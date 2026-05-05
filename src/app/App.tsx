@@ -1,54 +1,42 @@
-import { getVersion } from '@tauri-apps/api/app';
 import { useEffect, useState } from 'react';
+import { BrowserRouter, Route, Routes } from 'react-router-dom';
+
+import { seedDatabase } from '@/data/seeds';
+import DevDbCheck from '@/ui/pages/DevDbCheck';
+import Home from '@/ui/pages/Home';
 
 export default function App() {
-  const [appVersion, setAppVersion] = useState<string | null>(null);
-  const [tauriReachable, setTauriReachable] = useState(false);
+  const [dbReady, setDbReady] = useState(false);
+  const [dbError, setDbError] = useState<string | null>(null);
 
   useEffect(() => {
-    let active = true;
-    void getVersion()
-      .then((v) => {
-        if (active) {
-          setAppVersion(v);
-          setTauriReachable(true);
-        }
-      })
-      .catch(() => {
-        if (active) setTauriReachable(false);
-      });
-    return () => {
-      active = false;
-    };
+    seedDatabase()
+      .then(() => setDbReady(true))
+      .catch((e: unknown) => setDbError(String(e)));
   }, []);
 
-  return (
-    <main className="relative flex h-full flex-col items-center justify-center bg-ink-950 text-ink-100">
-      <div className="flex flex-col items-center gap-4 px-8 text-center">
-        <div className="flex items-baseline gap-3 font-display">
-          <span className="text-5xl font-medium tracking-tight">CAPI STUDIO</span>
-          <span className="text-laser-muted text-xl tabular-nums">v2</span>
-        </div>
-        <p className="font-body text-sm text-ink-400 max-w-md">
-          Production system for laser engraving and cutting.
-        </p>
-      </div>
+  if (dbError) {
+    return (
+      <main className="flex h-full items-center justify-center bg-ink-950 font-mono text-sm text-danger">
+        DB init error: {dbError}
+      </main>
+    );
+  }
 
-      <footer className="absolute inset-x-0 bottom-0 flex items-center justify-between border-t border-ink-700 bg-ink-900/80 px-4 py-2 font-mono text-[11px] text-ink-400">
-        <div className="flex items-center gap-4">
-          <span className="flex items-center gap-1.5">
-            <span
-              className={`inline-block h-1.5 w-1.5 rounded-full ${
-                tauriReachable ? 'bg-ok' : 'bg-warn'
-              }`}
-            />
-            tauri:{appVersion ?? 'detecting…'}
-          </span>
-          <span>theme:dark</span>
-          <span>onda:0</span>
-        </div>
-        <span className="text-ink-500">bootstrap ok</span>
-      </footer>
-    </main>
+  if (!dbReady) {
+    return (
+      <main className="flex h-full items-center justify-center bg-ink-950 font-mono text-sm text-ink-400">
+        initializing…
+      </main>
+    );
+  }
+
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        {import.meta.env.DEV && <Route path="/dev/db-check" element={<DevDbCheck />} />}
+      </Routes>
+    </BrowserRouter>
   );
 }
