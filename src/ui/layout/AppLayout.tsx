@@ -13,7 +13,7 @@ export default function AppLayout({ children, breadcrumb }: Props) {
   return (
     <div className="flex h-full flex-col bg-ink-950 text-ink-100">
       <AppHeader breadcrumb={breadcrumb} />
-      <main className="flex flex-1 flex-col overflow-auto">{children}</main>
+      <main className="relative flex-1 overflow-auto">{children}</main>
       <AppFooter />
     </div>
   );
