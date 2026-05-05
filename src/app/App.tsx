@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 
 import { seedDatabase } from '@/data/seeds';
+import { Toaster } from '@/ui/components/sonner';
 import DevDbCheck from '@/ui/pages/DevDbCheck';
 import Home from '@/ui/pages/Home';
 
@@ -33,6 +34,7 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      <Toaster />
       <Routes>
         <Route path="/" element={<Home />} />
         {import.meta.env.DEV && <Route path="/dev/db-check" element={<DevDbCheck />} />}
