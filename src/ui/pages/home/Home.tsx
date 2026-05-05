@@ -34,7 +34,7 @@ const CARDS = [
 export default function Home() {
   return (
     <AppLayout>
-      <div className="flex h-full items-center justify-center p-8">
+      <div className="flex flex-1 items-center justify-center p-8">
         <div className="grid grid-cols-2 gap-4 max-md:grid-cols-1">
           {CARDS.map((card) => (
             <HomeCard key={card.title} {...card} />
