@@ -97,7 +97,7 @@ export default function DevDbCheck() {
   }, []);
 
   return (
-    <main className="min-h-full bg-ink-950 text-ink-100 font-mono text-xs">
+    <main className="min-h-full animate-in fade-in bg-ink-950 font-mono text-xs text-ink-100 duration-150">
       <header className="sticky top-0 flex items-center justify-between border-b border-ink-700 bg-ink-900 px-4 py-2">
         <span className="text-laser font-medium text-sm">DEV — db-check</span>
         <Link to="/" className="text-ink-400 hover:text-ink-200 transition-colors">

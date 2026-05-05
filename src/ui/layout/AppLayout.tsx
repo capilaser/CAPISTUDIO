@@ -11,7 +11,7 @@ interface Props {
 
 export default function AppLayout({ children, breadcrumb }: Props) {
   return (
-    <div className="flex h-full flex-col bg-ink-950 text-ink-100">
+    <div className="flex h-full animate-in fade-in flex-col bg-ink-950 text-ink-100 duration-150">
       <AppHeader breadcrumb={breadcrumb} />
       <main className="relative flex-1 overflow-auto">{children}</main>
       <AppFooter />
