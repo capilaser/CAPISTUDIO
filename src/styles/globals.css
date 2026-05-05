@@ -1,0 +1,95 @@
+/* Variable fonts (Geist + JetBrains Mono) */
+@import '@fontsource-variable/geist';
+@import '@fontsource-variable/jetbrains-mono';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* Light theme — kept for completeness; default app boots in dark. */
+  :root {
+    --background: 220 13% 97%;
+    --foreground: 240 14% 14%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 240 14% 14%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 14% 14%;
+
+    --primary: 0 72% 51%; /* laser red */
+    --primary-foreground: 0 0% 98%;
+
+    --secondary: 220 13% 91%;
+    --secondary-foreground: 240 14% 14%;
+
+    --muted: 220 13% 91%;
+    --muted-foreground: 220 6% 45%;
+
+    --accent: 220 13% 91%;
+    --accent-foreground: 240 14% 14%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 220 13% 88%;
+    --input: 220 13% 88%;
+    --ring: 0 72% 51%;
+
+    --radius: 0.5rem;
+  }
+
+  /* Dark theme — primary mode of the app (industrial tool). */
+  .dark {
+    --background: 220 7% 5%; /* ink-950 */
+    --foreground: 220 13% 93%; /* ink-100 */
+
+    --card: 220 7% 10%; /* ink-800 */
+    --card-foreground: 220 13% 93%;
+
+    --popover: 220 7% 10%;
+    --popover-foreground: 220 13% 93%;
+
+    --primary: 0 72% 51%;
+    --primary-foreground: 0 0% 98%;
+
+    --secondary: 220 5% 16%; /* ink-700 */
+    --secondary-foreground: 220 13% 93%;
+
+    --muted: 220 5% 16%;
+    --muted-foreground: 220 5% 60%;
+
+    --accent: 220 5% 16%;
+    --accent-foreground: 220 13% 93%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 220 5% 16%;
+    --input: 220 5% 16%;
+    --ring: 0 72% 70%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html,
+  body,
+  #root {
+    @apply h-full;
+  }
+
+  body {
+    @apply bg-background text-foreground font-body antialiased;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+
+  /* Numerical inputs default to monospaced tabular figures. */
+  input[type='number'],
+  .tabular {
+    font-variant-numeric: tabular-nums;
+    @apply font-mono;
+  }
+}
