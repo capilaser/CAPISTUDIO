@@ -14,13 +14,18 @@ export function AppFooter() {
           />
           tauri:{version ?? 'detecting…'}
         </span>
-        <span>onda:2</span>
+        <span>onda:3</span>
       </div>
 
       {import.meta.env.DEV && (
-        <Link to="/dev/db-check" className="text-ink-600 transition-colors hover:text-ink-300">
-          db-check →
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link to="/dev/db-check" className="text-ink-600 transition-colors hover:text-ink-300">
+            db-check →
+          </Link>
+          <Link to="/dev/canvas-test" className="text-ink-600 transition-colors hover:text-ink-300">
+            canvas-test →
+          </Link>
+        </div>
       )}
     </footer>
   );

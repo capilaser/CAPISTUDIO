@@ -7,6 +7,7 @@ import { getAllMachines } from '@/data/repositories/machineRepository';
 import { getAllMaterialFamilies } from '@/data/repositories/materialFamilyRepository';
 import { getAllMaterials } from '@/data/repositories/materialRepository';
 import { getAllOperations } from '@/data/repositories/operationRepository';
+import { getAllPatternSummaries } from '@/data/repositories/patternRepository';
 import { getAllProducts } from '@/data/repositories/productRepository';
 import { getAllSettings } from '@/data/repositories/settingsRepository';
 import { getAllSlotTypes } from '@/data/repositories/slotTypeRepository';
@@ -33,6 +34,7 @@ export default function DevDbCheck() {
           materialFamilies,
           materials,
           products,
+          patterns,
           settingsMap,
         ] = await Promise.all([
           getAllMachines(),
@@ -43,6 +45,7 @@ export default function DevDbCheck() {
           getAllMaterialFamilies(),
           getAllMaterials(),
           getAllProducts(),
+          getAllPatternSummaries(),
           getAllSettings(),
         ]);
 
@@ -80,6 +83,10 @@ export default function DevDbCheck() {
           {
             title: `products (${products.length})`,
             rows: products as unknown as Array<Record<string, unknown>>,
+          },
+          {
+            title: `patterns (${patterns.length})`,
+            rows: patterns as unknown as Array<Record<string, unknown>>,
           },
           {
             title: `settings (${settings.length})`,
