@@ -1,0 +1,36 @@
+{
+  "broche-60x25": {
+    "id": "broche-60x25",
+    "type": "broche",
+    "label": "Broche 60 x 25",
+    "icon": "🏷️",
+    "status": "published",
+    "canvasMm": { "width": 60, "height": 25 },
+    "viewBox": { "minX": 0, "minY": 0, "width": 60, "height": 25 },
+    "allowedSlotTypes": ["logo", "name", "profession"],
+    "machines": ["due-laser"],
+    "defaultFonts": { "name": "Bebas Neue", "profession": "Open Sans" },
+    "constraints": { "sizeLocked": true, "minGapMm": 2 },
+    "version": { "rev": 1 }
+  },
+  "placa-300x90": {
+    "id": "placa-300x90",
+    "type": "placa",
+    "label": "Placa 300 x 90",
+    "icon": "🪪",
+    "status": "published",
+    "canvasMm": { "width": 300, "height": 90 },
+    "viewBox": { "minX": 0, "minY": 0, "width": 300, "height": 90 },
+    "allowedSlotTypes": ["logo", "name", "profession", "free-text", "qrcode", "image"],
+    "machines": ["master-biro", "fiber-laser", "due-laser"],
+    "defaultFonts": { "name": "Bebas Neue", "profession": "Bebas Neue" },
+    "constraints": { "sizeLocked": true, "minGapMm": 2 },
+    "productionModules": [
+      { "id": "placa-base", "label": "Base da Placa", "operation": "preview" },
+      { "id": "aplique-esquerdo", "label": "Aplique Esquerdo + Logo", "operation": "engrave" },
+      { "id": "aplique-cargo", "label": "Aplique Cargo + Escrita", "operation": "engrave" },
+      { "id": "nome-recorte", "label": "Nome para Corte", "operation": "cut" }
+    ],
+    "version": { "rev": 1 }
+  }
+}

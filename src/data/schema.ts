@@ -163,6 +163,11 @@ export type LayerMeta = {
   kind: 'visual' | 'production';
   operation: string | null;
   machines: string[];
+  /** PNG material applied to this layer. Only honoured when kind === 'visual'.
+   *  Production layers ignore this field entirely.
+   *  Persisted in canvasJson.capi.layers[]. Use (layer.materialId ?? null) when reading
+   *  legacy canvasJson that predates Onda 5. */
+  materialId: string | null;
 };
 export type SlotMeta = {
   type: 'logo' | 'nome' | 'profissao' | 'custom';

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { BrowserRouter } from 'react-router-dom';
 
 import { seedDatabase } from '@/data/seeds';
+import { FontLoader } from '@/ui/components/FontLoader';
 import { Toaster } from '@/ui/components/sonner';
 
 import { RouterContent } from './router';
@@ -34,6 +35,7 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      <FontLoader />
       <Toaster />
       <RouterContent />
     </BrowserRouter>

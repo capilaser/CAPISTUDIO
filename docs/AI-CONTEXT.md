@@ -40,8 +40,9 @@
 - Onda 0 ✅ → Sonnet 4.6
 - Onda 1 ✅ → Opus 4.7 (banco SQLite)
 - Onda 2 ✅ → Sonnet 4.6 + médio
-- Onda 3 ✅ → **Opus 4.7 + alto** (Canvas Fabric.js)
-- Onda 4 (atual) → Sonnet 4.6 + médio
+- Onda 3 ✅ → Opus 4.7 + alto (Canvas Fabric.js)
+- Onda 4 ✅ → Sonnet 4.6 + médio (slots + fitText)
+- Onda 4.5 → Sonnet 4.6 (download/seed simples)
 - Ondas 5-6 → Sonnet 4.6
 - Onda 7 → **Opus 4.7 + alto** (alinhamento)
 - Onda 9 → **Opus 4.7 + alto** (exportação SVG)
@@ -63,29 +64,34 @@
 
 - ⚠️ Claude Code tende a pular checkpoints — usar linguagem firme: _"PARE EXECUÇÃO. Quebra de contrato."_
 - ⚠️ Claude Code tende a atacar sintoma, não causa raiz — pedir diagnóstico antes de fix
+- ⚠️ "Auto mode" do Claude Code pula perguntas críticas — forçar respostas explícitas no kickoff
 - ✅ Validação visual com prints > confiar em descrição textual
+- ✅ Validação extra via SQL direto no banco (não confiar só no F5 test) quando persistência for crítica
 - ✅ Cada decisão arquitetural vai pra ADR em `docs/DECISIONS/`
 
 ---
 
 ## 🏗️ Estrutura de ondas (ROADMAP)
 
-| Onda | Tema                                             | Status     |
-| ---- | ------------------------------------------------ | ---------- |
-| 0    | Bootstrap (Tauri + Vite + React + TS)            | ✅ Fechada |
-| 1    | Banco SQLite + Seeds (19 tabelas)                | ✅ Fechada |
-| 2    | Home + Layout Base                               | ✅ Fechada |
-| 3    | Canvas Fabric.js                                 | ✅ Fechada |
-| 4    | Slots editáveis + fitText                        | 🔄 Próxima |
-| 5    | Texturas (PNGs ABS Escovado)                     | ⏳         |
-| 6    | Painel de camadas                                | ⏳         |
-| 7    | Sistema de alinhamento estilo Confluence         | ⏳         |
-| 8    | Padrões + slots persistentes                     | ⏳         |
-| 9    | Exportação SVG por máquina/operação              | ⏳         |
-| 10   | Telas restantes (Abrir Padrão, Histórico, Banco) | ⏳         |
-| 11   | Histórico completo de pedidos                    | ⏳         |
-| 12   | Settings                                         | ⏳         |
-| 13   | Validação final + polimento                      | ⏳         |
+| Onda | Tema                                                                     | Status     |
+| ---- | ------------------------------------------------------------------------ | ---------- |
+| 0    | Bootstrap (Tauri + Vite + React + TS)                                    | ✅ Fechada |
+| 1    | Banco SQLite + Seeds (19 tabelas)                                        | ✅ Fechada |
+| 2    | Home + Layout Base                                                       | ✅ Fechada |
+| 3    | Canvas Fabric.js                                                         | ✅ Fechada |
+| 4    | Slots editáveis + fitText                                                | ✅ Fechada |
+| 4.5  | Banco de Fontes Curado (5 fontes nicho profissional + FontFace API)      | ✅ Fechada |
+| 5    | Texturas (PNGs ABS Escovado)                                             | ✅ Fechada |
+| 6    | Painel de Slots + estrutura hierárquica de camadas (Caminho B+, ADR 008) | ⏳         |
+| 6.5  | UI dos bancos (Apliques/Gravações/Marcações)                             | ⏳         |
+| 7    | Painel de Camadas hierárquico (poder, edição TIPO+MÁQUINA)               | ⏳         |
+| 7    | Sistema de alinhamento estilo Confluence                                 | ⏳         |
+| 8    | Padrões + slots persistentes                                             | ⏳         |
+| 9    | Exportação SVG por máquina/operação                                      | ⏳         |
+| 10   | Telas restantes (Abrir Padrão, Histórico, Banco)                         | ⏳         |
+| 11   | Histórico completo de pedidos                                            | ⏳         |
+| 12   | Settings                                                                 | ⏳         |
+| 13   | Validação final + polimento                                              | ⏳         |
 
 ---
 
@@ -105,6 +111,34 @@
 - **Sem fonte padrão por slot.** Fonte é escolhida no momento de criar o slot.
 - **Production modules deferidos** pro backlog (ADR 003).
 
+### Canvas (Onda 3)
+
+- **Fabric.js 6** como engine. Unidades em **mm** com DPI = **4 px/mm** constante.
+- **viewBox do produto (banco) é fonte autoritativa de coordenadas.** Nunca confiar em `group.width` do Fabric pós-parse.
+- SVGs externos passam por `parseAndStripRootDimensions` (DOMParser, só na raiz) antes de `loadSVGFromString`.
+- Custom properties Capi serializadas via lista explícita em `CAPI_CUSTOM_PROPS` (`['id', 'capiSlot']`) no `toJSON([...])`.
+- Cleanup obrigatório com `engine.dispose()` no useEffect do React.
+- Pan mode com `selection = false` + `selectable = false` em user objects (não na base).
+- Round-trip canvas ↔ `patterns.canvasJson` via Drizzle, com upsert idempotente.
+
+### Fontes (Onda 4.5)
+
+- 5 famílias curadas embutidas em `src-tauri/resources/fonts/` (variable fonts + Bebas Neue estática)
+- Variable fonts cobrem regular + bold no mesmo arquivo (peso `100 900`)
+- Carregamento via `new FontFace(...).load() + document.fonts.add()` — **NÃO `@font-face` passivo** (gera falso negativo no `check()`, browser só baixa quando algum elemento usa a fonte)
+- Asset protocol Tauri 2.x: `enable: true + scope: ["**"]` no `security` do `tauri.conf.json` — **sem isso → ERR_CONNECTION_REFUSED**
+- ⚠️ Cargo não detecta mudanças em `resources/` — executar `cargo clean` ao adicionar PNGs/fonts novas
+- Pré-release: revisar scope `["**"]` para algo mais restrito (ex: `["$RESOURCE/**"]`)
+
+### Slots e fitText (Onda 4)
+
+- Cada slot = body Rect (persistente, arrastável) + overlay Rect (descartável, só Designer)
+- `fitText` reduz fonte sem quebrar linha; min 6pt, max 24pt, passo 0.5pt; função pura com `measureFn` injetada
+- Placeholder de logo vazio = `fabric.Group` gerenciado pelo `SlotManager`, não componente React
+- Conteúdo dos slots = `fabric.Text` (read-only), nunca `fabric.IText`
+- ⚠️ **Cache do Fabric 6:** usar `.set({ prop: value })`, nunca atribuição direta. Bug só aparece no Tauri (Chromium), não em jsdom — testes passam mas bug existe visualmente.
+- `@font-face` não carregado no WebView ainda — `fitText` mede com fallback `system-ui`. Corrige na Onda 4.5.
+
 ### Visual
 
 - **Estética industrial-utilitária** estilo Lightburn/Ableton. NÃO Canva/Figma.
@@ -116,7 +150,7 @@
 
 - **4 cards apenas:** Novo Padrão, Abrir Padrão, Histórico de Artes, Banco de Ativos.
 - **Cards mostram toast** "Em desenvolvimento — chega na Onda X" ao clicar.
-- **Dev link discreto** pra `/dev/db-check` no rodapé, só em DEV.
+- **Dev link discreto** pra `/dev/db-check` e `/dev/canvas-test` no rodapé, só em DEV.
 
 ---
 
@@ -126,6 +160,11 @@
 - `002-no-pattern-migration.md` — Padrões do v1 vazios, sem migração
 - `003-production-modules-deferred.md` — Conceito ainda imaturo, fica pra futuro
 - `004-product-layers-svg-nullable.md` — Coluna nullable até product_layers ser populado de fato
+- `005-canvas-engine-fabric-mm.md` — Canvas em mm com DPI=4, viewBox autoritativo do banco
+- `006-onda-4-slots-fittext.md` — Slots editáveis, fitText, body/overlay, placeholder, bug cache Fabric 6
+- `007-onda-4.5-banco-fontes.md` — 5 fontes curadas, FontFace API ativa, asset protocol Tauri 2.x OPT-IN, cargo clean obrigatório ao adicionar resources
+- `008-camadas-hierarquicas-bancos-componentes.md` — Camadas em 2 níveis (principal → operação) + 3 bancos novos (apliques/gravações/marcações). SVGs importados descartam cores, mantém só contornos.
+- `009-exportacao-maquina-operacao.md` — Spec completa da Onda 9: 1 SVG por (máquina, operação). Regra "marcação herda contorno". Feature "tirar miolo". Nesting fica pra Onda 9.5.
 
 ---
 
@@ -146,7 +185,7 @@ Localização: `capi-studio-v2/projeto/` (anexar quando relevante ao chat)
 
 ### Princípios
 
-1. **1 chat ≠ projeto inteiro.** Quebra por escopo.
+1. **1 chat ≠ projeto inteiro.** Quebra por escopo — geralmente 1 chat por onda.
 2. **Anexa docs ao recomeçar.** Não me peça pra "lembrar".
 3. **Documenta fora do chat.** ADRs e docs no projeto.
 4. **Corta cedo, não tarde.** Quando sentir que estou amolecendo.
@@ -220,6 +259,7 @@ E eu vou rodar este checklist e te responder objetivamente:
 - shadcn/ui: latest
 - Drizzle ORM: latest
 - tauri-plugin-sql: 2.x
+- Vitest + jsdom + node-canvas (testes do canvas)
 
 **Banco:** `%APPDATA%\com.capilaser.studio\capi-studio.db` (Windows)
 
@@ -252,4 +292,4 @@ Eu leio o contexto, faço perguntas estratégicas se necessário, e começamos c
 
 ---
 
-_Última atualização: Onda 3 fechada — próxima Onda 4 (slots + fitText)_
+_Última atualização: Onda 4.5 fechada — próxima Onda 5 (texturas PNGs ABS Escovado)_

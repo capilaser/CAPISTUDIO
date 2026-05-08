@@ -14,7 +14,7 @@ export function AppFooter() {
           />
           tauri:{version ?? 'detecting…'}
         </span>
-        <span>onda:3</span>
+        <span>onda:5</span>
       </div>
 
       {import.meta.env.DEV && (
@@ -24,6 +24,12 @@ export function AppFooter() {
           </Link>
           <Link to="/dev/canvas-test" className="text-ink-600 transition-colors hover:text-ink-300">
             canvas-test →
+          </Link>
+          <Link
+            to="/dev/materials-test"
+            className="text-ink-600 transition-colors hover:text-ink-300"
+          >
+            materials-test →
           </Link>
         </div>
       )}

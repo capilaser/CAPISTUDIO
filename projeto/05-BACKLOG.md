@@ -263,6 +263,102 @@ Pra deixar claro o que o produto NÃO é:
 
 ---
 
+## Visão estendida capturada na calibração da Onda 5
+
+Durante a calibração da Onda 5, Gabriell descreveu detalhadamente a
+visão completa do produto. Tudo abaixo está formalizado no arquivo
+`projeto/06-VISION.md` — esta seção é apenas índice de features
+novas que entram no backlog priorizado.
+
+### Categorias novas de elementos no Banco de Ativos
+
+- **Banco de curvas e linhas padrão (acabamentos)**: ornamentos,
+  traços decorativos, divisórias. Sub-aba do Banco de Ativos.
+  Schema atual (`svg_bases`) já comporta — falta apenas UI de
+  categorização. Onda 10.
+
+- **Banco de apliques**: SVGs com texturas associadas que Gabriell
+  usa repetidamente (apliques de bronze, dourado). Categoria
+  "Aplique" em `svg_bases` + texture sugerida vinculada. Onda 10
+  ou 5.5.
+
+- **Histórico de uso de fontes**: rastrear quais fontes são mais
+  usadas em quais slots. Adicionar campo `usage_count` em `fonts`
+  ou tabela `pattern_fonts`. Refinamento Onda 10+.
+
+- **Conjuntos de fontes pré-definidos (presets)**: abstração que
+  aplica fonte diferente em cada slot ao mesmo tempo (ex: "Preset
+  Profissional Liberal" = fonte X pra nome + fonte Y pra profissão).
+  Simplifica criação de padrões similares. Fase 2.
+
+### Otimizações de exportação (otimizam tempo de máquina)
+
+- **Tirar miolo automático ("hollow letters")**: ao gerar arquivo
+  de marcação, remover áreas internas de letras (ex: letra B sem
+  as 2 bolinhas internas). Otimiza tempo de máquina, economiza
+  material. Complexidade técnica média-alta (parsing SVG, detecção
+  de holes). Fase 2.
+
+- **Nesting automático**: empacotar SVGs no menor espaço possível
+  antes de exportar pra máquina. Algoritmo de bin packing 2D
+  irregular. Bibliotecas existem (SVGNest, Deepnest), avaliar
+  integração. Complexidade alta. Fase 2.
+
+- **Detecção automática de operação por contexto**: sistema detecta
+  se gravação está dentro de aplique vs solta na camada 0, e propõe
+  operação correta automaticamente (sem modal). Refinamento da
+  decisão B do ADR 009 (modal de sugestão). Complexidade
+  baixa-média. Fase 2.
+
+### Automação de fluxo
+
+- **Aprovação 1-clique → arquivos certos**: botão "Aprovar pedido"
+  gera automaticamente PNG mockup + SVGs separados por máquina +
+  salva no histórico + (Fase 3) notifica setor de produção. Onda 9
+  já implementa parte do export; Onda 11/12 polem fluxo; Fase 2
+  adiciona automação completa.
+
+### Inteligência futura (Fase 3)
+
+- **IA para busca visual de padrões**: cliente manda foto, sistema
+  sugere padrões similares do banco usando embeddings visuais.
+  Requer modelo de visão computacional + infra de embeddings +
+  dataset rotulado. Longo prazo.
+
+### Curadoria de broches existentes
+
+- **Curadoria UI completa**: Gabriell tem milhares de broches em
+  arquivos antigos. Decisão: NÃO migrar em massa. Curadoria manual
+  controlada via UI (Onda 10). Volume estimado: ~50-100 padrões
+  curados, não milhares.
+
+  Princípios:
+  - Qualidade > quantidade no banco
+  - Padrões antigos ruins poluem busca
+  - Curadoria é onde fica o valor real
+
+  Início: depois do MVP fechar. Onda 10 entrega a UI de import;
+  Gabriell faz curadoria offline depois.
+
+---
+
+## Decisões de UX já formalizadas (referência)
+
+Estas decisões foram capturadas em ADR 008 (texturas) e ADR 009
+(layout) durante a calibração da Onda 5. Documentadas aqui para
+referência cruzada:
+
+- **Operador vs Designer é layout, não permissão** (ADR 008)
+- **Painel direito de camadas — Opção D-completa** (sempre visível
+  nos 2 modos, ADR 009)
+- **Sidebar esquerda hierárquica** (Produto → Material → Cor →
+  Padrão → Campos dinâmicos, ADR 009)
+- **Topbar de padrões inline** (chips + thumbnails no canvas, ADR 009)
+- **Drag entre camadas com modal de sugestão** (Opção B, ADR 009)
+- **Adicionar campo via menu de contexto** (botão direito, ADR 009)
+
+---
+
 ## Como priorizar Fase 2
 
 Quando o MVP estiver estável e em uso, sugestão de ordem:

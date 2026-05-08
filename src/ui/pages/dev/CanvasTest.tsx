@@ -11,9 +11,16 @@ import {
 import { attachCanvasKeybindings } from '@/core/canvas/keybindings';
 import { parseViewBox } from '@/core/canvas/svg-utils';
 import { MM_TO_PX } from '@/core/canvas/units';
-import { Button } from '@/ui/components/button';
+import { getById as getMaterialById } from '@/data/repositories/materialRepository';
+import { resolveAssetUrl } from '@/data/repositories/materialRepository';
 import { getPatternById, upsertPatternCanvas } from '@/data/repositories/patternRepository';
 import { getProductById, type Product } from '@/data/repositories/productRepository';
+import { useCanvasStore } from '@/stores/canvas-store';
+import { Button } from '@/ui/components/button';
+import { ModeToggle } from './canvas-test/ModeToggle';
+import { OperatorInputs } from './canvas-test/OperatorInputs';
+import { RightPanel } from './canvas-test/RightPanel';
+import { SlotCreatorButtons } from './canvas-test/SlotCreatorButtons';
 
 const TEST_RECT_MM = { width: 20, height: 10 };
 
@@ -26,6 +33,8 @@ export default function CanvasTest() {
   const [ready, setReady] = useState(false);
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
+
+  const { mode, setSelectedSlotId, setSelectedLayerId, setSelectedLayerKind } = useCanvasStore();
 
   async function handleSave() {
     const engine = engineRef.current;
@@ -97,15 +106,35 @@ export default function CanvasTest() {
         if (existing?.canvasJson) {
           if ((existing.canvasJson.objects?.length ?? 0) > 0) {
             try {
-              await engine.deserialize({
-                version: existing.canvasJson.version,
-                objects: existing.canvasJson.objects as Array<Record<string, unknown>>,
-                capi: {
-                  productId: p.id,
-                  units: 'mm',
-                  layers: [],
+              // Collect materialIds present in layers for pre-loading.
+              const layers = existing.canvasJson.capi?.layers ?? [];
+              const matEntries: Array<{ id: string; url: string }> = [];
+
+              await engine.deserialize(
+                {
+                  version: existing.canvasJson.version,
+                  objects: existing.canvasJson.objects as Array<Record<string, unknown>>,
+                  capi: {
+                    productId: p.id,
+                    units: 'mm',
+                    layers,
+                  },
                 },
-              });
+                // Re-apply material Patterns from saved materialIds.
+                async (materialId) => {
+                  const mat = await getMaterialById(materialId);
+                  if (!mat) throw new Error(`Material not found: ${materialId}`);
+                  const url = await resolveAssetUrl(mat);
+                  matEntries.push({ id: materialId, url });
+                  return url;
+                }
+              );
+
+              // Pre-warm the image cache with the materials we already resolved
+              // during deserialize — zero additional IPC calls.
+              if (matEntries.length > 0) {
+                await engine.preloadMaterials(matEntries);
+              }
             } catch (e) {
               if (import.meta.env.DEV) {
                 console.warn('[canvas-test] deserialize failed, opening empty:', e);
@@ -118,6 +147,12 @@ export default function CanvasTest() {
           );
         }
 
+        engine.loadSlotsFromCanvas();
+        engine.onSlotSelectionChange = setSelectedSlotId;
+        engine.onLayerSelectionChange = (id, meta) => {
+          setSelectedLayerId(id);
+          setSelectedLayerKind(meta?.kind ?? null);
+        };
         engineRef.current = engine;
         detachKeys = attachCanvasKeybindings({
           onZoomIn: () => engine.zoomBy(1.1),
@@ -142,7 +177,15 @@ export default function CanvasTest() {
       engineRef.current = null;
       productRef.current = null;
     };
-  }, []);
+    // Zustand setters are stable references — listing them satisfies exhaustive-deps
+    // without causing re-runs.
+  }, [setSelectedSlotId, setSelectedLayerId, setSelectedLayerKind]);
+
+  // Sync Zustand mode → canvas engine whenever mode changes.
+  useEffect(() => {
+    if (!ready || !engineRef.current) return;
+    engineRef.current.setMode(mode);
+  }, [mode, ready]);
 
   function handleAddRectangle() {
     const engine = engineRef.current;
@@ -162,6 +205,8 @@ export default function CanvasTest() {
 
   function handleClear() {
     engineRef.current?.clearUserObjects();
+    setSelectedLayerId(null);
+    setSelectedLayerKind(null);
   }
 
   return (
@@ -174,6 +219,12 @@ export default function CanvasTest() {
       </header>
 
       <div className="flex items-center gap-2 border-b border-ink-800 bg-ink-900/50 px-4 py-2">
+        <ModeToggle />
+
+        <SlotCreatorButtons engineRef={engineRef} disabled={!ready} />
+
+        <div className="h-4 w-px bg-ink-700" />
+
         <Button
           variant="secondary"
           size="sm"
@@ -206,17 +257,24 @@ export default function CanvasTest() {
         </span>
       </div>
 
-      <div className="flex flex-1 items-center justify-center p-6">
-        {error ? (
-          <p className="font-mono text-xs text-danger">error: {error}</p>
-        ) : (
-          <canvas
-            ref={canvasRef}
-            width={DEV_VIEWPORT.widthPx}
-            height={DEV_VIEWPORT.heightPx}
-            className="rounded-sm border border-ink-700 shadow-md"
-          />
-        )}
+      {/* 3-column layout: canvas | RightPanel (material) | OperatorInputs */}
+      <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-1 items-center justify-center p-6">
+          {error ? (
+            <p className="font-mono text-xs text-danger">error: {error}</p>
+          ) : (
+            <canvas
+              ref={canvasRef}
+              width={DEV_VIEWPORT.widthPx}
+              height={DEV_VIEWPORT.heightPx}
+              className="rounded-sm border border-ink-700 shadow-md"
+            />
+          )}
+        </div>
+        {/* RightPanel: visible whenever a visual layer is selected (both modes) */}
+        <RightPanel engineRef={engineRef} />
+        {/* OperatorInputs: visible only in operator mode */}
+        {mode === 'operator' && <OperatorInputs engineRef={engineRef} />}
       </div>
 
       <footer className="border-t border-ink-800 bg-ink-900/60 px-4 py-2 font-mono text-[11px] text-ink-400">

@@ -1,0 +1,19 @@
+{
+  "appName": "Capi Studio",
+  "activeProductId": "broche-60x25",
+  "defaultMaterialId": "metal-gold",
+  "storageMode": "local",
+  "logoPolicy": {
+    "allowedFormats": ["svg"],
+    "localFolder": "assets/logos/"
+  },
+  "export": {
+    "pngClient": true,
+    "svg": true,
+    "svgProduction": true,
+    "productionFileNames": {
+      "engrave": "{orderName}_gravacao.svg",
+      "cut": "{orderName}_corte-laser.svg"
+    }
+  }
+}

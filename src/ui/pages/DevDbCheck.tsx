@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { getAllCategories } from '@/data/repositories/categoryRepository';
 import { getAllFonts } from '@/data/repositories/fontRepository';
 import { getAllMachines } from '@/data/repositories/machineRepository';
-import { getAllMaterialFamilies } from '@/data/repositories/materialFamilyRepository';
+import { listFamilies } from '@/data/repositories/materialFamilyRepository';
 import { getAllMaterials } from '@/data/repositories/materialRepository';
 import { getAllOperations } from '@/data/repositories/operationRepository';
 import { getAllPatternSummaries } from '@/data/repositories/patternRepository';
@@ -42,7 +42,7 @@ export default function DevDbCheck() {
           getAllSlotTypes(),
           getAllFonts(),
           getAllCategories(),
-          getAllMaterialFamilies(),
+          listFamilies(),
           getAllMaterials(),
           getAllProducts(),
           getAllPatternSummaries(),

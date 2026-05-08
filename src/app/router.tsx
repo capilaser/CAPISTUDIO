@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 
 import CanvasTest from '@/ui/pages/dev/CanvasTest';
+import MaterialsTestPage from '@/ui/pages/dev/MaterialsTestPage';
 import DevDbCheck from '@/ui/pages/DevDbCheck';
 import Home from '@/ui/pages/Home';
 
@@ -36,6 +37,7 @@ export function RouterContent() {
       <Route path="/" element={<Home />} />
       {import.meta.env.DEV && <Route path="/dev/db-check" element={<DevDbCheck />} />}
       {import.meta.env.DEV && <Route path="/dev/canvas-test" element={<CanvasTest />} />}
+      {import.meta.env.DEV && <Route path="/dev/materials-test" element={<MaterialsTestPage />} />}
     </Routes>
   );
 }

@@ -66,19 +66,36 @@ O canvas tem **dois modos** numa interface única (sem trocar de tela):
 - **Modo Operador** (padrão): mostra apenas os campos editáveis do padrão (logo, nome, profissão), com mockup texturizado em tempo real. Toolbar enxuta.
 - **Modo Designer**: ativado pelo botão "Edição Avançada" (toggle persistente na sessão). Libera toolbar completa: camadas, alinhamento, snap, manipulação vetorial, propriedades numéricas em mm.
 
+> ⚠️ **Operador vs Designer é diferença de layout, não de permissão.** Ambos os modos têm acesso às mesmas funções operacionais essenciais (logo, nome, profissão, material, cor, painel de camadas, histórico, salvar, exportar). O toggle "Edição Avançada" no Operador esconde apenas ferramentas de construção de padrão: criação/redimensionamento de slots, painel de propriedades numéricas em mm, réguas e guias, ungroup vetorial (Ctrl+U). **Material, cor e painel de camadas são acessíveis sem toggle em ambos os modos.**
+
 ### RF-3.2 Toolbar do Modo Operador
 
-- Trocar logo (upload SVG/DXF/PNG ou escolher do banco)
-- Editar nome (input de texto + seletor de fonte)
-- Editar profissão (input de texto + seletor de fonte)
-- Trocar textura/material
-- Trocar cor (do material aplicado)
-- Botão "Edição Avançada" (toggle)
-- Botão "Salvar como pedido"
-- Botão "Exportar PNG (cliente)"
-- Botão "Exportar SVG (corte)"
+O Modo Operador apresenta layout em 3 zonas:
+
+- **Sidebar esquerda fixa (280px)**: fluxo hierárquico Produto → Material → Cor → Padrão → Campos dinâmicos. Apenas os campos presentes no padrão escolhido aparecem (RF-3.11).
+- **Topbar do canvas**: chips de filtro + thumbnails dos padrões compatíveis. Permite trocar padrão sem sair do canvas (RF-3.12).
+- **Painel direito (280px)**: lista de camadas com chip de operação e máquina + seleção de material para a camada selecionada (RF-3.10).
+
+As ações abaixo são acessíveis nas zonas correspondentes:
+
+- Trocar logo (upload SVG/DXF/PNG ou escolher do banco) — sidebar esquerda
+- Editar nome (input de texto + seletor de fonte) — sidebar esquerda
+- Editar profissão (input de texto + seletor de fonte) — sidebar esquerda
+- Trocar textura/material — painel direito
+- Trocar cor (do material aplicado) — painel direito
+- Botão "Edição Avançada" (toggle) — header
+- Botão "Salvar como pedido" — header
+- Botão "Exportar PNG (cliente)" — header
+- Botão "Exportar SVG (corte)" — header
 
 ### RF-3.3 Toolbar do Modo Designer
+
+O Modo Designer exibe por padrão todas as ferramentas da lista abaixo. No Modo Operador, essas ferramentas ficam **atrás do toggle "Edição Avançada"** (não são removidas — são recolhidas para deixar o layout mais enxuto).
+
+**Exceções (sempre visíveis nos 2 modos):**
+
+- Histórico (Ctrl+Z / Ctrl+Shift+Z) — undo/redo é função primária
+- Painel de camadas (Opção D-completa) — visível em ambos os modos desde o início
 
 Adiciona ao toolbar Operador:
 
@@ -154,6 +171,37 @@ Slots têm posição (mm) + área máxima (mm). Visíveis no Modo Designer (over
 - **SVG de corte**: 1 arquivo por máquina envolvida no pedido. Nome `{labelPedido}_{Maquina}.svg`. Conteúdo: apenas camadas `production`, agrupadas por operação dentro de `<g>`s. Sem texturas, curvas puras.
 
 Equivalente exato do `exportProductionSVGs()` do v1.
+
+### RF-3.10 Aplicação de materiais às camadas
+
+- Cada camada `kind === "visual"` pode ter um `materialId` associado (vínculo em `LayerMeta`).
+- Camadas `kind === "production"` **ignoram** `materialId` — não recebem textura em nenhuma circunstância.
+- Seleção via 2 dropdowns encadeados: **Família** → **Cor**, com bolinha `swatch` (hex, 16px) no item de cor.
+- Dropdown fica no painel lateral direito, visível apenas quando uma camada visual está selecionada.
+- Aplicação imediata, sem confirmação: PNG do material é clipado pelo SVG base do produto.
+- Troca de material: re-render em ≤ 100ms (PNG pré-carregado em cache ao boot).
+- Padrão mestre pode definir `defaultMaterialId` — herdado pela camada ao abrir padrão.
+- Override de material no pedido salvo em `orders.canvasJson`. Padrão mestre não é tocado.
+- Camada visual sem material atribuído renderiza com fill cinza neutro (`#8a8e92`).
+
+### RF-3.11 Sidebar esquerda hierárquica
+
+Sidebar esquerda fixa de 280px, presente em ambos os modos, com fluxo top-down:
+
+1. **Produto**: seleção via cards (broche, placa, etc.)
+2. **Material**: dropdown com famílias compatíveis com o produto
+3. **Cor**: dropdown com cores da família selecionada
+4. **Padrão**: chips com padrões compatíveis com a combinação produto/material/cor
+5. **Campos dinâmicos**: seções específicas para cada slot existente no padrão escolhido (Nome, Logo, Profissão, etc.). Slots ausentes não aparecem.
+
+Operador pode adicionar campos novos via menu de contexto (botão direito) → Logo / Nome / Profissão / Texto custom.
+
+### RF-3.12 Topbar de padrões inline
+
+Acima do canvas, topbar apresenta:
+
+1. **Linha de chips de filtro**: "todos" (default ativo) + chips derivados de tags dos padrões (com-traço, sem-traço, nome-longo, centralizado, etc.). Chip ativo em cor `laser` (#dc2626).
+2. **Linha de thumbnails**: padrões compatíveis com o filtro ativo. Click troca padrão no canvas em tempo real.
 
 ---
 

@@ -1,3 +1,6 @@
+import { convertFileSrc } from '@tauri-apps/api/core';
+import { resolveResource } from '@tauri-apps/api/path';
+
 import { getDb } from '../client';
 
 export interface FallbackStop {
@@ -40,7 +43,8 @@ export async function getAllMaterials(): Promise<Material[]> {
   return rows.map(toMaterial);
 }
 
-export async function getMaterialsByFamily(familyId: string): Promise<Material[]> {
+/** Returns all materials for a given family, ordered by label. */
+export async function listByFamily(familyId: string): Promise<Material[]> {
   const db = await getDb();
   const rows = await db.select<MaterialRow[]>(
     `SELECT id, family_id as familyId, label, swatch, png_path as pngPath,
@@ -51,7 +55,8 @@ export async function getMaterialsByFamily(familyId: string): Promise<Material[]
   return rows.map(toMaterial);
 }
 
-export async function getMaterialById(id: string): Promise<Material | null> {
+/** Returns a single material by id, or null if not found. */
+export async function getById(id: string): Promise<Material | null> {
   const db = await getDb();
   const rows = await db.select<MaterialRow[]>(
     `SELECT id, family_id as familyId, label, swatch, png_path as pngPath,
@@ -60,4 +65,18 @@ export async function getMaterialById(id: string): Promise<Material | null> {
     [id]
   );
   return rows[0] ? toMaterial(rows[0]) : null;
+}
+
+/**
+ * Resolves a Material's pngPath to a WebView-accessible URL via Tauri asset protocol.
+ *
+ * pngPath in the DB is relative to the resources dir (e.g. "materials/abs-escovado-prata.png").
+ * resolveResource prefixes it with "resources/" to get the absolute path in the bundle.
+ * convertFileSrc converts that to http://asset.localhost/... which the WebView can load.
+ *
+ * Requires: assetProtocol enabled in tauri.conf.json (see ADR 007).
+ */
+export async function resolveAssetUrl(material: Material): Promise<string> {
+  const absPath = await resolveResource(`resources/${material.pngPath}`);
+  return convertFileSrc(absPath);
 }
