@@ -73,25 +73,25 @@
 
 ## 🏗️ Estrutura de ondas (ROADMAP)
 
-| Onda | Tema                                                                     | Status     |
-| ---- | ------------------------------------------------------------------------ | ---------- |
-| 0    | Bootstrap (Tauri + Vite + React + TS)                                    | ✅ Fechada |
-| 1    | Banco SQLite + Seeds (19 tabelas)                                        | ✅ Fechada |
-| 2    | Home + Layout Base                                                       | ✅ Fechada |
-| 3    | Canvas Fabric.js                                                         | ✅ Fechada |
-| 4    | Slots editáveis + fitText                                                | ✅ Fechada |
-| 4.5  | Banco de Fontes Curado (5 fontes nicho profissional + FontFace API)      | ✅ Fechada |
-| 5    | Texturas (PNGs ABS Escovado)                                             | ✅ Fechada |
-| 6    | Painel de Slots + estrutura hierárquica de camadas (Caminho B+, ADR 008) | ⏳         |
-| 6.5  | UI dos bancos (Apliques/Gravações/Marcações)                             | ⏳         |
-| 7    | Painel de Camadas hierárquico (poder, edição TIPO+MÁQUINA)               | ⏳         |
-| 7    | Sistema de alinhamento estilo Confluence                                 | ⏳         |
-| 8    | Padrões + slots persistentes                                             | ⏳         |
-| 9    | Exportação SVG por máquina/operação                                      | ⏳         |
-| 10   | Telas restantes (Abrir Padrão, Histórico, Banco)                         | ⏳         |
-| 11   | Histórico completo de pedidos                                            | ⏳         |
-| 12   | Settings                                                                 | ⏳         |
-| 13   | Validação final + polimento                                              | ⏳         |
+| Onda | Tema                                                                      | Status     |
+| ---- | ------------------------------------------------------------------------- | ---------- |
+| 0    | Bootstrap (Tauri + Vite + React + TS)                                     | ✅ Fechada |
+| 1    | Banco SQLite + Seeds (19 tabelas)                                         | ✅ Fechada |
+| 2    | Home + Layout Base                                                        | ✅ Fechada |
+| 3    | Canvas Fabric.js                                                          | ✅ Fechada |
+| 4    | Slots editáveis + fitText                                                 | ✅ Fechada |
+| 4.5  | Banco de Fontes Curado (5 fontes nicho profissional + FontFace API)       | ✅ Fechada |
+| 5    | Texturas (PNGs ABS Escovado)                                              | ✅ Fechada |
+| 6    | Estrutura hierárquica de camadas + bancos de apliques/gravações/marcações | ⏳         |
+| 6.5  | UI dos bancos (Apliques/Gravações/Marcações)                              | ⏳         |
+| 7    | Painel de Camadas hierárquico (poder, edição TIPO+MÁQUINA)                | ⏳         |
+| 7    | Sistema de alinhamento estilo Confluence                                  | ⏳         |
+| 8    | Padrões + slots persistentes                                              | ⏳         |
+| 9    | Exportação SVG por máquina/operação                                       | ⏳         |
+| 10   | Telas restantes (Abrir Padrão, Histórico, Banco)                          | ⏳         |
+| 11   | Histórico completo de pedidos                                             | ⏳         |
+| 12   | Settings                                                                  | ⏳         |
+| 13   | Validação final + polimento                                               | ⏳         |
 
 ---
 
@@ -139,6 +139,14 @@
 - ⚠️ **Cache do Fabric 6:** usar `.set({ prop: value })`, nunca atribuição direta. Bug só aparece no Tauri (Chromium), não em jsdom — testes passam mas bug existe visualmente.
 - `@font-face` não carregado no WebView ainda — `fitText` mede com fallback `system-ui`. Corrige na Onda 4.5.
 
+### Texturas (Onda 5)
+
+- Materiais aplicados via `fabric.Pattern` como fill da camada, com `clipPath` baseado no contorno do produto (`absolutePositioned: true`)
+- Cenário 1 (clipPath + Pattern ortogonal) escolhido após refute do Cenário 2 (canvas pré-renderizado) por bug de patternTransform com objeto maior que produto
+- Strip + restore simétrico de fill e clipPath em `serialize()` preserva invariante: serialize não modifica estado visual do canvas
+- Cache `materialImageCache` + `preloadMaterials` reduz trocas para < 0.5ms (meta RF-8.1 era < 200ms — 1000× mais rápido)
+- ⚠️ Riscos conhecidos Fabric 6.9.1: Issue #8517 (toDataUrl + absolutePositioned) → follow-up Onda 9; Issue #7742 (Group clipPath) → mitigado via compound path string
+
 ### Visual
 
 - **Estética industrial-utilitária** estilo Lightburn/Ableton. NÃO Canva/Figma.
@@ -161,10 +169,10 @@
 - `003-production-modules-deferred.md` — Conceito ainda imaturo, fica pra futuro
 - `004-product-layers-svg-nullable.md` — Coluna nullable até product_layers ser populado de fato
 - `005-canvas-engine-fabric-mm.md` — Canvas em mm com DPI=4, viewBox autoritativo do banco
-- `006-onda-4-slots-fittext.md` — Slots editáveis, fitText, body/overlay, placeholder, bug cache Fabric 6
-- `007-onda-4.5-banco-fontes.md` — 5 fontes curadas, FontFace API ativa, asset protocol Tauri 2.x OPT-IN, cargo clean obrigatório ao adicionar resources
-- `008-camadas-hierarquicas-bancos-componentes.md` — Camadas em 2 níveis (principal → operação) + 3 bancos novos (apliques/gravações/marcações). SVGs importados descartam cores, mantém só contornos.
-- `009-exportacao-maquina-operacao.md` — Spec completa da Onda 9: 1 SVG por (máquina, operação). Regra "marcação herda contorno". Feature "tirar miolo". Nesting fica pra Onda 9.5.
+- `006-onda-4-slots-fittext.md` — Slots, fitText, body/overlay, placeholder, bug cache Fabric 6
+- `007-onda-4.5-banco-fontes.md` — 5 fontes curadas, FontFace API ativa, asset protocol Tauri 2.x OPT-IN, cargo clean obrigatório
+- `008-onda-5-texturas-camada.md` — Texturas via fabric.Pattern + clipPath, cache de imagens, strip+restore em serialize, riscos Fabric 6.9.1 (issues #8517, #7742)
+- `009-onda-5-layout-sidebar-topbar.md` — Layout sidebar esquerda hierárquica + topbar de chips de padrões + painel direito de camadas Opção D-completa
 
 ---
 
@@ -292,4 +300,4 @@ Eu leio o contexto, faço perguntas estratégicas se necessário, e começamos c
 
 ---
 
-_Última atualização: Onda 4.5 fechada — próxima Onda 5 (texturas PNGs ABS Escovado)_
+_Última atualização: Onda 5 fechada — próxima Onda 6 (estrutura hierárquica de camadas + bancos de apliques/gravações/marcações, ADR a ser criado)_
