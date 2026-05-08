@@ -1,12 +1,17 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 
+import { list as listAppliques } from '@/data/repositories/appliqueRepository';
 import { getAllCategories } from '@/data/repositories/categoryRepository';
+import { list as listSvgBases } from '@/data/repositories/svgBaseRepository';
+import { list as listEngravings } from '@/data/repositories/engravingRepository';
 import { getAllFonts } from '@/data/repositories/fontRepository';
 import { getAllMachines } from '@/data/repositories/machineRepository';
+import { list as listMarkings } from '@/data/repositories/markingRepository';
 import { listFamilies } from '@/data/repositories/materialFamilyRepository';
 import { getAllMaterials } from '@/data/repositories/materialRepository';
 import { getAllOperations } from '@/data/repositories/operationRepository';
+import { list as listPatternLayers } from '@/data/repositories/patternLayerRepository';
 import { getAllPatternSummaries } from '@/data/repositories/patternRepository';
 import { getAllProducts } from '@/data/repositories/productRepository';
 import { getAllSettings } from '@/data/repositories/settingsRepository';
@@ -21,6 +26,8 @@ export default function DevDbCheck() {
   const [sections, setSections] = useState<Section[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  // Onda 6a — raw JSON test for appliqueRepo.list()
+  const [appliqueJson, setAppliqueJson] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -36,6 +43,11 @@ export default function DevDbCheck() {
           products,
           patterns,
           settingsMap,
+          svgBases,
+          patternLayers,
+          appliques,
+          engravings,
+          markings,
         ] = await Promise.all([
           getAllMachines(),
           getAllOperations(),
@@ -47,6 +59,11 @@ export default function DevDbCheck() {
           getAllProducts(),
           getAllPatternSummaries(),
           getAllSettings(),
+          listSvgBases(),
+          listPatternLayers(),
+          listAppliques(),
+          listEngravings(),
+          listMarkings(),
         ]);
 
         const settings = Object.entries(settingsMap).map(([key, value]) => ({ key, value }));
@@ -92,6 +109,27 @@ export default function DevDbCheck() {
             title: `settings (${settings.length})`,
             rows: settings as unknown as Array<Record<string, unknown>>,
           },
+          {
+            title: `svg_bases (${svgBases.length})`,
+            rows: svgBases as unknown as Array<Record<string, unknown>>,
+          },
+          // ── Onda 6a ────────────────────────────────────────────────────────
+          {
+            title: `pattern_layers (${patternLayers.length})`,
+            rows: patternLayers as unknown as Array<Record<string, unknown>>,
+          },
+          {
+            title: `appliques (${appliques.length})`,
+            rows: appliques as unknown as Array<Record<string, unknown>>,
+          },
+          {
+            title: `engravings (${engravings.length})`,
+            rows: engravings as unknown as Array<Record<string, unknown>>,
+          },
+          {
+            title: `markings (${markings.length})`,
+            rows: markings as unknown as Array<Record<string, unknown>>,
+          },
         ]);
       } catch (e) {
         setError(String(e));
@@ -116,6 +154,26 @@ export default function DevDbCheck() {
         {loading && <p className="text-ink-400">loading…</p>}
 
         {error && <p className="text-danger">error: {error}</p>}
+
+        {/* ── Onda 6a — botão temporário: appliqueRepo.list() raw JSON ── */}
+        <section className="border border-ink-700 rounded p-3">
+          <h2 className="mb-2 text-ink-300 font-medium">Onda 6a — appliqueRepo.list() raw JSON</h2>
+          <button
+            className="px-3 py-1 text-xs bg-ink-800 hover:bg-ink-700 text-ink-200 rounded transition-colors"
+            onClick={() => {
+              listAppliques()
+                .then((data) => setAppliqueJson(JSON.stringify(data, null, 2)))
+                .catch((e: unknown) => setAppliqueJson(`ERROR: ${String(e)}`));
+            }}
+          >
+            Chamar appliqueRepo.list()
+          </button>
+          {appliqueJson !== null && (
+            <pre className="mt-2 overflow-x-auto rounded bg-ink-900 p-2 text-[11px] text-ink-200 whitespace-pre-wrap">
+              {appliqueJson}
+            </pre>
+          )}
+        </section>
 
         {sections.map(({ title, rows }) => (
           <section key={title}>

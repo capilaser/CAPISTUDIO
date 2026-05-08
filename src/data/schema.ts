@@ -198,8 +198,34 @@ export const patterns = sqliteTable('patterns', {
   deletedAt: integer('deleted_at', { mode: 'timestamp' }),
 });
 
-// ── 13. PATTERN_SLOTS ─────────────────────────────────────────────────────────
+// ── 13. PATTERN_LAYERS ────────────────────────────────────────────────────────
+// Principal layer — represents one physical piece (base, applique) in a pattern.
+// Sub-layers of operation live in the canvas (LayerMeta) referencing this id.
+// ADR 010: hierarchy is fixed at 2 levels (principal → operation). No deeper nesting.
+export const patternLayers = sqliteTable('pattern_layers', {
+  id: text('id').primaryKey(),
+  patternId: text('pattern_id')
+    .notNull()
+    .references(() => patterns.id),
+  name: text('name').notNull(),
+  zIndex: integer('z_index').notNull().default(0),
+  visible: integer('visible', { mode: 'boolean' }).notNull().default(true),
+  locked: integer('locked', { mode: 'boolean' }).notNull().default(false),
+  svgFilePath: text('svg_file_path'), // nullable — path relative to appData/assets/svg-bases/
+  materialId: text('material_id').references(() => materials.id), // nullable
+  widthMm: real('width_mm'),
+  heightMm: real('height_mm'),
+  positionXmm: real('position_x_mm').notNull().default(0),
+  positionYmm: real('position_y_mm').notNull().default(0),
+  createdAt: integer('created_at', { mode: 'timestamp' })
+    .notNull()
+    .default(sql`(unixepoch())`),
+  deletedAt: integer('deleted_at', { mode: 'timestamp' }),
+});
+
+// ── 14. PATTERN_SLOTS ─────────────────────────────────────────────────────────
 // Static slot index for fast lookup — source of truth is canvasJson.
+// parentLayerId: nullable — NULL means slot is not yet bound to a principal layer.
 export const patternSlots = sqliteTable('pattern_slots', {
   id: text('id').primaryKey(),
   patternId: text('pattern_id')
@@ -211,6 +237,7 @@ export const patternSlots = sqliteTable('pattern_slots', {
   maxWidth: real('max_width').notNull(), // mm
   maxHeight: real('max_height').notNull(), // mm
   defaultFontId: text('default_font_id').references(() => fonts.id),
+  parentLayerId: text('parent_layer_id').references(() => patternLayers.id), // nullable — ADR 010
   meta: text('meta'), // JSON: alignment, autofit, etc.
 });
 
@@ -301,7 +328,59 @@ export const settings = sqliteTable('settings', {
     .default(sql`(unixepoch())`),
 });
 
-// ── 19. EXPORT_HISTORY ────────────────────────────────────────────────────────
+// ── 19. APPLIQUES ─────────────────────────────────────────────────────────────
+// Bank of reusable applique SVGs (physical pieces applied on top of a base).
+// ADR 010: imported SVGs are stripped of colour — only contours are used.
+export const appliques = sqliteTable('appliques', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  filePath: text('file_path').notNull(), // relative to appData/assets/appliques/
+  thumbnailPath: text('thumbnail_path'),
+  widthMm: real('width_mm'),
+  heightMm: real('height_mm'),
+  tags: text('tags').notNull().default('[]'), // JSON: string[]
+  metadata: text('metadata'), // JSON: arbitrary extra data
+  createdAt: integer('created_at', { mode: 'timestamp' })
+    .notNull()
+    .default(sql`(unixepoch())`),
+  deletedAt: integer('deleted_at', { mode: 'timestamp' }),
+});
+
+// ── 20. ENGRAVINGS ────────────────────────────────────────────────────────────
+// Bank of reusable engraving SVGs (logos, icons, ornaments to engrave).
+export const engravings = sqliteTable('engravings', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  filePath: text('file_path').notNull(), // relative to appData/assets/engravings/
+  thumbnailPath: text('thumbnail_path'),
+  widthMm: real('width_mm'),
+  heightMm: real('height_mm'),
+  tags: text('tags').notNull().default('[]'), // JSON: string[]
+  metadata: text('metadata'), // JSON: arbitrary extra data
+  createdAt: integer('created_at', { mode: 'timestamp' })
+    .notNull()
+    .default(sql`(unixepoch())`),
+  deletedAt: integer('deleted_at', { mode: 'timestamp' }),
+});
+
+// ── 21. MARKINGS ──────────────────────────────────────────────────────────────
+// Bank of reusable marking SVGs (pre-registered mark paths, letter sets for cutting).
+export const markings = sqliteTable('markings', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  filePath: text('file_path').notNull(), // relative to appData/assets/markings/
+  thumbnailPath: text('thumbnail_path'),
+  widthMm: real('width_mm'),
+  heightMm: real('height_mm'),
+  tags: text('tags').notNull().default('[]'), // JSON: string[]
+  metadata: text('metadata'), // JSON: arbitrary extra data
+  createdAt: integer('created_at', { mode: 'timestamp' })
+    .notNull()
+    .default(sql`(unixepoch())`),
+  deletedAt: integer('deleted_at', { mode: 'timestamp' }),
+});
+
+// ── 22. EXPORT_HISTORY ────────────────────────────────────────────────────────
 export const exportHistory = sqliteTable('export_history', {
   id: text('id').primaryKey(),
   orderId: text('order_id').references(() => orders.id),

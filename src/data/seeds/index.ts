@@ -1,6 +1,7 @@
 import type Database from '@tauri-apps/plugin-sql';
 
 import { getDb } from '../client';
+import { seedAppliques } from './seedAppliques';
 import { seedCategories } from './seedCategories';
 import { seedFonts } from './seedFonts';
 import { seedMachines } from './seedMachines';
@@ -9,6 +10,7 @@ import { seedOperations } from './seedOperations';
 import { seedProducts } from './seedProducts';
 import { seedSettings } from './seedSettings';
 import { seedSlotTypes } from './seedSlotTypes';
+import { seedSvgBases } from './seedSvgBases';
 
 export interface SeedResult {
   entity: string;
@@ -27,6 +29,9 @@ const SEEDS: Array<[string, SeedFn]> = [
   ['materials', seedMaterials],
   ['products', seedProducts],
   ['settings', seedSettings],
+  // Onda 6a — asset banks (run after Rust seed_asset_files copies SVGs to appData)
+  ['svg_bases', seedSvgBases],
+  ['appliques', seedAppliques],
 ];
 
 export async function seedDatabase(): Promise<SeedResult[]> {

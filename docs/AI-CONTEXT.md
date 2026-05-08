@@ -73,25 +73,25 @@
 
 ## 🏗️ Estrutura de ondas (ROADMAP)
 
-| Onda | Tema                                                                      | Status     |
-| ---- | ------------------------------------------------------------------------- | ---------- |
-| 0    | Bootstrap (Tauri + Vite + React + TS)                                     | ✅ Fechada |
-| 1    | Banco SQLite + Seeds (19 tabelas)                                         | ✅ Fechada |
-| 2    | Home + Layout Base                                                        | ✅ Fechada |
-| 3    | Canvas Fabric.js                                                          | ✅ Fechada |
-| 4    | Slots editáveis + fitText                                                 | ✅ Fechada |
-| 4.5  | Banco de Fontes Curado (5 fontes nicho profissional + FontFace API)       | ✅ Fechada |
-| 5    | Texturas (PNGs ABS Escovado)                                              | ✅ Fechada |
-| 6    | Estrutura hierárquica de camadas + bancos de apliques/gravações/marcações | ⏳         |
-| 6.5  | UI dos bancos (Apliques/Gravações/Marcações)                              | ⏳         |
-| 7    | Painel de Camadas hierárquico (poder, edição TIPO+MÁQUINA)                | ⏳         |
-| 7    | Sistema de alinhamento estilo Confluence                                  | ⏳         |
-| 8    | Padrões + slots persistentes                                              | ⏳         |
-| 9    | Exportação SVG por máquina/operação                                       | ⏳         |
-| 10   | Telas restantes (Abrir Padrão, Histórico, Banco)                          | ⏳         |
-| 11   | Histórico completo de pedidos                                             | ⏳         |
-| 12   | Settings                                                                  | ⏳         |
-| 13   | Validação final + polimento                                               | ⏳         |
+| Onda | Tema                                                                     | Status     |
+| ---- | ------------------------------------------------------------------------ | ---------- |
+| 0    | Bootstrap (Tauri + Vite + React + TS)                                    | ✅ Fechada |
+| 1    | Banco SQLite + Seeds (19 tabelas)                                        | ✅ Fechada |
+| 2    | Home + Layout Base                                                       | ✅ Fechada |
+| 3    | Canvas Fabric.js                                                         | ✅ Fechada |
+| 4    | Slots editáveis + fitText                                                | ✅ Fechada |
+| 4.5  | Banco de Fontes Curado (5 fontes nicho profissional + FontFace API)      | ✅ Fechada |
+| 5    | Texturas (PNGs ABS Escovado)                                             | ✅ Fechada |
+| 6a   | Schema + Seeds + Bancos (apliques, engravings, markings, pattern_layers) | ✅ Fechada |
+| 6.5  | UI dos bancos (Apliques/Gravações/Marcações)                             | ⏳         |
+| 7    | Painel de Camadas hierárquico (poder, edição TIPO+MÁQUINA)               | ⏳         |
+| 7    | Sistema de alinhamento estilo Confluence                                 | ⏳         |
+| 8    | Padrões + slots persistentes                                             | ⏳         |
+| 9    | Exportação SVG por máquina/operação                                      | ⏳         |
+| 10   | Telas restantes (Abrir Padrão, Histórico, Banco)                         | ⏳         |
+| 11   | Histórico completo de pedidos                                            | ⏳         |
+| 12   | Settings                                                                 | ⏳         |
+| 13   | Validação final + polimento                                              | ⏳         |
 
 ---
 
@@ -147,6 +147,15 @@
 - Cache `materialImageCache` + `preloadMaterials` reduz trocas para < 0.5ms (meta RF-8.1 era < 200ms — 1000× mais rápido)
 - ⚠️ Riscos conhecidos Fabric 6.9.1: Issue #8517 (toDataUrl + absolutePositioned) → follow-up Onda 9; Issue #7742 (Group clipPath) → mitigado via compound path string
 
+### Onda 6a — Schema hierárquico + bancos de componentes
+
+- 4 tabelas novas: `pattern_layers`, `appliques`, `engravings`, `markings` — todas seguem mesmo shape (id, name, filePath, thumbnail, dimensões, tags, metadata, soft delete)
+- Coluna `parent_layer_id` em `pattern_slots` (nullable, FK lógica → `pattern_layers`)
+- Convenção dual de filePath: `"resource://"` (fixtures embutidas) e `"appdata://"` (uploads do usuário). Resolver em `src/services/svgPathResolver.ts`
+- Fixtures de seed (4 svg-bases + 3 apliques) ficam em `src-tauri/resources/fixtures/`, **NUNCA copiadas pra appData**. Padrão coerente com Onda 4.5 (banco de fontes)
+- `INSERT OR REPLACE` em seeds — revisitar quando `pattern_layers` virar FK para `svg_bases` (Onda 6b+)
+- ADR 010 documenta hierarquia de camadas em 2 níveis fixos (principal → operação)
+
 ### Visual
 
 - **Estética industrial-utilitária** estilo Lightburn/Ableton. NÃO Canva/Figma.
@@ -173,6 +182,7 @@
 - `007-onda-4.5-banco-fontes.md` — 5 fontes curadas, FontFace API ativa, asset protocol Tauri 2.x OPT-IN, cargo clean obrigatório
 - `008-onda-5-texturas-camada.md` — Texturas via fabric.Pattern + clipPath, cache de imagens, strip+restore em serialize, riscos Fabric 6.9.1 (issues #8517, #7742)
 - `009-onda-5-layout-sidebar-topbar.md` — Layout sidebar esquerda hierárquica + topbar de chips de padrões + painel direito de camadas Opção D-completa
+- `010-camadas-hierarquicas-bancos-componentes.md` — Hierarquia de camadas em 2 níveis, tabelas de bancos, convenção dual filePath resource://+appdata://, FK parentLayerId
 
 ---
 
@@ -300,4 +310,4 @@ Eu leio o contexto, faço perguntas estratégicas se necessário, e começamos c
 
 ---
 
-_Última atualização: Onda 5 fechada — próxima Onda 6 (estrutura hierárquica de camadas + bancos de apliques/gravações/marcações, ADR a ser criado)_
+_Última atualização: Onda 6a fechada — próxima Onda 6b (parser SVG + LayerMeta refactor)_

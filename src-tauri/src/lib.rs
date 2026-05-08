@@ -27,6 +27,12 @@ pub fn run() {
             sql: include_str!("../migrations/0003_fix_resource_paths.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 5,
+            description: "wave6a_schema",
+            sql: include_str!("../migrations/0004_wave6a_schema.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()
