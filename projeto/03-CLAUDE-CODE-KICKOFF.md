@@ -4,7 +4,74 @@
 
 ---
 
-## CONTEXTO
+## ⚠️ ATUALIZAÇÃO PÓS-ONDA 8 (estado vigente)
+
+Este kickoff foi escrito quando o projeto estava na Onda 0. **As Ondas 0–6.5 e a Onda 8 já foram entregues e commitadas.** O documento abaixo permanece como referência histórica do plano original, mas o estado vigente é:
+
+### Estratégia atual (travada pós-Onda 8)
+
+> **Construir o produto inteiro de forma sólida antes de testar com clientes.**
+
+A operação que o Capi Studio v2 automatiza já é validada na prática diária do dono — não há "MVP pra validar mercado". O critério de pronto é **substituir o fluxo do Corel inteiro**.
+
+**Implicações:**
+
+- Não vender em fatias intermediárias
+- Não pular ondas pra "ir mais rápido"
+- Cada onda fecha completa (Plano → Implementação → Validação → Commit)
+- Pós-MVP: ajustes pontuais e atualizações projetadas, não reescrita
+
+### Estado real das ondas (atualizado)
+
+| Onda    | Tema                                                      | Status         |
+| ------- | --------------------------------------------------------- | -------------- |
+| 0       | Bootstrap Tauri + React + TS                              | ✅ Fechada     |
+| 1       | Banco SQLite + Seeds                                      | ✅ Fechada     |
+| 2       | Home + Layout Base                                        | ✅ Fechada     |
+| 3       | Canvas Fabric.js                                          | ✅ Fechada     |
+| 4       | Slots + fitText                                           | ✅ Fechada     |
+| 4.5     | Banco de Fontes Curado                                    | ✅ Fechada     |
+| 5       | Texturas (PNGs ABS Escovado)                              | ✅ Fechada     |
+| 6a      | Schema hierárquico (3 bancos novos)                       | ✅ Fechada     |
+| 6b      | Parser Corel + LayerMeta hierárquico                      | ✅ Fechada     |
+| 6c      | ❌ REMOVIDA — absorvida pela Onda 7                       | —              |
+| 6.5     | UI Apliques completa                                      | ✅ Fechada     |
+| **8**   | **Padrões salvos + reabertura (commit 17a23ae)**          | **✅ Fechada** |
+| **9.5** | **Mini — Cadastrar 5 materiais novos (Acrílico)**         | **⏭️ PRÓXIMA** |
+| 7       | Painel hierárquico + alinhamento Confluence               | ⏳             |
+| 8.5     | Banco de Gravações + uso no canvas (categoria Profissões) | ⏳             |
+| 9       | Exportação PNG + SVG por máquina                          | ⏳             |
+| 10      | Telas restantes (Grid, Histórico, Banco)                  | ⏳             |
+| 11      | Atalhos + Undo/Redo                                       | ⏳             |
+| 12      | Polimento + build MSI                                     | ⏳             |
+| 13      | Validação final + smoke test                              | ⏳             |
+
+**Sequência travada (ordem de execução):** Mini-9.5 → Onda 7 → Onda 8.5 → Onda 9 → Onda 10 → 11 → 12 → 13.
+
+**Justificativa da ordem:**
+
+- Mini-9.5 primeiro: trabalho pequeno, destrava material correto pras placas
+- Onda 7 antes de criar mais padrões: evita refazer com UX ruim
+- Onda 8.5 antes da 9: evita refazer pipeline de export quando gravações entrarem
+- Onda 10 antes de 11/12: telas são produto, atalhos/polimento são lapidação
+
+### O que ainda vale do kickoff original
+
+✅ Stack (não-negociável) — seção abaixo
+✅ Estrutura de pastas — seção abaixo
+✅ Regras de comportamento Claude Code — seção abaixo
+✅ Design system — seção abaixo
+✅ Critério de primeiro commit — **NÃO se aplica mais** (o projeto já tem dezenas de commits)
+
+### O que NÃO vale mais do kickoff original
+
+❌ "Comece pela Onda 0" — Onda 0 já foi feita
+❌ Tabela de ondas no roadmap original (substituída pela tabela acima)
+❌ Login na Onda 2 (Login removido do MVP — single-user local sem senha)
+
+---
+
+## CONTEXTO HISTÓRICO (mantido pra referência)
 
 Você é o engenheiro responsável por construir o **Capi Studio v2**, um sistema desktop para Windows de criação de artes para gravação a laser e corte a laser.
 

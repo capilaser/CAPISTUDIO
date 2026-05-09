@@ -14,6 +14,93 @@ Durante a consultoria você teve **muitas ideias boas** que não cabem no MVP. E
 
 ---
 
+## 🎯 Estratégia de execução do MVP
+
+> **Decidido pós-Onda 8:** construir o produto inteiro de forma sólida antes de testar com clientes.
+
+A operação que o Capi Studio v2 automatiza já é validada na prática diária do Gabriell — não há "MVP pra validar mercado", há produto completo pra substituir o Corel.
+
+**Sequência travada das ondas restantes:**
+
+| Ordem | Onda                                                                           | Por que essa ordem                                                |
+| ----- | ------------------------------------------------------------------------------ | ----------------------------------------------------------------- |
+| 1     | **Mini-9.5 — Cadastrar 5 materiais novos**                                     | Trabalho pequeno, destrava material correto pras placas           |
+| 2     | **Onda 7 — Painel hierárquico + alinhamento**                                  | Designer profissional ANTES de criar mais padrões — evita refazer |
+| 3     | **Onda 8.5 — Banco de Gravações + uso no canvas**                              | Antes da Onda 9 — evita refazer pipeline de export                |
+| 4     | **Onda 9 — Exportação PNG + SVG por máquina**                                  | Output pra cliente + máquina                                      |
+| 5     | **Onda 10 — Telas restantes** (Grid Padrões, Histórico, Banco Ativos completo) | Navegação completa                                                |
+| 6     | **Onda 11 — Atalhos + Undo/Redo (50 níveis)**                                  | UX profissional                                                   |
+| 7     | **Onda 12 — Polimento final + build MSI**                                      | Instalador Windows pronto                                         |
+| 8     | **Onda 13 — Validação final + smoke test**                                     | QA do produto inteiro                                             |
+
+**Não pular ondas. Não vender em fatias intermediárias. Pós-MVP: ajustes pontuais e atualizações projetadas, não reescrita.**
+
+---
+
+## 📋 Escopo refinado da Onda 8.5 — Banco de Gravações
+
+> **Refinamento decidido pós-Onda 8** (após Gabriell entregar SVG da Balança da Justiça).
+
+### O que a onda entrega
+
+1. **Cadastro no banco `engravings`** dos SVGs em `assets-pendentes/gravacoes/profissoes/`:
+   - `balanca-advogado.svg` (entregue)
+   - `advogado-texto.svg` (a entregar pelo Gabriell)
+   - Futuras profissões conforme Gabriell for produzindo
+
+2. **Sistema de categorias de gravação**:
+   - Categoria inicial: **"Profissões"**
+   - Schema já tem `categories` table — usar `scope='engraving'`
+   - Categorias futuras (Fase 2): Símbolos, Ornamentos, Decorativos
+
+3. **Aba "Gravações" no UnifiedRightPanel**:
+   - Análoga à aba "Apliques" da Onda 6.5
+   - Filtro por categoria (dropdown)
+   - Grid de cards com preview SVG
+   - Clique adiciona gravação ao canvas
+
+4. **Engine: `addEngravingSvg()`**:
+   - Análogo a `addAppliqueSvg()` da Onda 6.5
+   - Mesmas validações via `parseCorelSvg`
+   - Cria `OperationLayerMeta` com `kind: 'operation', operation: 'gravacao'`
+   - Posicionamento livre (Gabriell move manualmente sobre o aplique destino)
+
+### Decisões de produto (Gabriell)
+
+- **SVG vetorizado pronto > texto vivo:** Gabriell exporta texto da palavra "Advogado" como SVG do Corel (mesmo método da balança), não texto editável em runtime. Vantagem: controle total da fonte e estilo, simples, faz uma vez por profissão.
+
+- **Restrição de fonte (empírica):** Gabriell descobriu na prática que algumas fontes "bugam" no SVG exportado do Corel. Solução: ele evita essas fontes. Sem lista escrita — conhecimento operacional do dono.
+
+- **Categoria inicial só "Profissões":** Não inflar o banco. Outras categorias entram quando houver demanda real.
+
+### O que NÃO entra na 8.5
+
+- ❌ Texto vetorizado em runtime (gerar SVG do texto baseado em fonte do banco) — fica pra Fase 2 quando houver volume de profissões justificando
+- ❌ Editor de gravação dentro do app — Gabriell continua usando Corel pra criar
+- ❌ Posicionamento automático sobre apliques — operador move manualmente
+- ❌ Categorias adicionais (Símbolos, Ornamentos) — Fase 2 ou quando demandar
+
+### Diferença entre `engravings` e `logos`
+
+| Banco        | O que armazena                                                | Quem cadastra                                        |
+| ------------ | ------------------------------------------------------------- | ---------------------------------------------------- |
+| `engravings` | Gravações **reutilizáveis** do catálogo (balança, "Advogado") | Designer, 1 vez por categoria                        |
+| `logos`      | Logo do **cliente final** (escritório "Silva & Associados")   | Auto-alimentado quando operador faz upload no pedido |
+
+---
+
+## 🪦 Ondas removidas do roadmap
+
+### Onda 6c — Painel de slots agrupado por camada
+
+**Status:** ❌ REMOVIDA
+
+**Por quê:** A funcionalidade que ela entregaria (UI agrupada de slots por camada principal) é coberta pela Onda 7 (Painel de Camadas hierárquico estilo Photoshop). Manter as duas separadas seria redundância.
+
+**Decisão tomada:** consolidar tudo na Onda 7. A Mini-onda 9.5 + Onda 7 substituem completamente o que era 6c.
+
+---
+
 ## Fase 2 — Pedidos e CRM (provavelmente próxima onda após MVP)
 
 ### Página de Pedidos com Status
@@ -189,6 +276,12 @@ Placa
 - Logos com histórico: cliente mandou logo nova, preservar a antiga
 - Comparação visual entre versões
 
+### Upload de produto pelo usuário (substituir ADR 013)
+
+- Hoje `base_svg` da placa-300x90 vem de fixture via seed (ADR 013)
+- Pós-MVP: criar fluxo de upload de SVG → cadastrar produto novo → preencher base_svg
+- Substitui a estratégia "INSERT OR IGNORE + UPDATE WHERE NULL" por upload real
+
 ---
 
 ## Fase 2 — Operação Real
@@ -263,105 +356,9 @@ Pra deixar claro o que o produto NÃO é:
 
 ---
 
-## Visão estendida capturada na calibração da Onda 5
-
-Durante a calibração da Onda 5, Gabriell descreveu detalhadamente a
-visão completa do produto. Tudo abaixo está formalizado no arquivo
-`projeto/06-VISION.md` — esta seção é apenas índice de features
-novas que entram no backlog priorizado.
-
-### Categorias novas de elementos no Banco de Ativos
-
-- **Banco de curvas e linhas padrão (acabamentos)**: ornamentos,
-  traços decorativos, divisórias. Sub-aba do Banco de Ativos.
-  Schema atual (`svg_bases`) já comporta — falta apenas UI de
-  categorização. Onda 10.
-
-- **Banco de apliques**: SVGs com texturas associadas que Gabriell
-  usa repetidamente (apliques de bronze, dourado). Categoria
-  "Aplique" em `svg_bases` + texture sugerida vinculada. Onda 10
-  ou 5.5.
-
-- **Histórico de uso de fontes**: rastrear quais fontes são mais
-  usadas em quais slots. Adicionar campo `usage_count` em `fonts`
-  ou tabela `pattern_fonts`. Refinamento Onda 10+.
-
-- **Conjuntos de fontes pré-definidos (presets)**: abstração que
-  aplica fonte diferente em cada slot ao mesmo tempo (ex: "Preset
-  Profissional Liberal" = fonte X pra nome + fonte Y pra profissão).
-  Simplifica criação de padrões similares. Fase 2.
-
-### Otimizações de exportação (otimizam tempo de máquina)
-
-- **Tirar miolo automático ("hollow letters")**: ao gerar arquivo
-  de marcação, remover áreas internas de letras (ex: letra B sem
-  as 2 bolinhas internas). Otimiza tempo de máquina, economiza
-  material. Complexidade técnica média-alta (parsing SVG, detecção
-  de holes). Fase 2.
-
-- **Nesting automático**: empacotar SVGs no menor espaço possível
-  antes de exportar pra máquina. Algoritmo de bin packing 2D
-  irregular. Bibliotecas existem (SVGNest, Deepnest), avaliar
-  integração. Complexidade alta. Fase 2.
-
-- **Detecção automática de operação por contexto**: sistema detecta
-  se gravação está dentro de aplique vs solta na camada 0, e propõe
-  operação correta automaticamente (sem modal). Refinamento da
-  decisão B do ADR 009 (modal de sugestão). Complexidade
-  baixa-média. Fase 2.
-
-### Automação de fluxo
-
-- **Aprovação 1-clique → arquivos certos**: botão "Aprovar pedido"
-  gera automaticamente PNG mockup + SVGs separados por máquina +
-  salva no histórico + (Fase 3) notifica setor de produção. Onda 9
-  já implementa parte do export; Onda 11/12 polem fluxo; Fase 2
-  adiciona automação completa.
-
-### Inteligência futura (Fase 3)
-
-- **IA para busca visual de padrões**: cliente manda foto, sistema
-  sugere padrões similares do banco usando embeddings visuais.
-  Requer modelo de visão computacional + infra de embeddings +
-  dataset rotulado. Longo prazo.
-
-### Curadoria de broches existentes
-
-- **Curadoria UI completa**: Gabriell tem milhares de broches em
-  arquivos antigos. Decisão: NÃO migrar em massa. Curadoria manual
-  controlada via UI (Onda 10). Volume estimado: ~50-100 padrões
-  curados, não milhares.
-
-  Princípios:
-  - Qualidade > quantidade no banco
-  - Padrões antigos ruins poluem busca
-  - Curadoria é onde fica o valor real
-
-  Início: depois do MVP fechar. Onda 10 entrega a UI de import;
-  Gabriell faz curadoria offline depois.
-
----
-
-## Decisões de UX já formalizadas (referência)
-
-Estas decisões foram capturadas em ADR 008 (texturas) e ADR 009
-(layout) durante a calibração da Onda 5. Documentadas aqui para
-referência cruzada:
-
-- **Operador vs Designer é layout, não permissão** (ADR 008)
-- **Painel direito de camadas — Opção D-completa** (sempre visível
-  nos 2 modos, ADR 009)
-- **Sidebar esquerda hierárquica** (Produto → Material → Cor →
-  Padrão → Campos dinâmicos, ADR 009)
-- **Topbar de padrões inline** (chips + thumbnails no canvas, ADR 009)
-- **Drag entre camadas com modal de sugestão** (Opção B, ADR 009)
-- **Adicionar campo via menu de contexto** (botão direito, ADR 009)
-
----
-
 ## Como priorizar Fase 2
 
-Quando o MVP estiver estável e em uso, sugestão de ordem:
+Quando o MVP completo estiver entregue e em uso, sugestão de ordem:
 
 1. **Drive Reader Inteligente** (alto valor, viabiliza automação completa)
 2. **Página de Pedidos com Status** (organização operacional)
@@ -376,4 +373,4 @@ Quando o MVP estiver estável e em uso, sugestão de ordem:
 
 ---
 
-**Última atualização:** 2026-05-05 (consultoria de planejamento)
+**Última atualização:** Pós-Onda 8 (commit 17a23ae). Estratégia "produto completo antes de testar" travada. Sequência das ondas restantes definida. Onda 6c removida do roadmap.

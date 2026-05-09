@@ -20,9 +20,28 @@
 
 - **Não programa.** Aprendeu a usar terminal nesta jornada. Dono da empresa, está contratando consultoria de IA.
 - **Dono de empresa de corte/gravação a laser** em Curitiba/PR. Esposa é CEO. Eventualmente vai contratar alguém pra operar.
+- **Mercado já validado.** A operação que o Capi Studio v2 vai automatizar é exatamente a que ele já executa todos os dias no Corel há anos. **Não é hipótese de produto** — é substituição de fluxo manual por software dedicado.
 - **Decisões maduras:** trava escopo MVP enxuto, foca no essencial, descarta features que viram patos chocos.
 - **Trabalha com pausas saudáveis:** sessões de horas com paradas pra dormir, comer, trabalhar outras coisas.
 - **Personalidade:** detalhista, paciente com método, valida com prints, não confia cegamente. Aceita feedback firme quando técnico.
+
+---
+
+## 🎯 ESTRATÉGIA TRAVADA (decisão pós-Onda 8)
+
+> **Construir o produto inteiro de forma sólida, antes de testar com clientes.**
+
+A operação que o produto automatiza já é **validada na prática diária do Gabriell**. Não há "MVP pra validar mercado" — há produto completo pra substituir o Corel.
+
+**Implicações:**
+
+- ❌ Não vender em fatias intermediárias
+- ❌ Não pular ondas pra "ir mais rápido"
+- ✅ Cada onda entrega funcionalidade sólida, sem retrabalho
+- ✅ Quando o produto fechar, ele substitui o fluxo do Corel inteiro
+- ✅ Pós-MVP: ajustes pontuais e atualizações projetadas, não reescrita
+
+**Critério de pronto:** Gabriell consegue fechar um pedido (criar padrão → preencher → exportar PNG + SVG corte) **sem abrir o Corel**.
 
 ---
 
@@ -71,18 +90,37 @@
 - **Sem bajulação** — feedback honesto vale mais
 - **Checkpoints minimalistas** — só onde Gabriell precisa validar de verdade
 
+### Regra obrigatória do Claude Code (criada na Onda 8)
+
+Ao final de CADA fase, Claude Code DEVE incluir bloco:
+
+```
+═══════════════════════════════════════════════════════════════
+ESTADO DE CONTEXTO (pro consultor estratégico)
+═══════════════════════════════════════════════════════════════
+
+Contexto restante: ~XX%
+Última operação custosa: [...]
+Próxima fase prevista: [...]
+Recomendação: [Pode seguir / Sugiro compactar / Sugiro reiniciar]
+Justificativa: [...]
+═══════════════════════════════════════════════════════════════
+```
+
 ### Lições aprendidas (de sessões anteriores)
 
 - ⚠️ Claude Code tende a pular checkpoints — usar linguagem firme: _"PARE EXECUÇÃO. Quebra de contrato."_
 - ⚠️ Claude Code tende a atacar sintoma, não causa raiz — pedir diagnóstico antes de fix
 - ⚠️ Claude Code às vezes **inventa justificativa** pra evitar investigar problema real ("removi os logs pelo critério X" quando os logs eram outros). Pressionar com evidência cronológica.
 - ⚠️ "Auto mode" do Claude Code pula perguntas críticas — forçar respostas explícitas no kickoff
+- ⚠️ Claude Code esquece o bloco "ESTADO DE CONTEXTO" se não for lembrado — exigir até virar hábito
 - ✅ Validação visual com prints > confiar em descrição textual
 - ✅ Validação extra via SQL direto no banco (não confiar só no F5 test) quando persistência for crítica
 - ✅ Cada decisão arquitetural vai pra ADR em `docs/DECISIONS/`
 - ✅ **Logs no DevTools > leitura de código** quando Claude Code afirma "tudo OK" mas runtime contradiz
 - ✅ **Teste verde ≠ código no caminho de execução** — validar via runtime que função modificada está sendo chamada
 - ✅ **Causa raiz > sintoma**, sempre, sem exceção
+- ✅ **Validação manual com print do Gabriell substitui infra de teste de banco real** (decidido na Onda 8 — viável com dono de operação validada)
 
 ---
 
@@ -104,10 +142,12 @@
 - Onda 5 ✅ → Sonnet 4.6
 - Onda 6a ✅ → Sonnet 4.6 (schema)
 - Onda 6b ✅ → Opus 4.7 alto (parser + LayerMeta + bug Fabric)
-- Onda 6c → Sonnet 4.6 (painel de slots)
-- Onda 6.5 → Sonnet 4.6 (UI bancos)
-- Onda 7 → **Opus 4.7 + alto** (alinhamento)
-- Onda 9 → **Opus 4.7 + alto** (exportação SVG)
+- Onda 6.5 ✅ → Sonnet 4.6 (UI Apliques completa)
+- Onda 8 ✅ → Sonnet 4.6 (padrões salvos + reabertura)
+- **Mini-9.5 → Sonnet 4.6** (cadastrar materiais — trabalho pequeno)
+- **Onda 7 → Opus 4.7 + alto** (alinhamento + painel hierárquico)
+- **Onda 8.5 → Sonnet 4.6** (gravações sobre apliques)
+- **Onda 9 → Opus 4.7 + alto** (exportação SVG por máquina/operação)
 - Ondas 10-12 → Sonnet 4.6 ou Haiku
 - Onda 13 → Opus 4.7
 
@@ -115,27 +155,43 @@
 
 ## 🏗️ Estrutura de ondas (ROADMAP)
 
-| Onda    | Tema                                                                | Status                             |
-| ------- | ------------------------------------------------------------------- | ---------------------------------- |
-| 0       | Bootstrap (Tauri + Vite + React + TS)                               | ✅ Fechada                         |
-| 1       | Banco SQLite + Seeds (19 tabelas)                                   | ✅ Fechada                         |
-| 2       | Home + Layout Base                                                  | ✅ Fechada                         |
-| 3       | Canvas Fabric.js                                                    | ✅ Fechada                         |
-| 4       | Slots editáveis + fitText                                           | ✅ Fechada                         |
-| 4.5     | Banco de Fontes Curado (5 fontes nicho profissional + FontFace API) | ✅ Fechada                         |
-| 5       | Texturas (PNGs ABS Escovado)                                        | ✅ Fechada                         |
-| 6a      | Schema de hierarquia (3 bancos novos)                               | ✅ Fechada                         |
-| **6b**  | **Parser Corel + Cleanup + LayerMeta hierárquico**                  | **✅ Fechada**                     |
-| 6c      | Painel de Slots agrupado por camada                                 | ⏳ (pulada — vai junto com Onda 7) |
-| **6.5** | **UI dos bancos (Apliques/Gravações/Marcações) — Fases A+B+C+D**    | **✅ Fechada**                     |
-| 7       | Painel de Camadas hierárquico + alinhamento estilo Confluence       | ⏳                                 |
-| **8**   | **Padrões salvos + round-trip (Placa Advogado)**                    | **✅ Fechada**                     |
-| 8.5     | Gravações sobre apliques (balança + "Advogado")                     | ⏳                                 |
-| 9       | Exportação SVG por máquina/operação                                 | ⏳ (recomendado ANTES da 8.5)      |
-| 10      | Telas restantes (Abrir Padrão, Histórico, Banco)                    | ⏳                                 |
-| 11      | Histórico completo de pedidos                                       | ⏳                                 |
-| 12      | Settings                                                            | ⏳                                 |
-| 13      | Validação final + polimento                                         | ⏳                                 |
+| Onda    | Tema                                                                      | Status                          |
+| ------- | ------------------------------------------------------------------------- | ------------------------------- |
+| 0       | Bootstrap (Tauri + Vite + React + TS)                                     | ✅ Fechada                      |
+| 1       | Banco SQLite + Seeds (24 tabelas pós-6a)                                  | ✅ Fechada                      |
+| 2       | Home + Layout Base                                                        | ✅ Fechada                      |
+| 3       | Canvas Fabric.js                                                          | ✅ Fechada                      |
+| 4       | Slots editáveis + fitText                                                 | ✅ Fechada                      |
+| 4.5     | Banco de Fontes Curado (5 fontes)                                         | ✅ Fechada                      |
+| 5       | Texturas (PNGs ABS Escovado)                                              | ✅ Fechada                      |
+| 6a      | Schema de hierarquia (3 bancos novos)                                     | ✅ Fechada                      |
+| 6b      | Parser Corel + Cleanup + LayerMeta hierárquico                            | ✅ Fechada                      |
+| 6c      | ❌ **REMOVIDA** — funcionalidade absorvida pela Onda 7                    | ❌ Removida                     |
+| 6.5     | UI Apliques completa                                                      | ✅ Fechada                      |
+| **8**   | **Padrões salvos + reabertura (Placa Advogado)**                          | **✅ Fechada (commit 17a23ae)** |
+| **9.5** | **Mini-onda — Cadastrar 5 materiais novos (Acrílico Espelhado + Sólido)** | **⏭️ PRÓXIMA**                  |
+| 7       | Painel de Camadas hierárquico + alinhamento estilo Confluence             | ⏳                              |
+| 8.5     | Gravações sobre apliques (balança + texto profissão)                      | ⏳                              |
+| 9       | Exportação SVG por máquina/operação + PNG mockup                          | ⏳                              |
+| 10      | Telas restantes (Grid Padrões, Histórico, Banco Ativos)                   | ⏳                              |
+| 11      | Atalhos globais + Undo/Redo (50 níveis)                                   | ⏳                              |
+| 12      | Polimento final + build MSI Windows                                       | ⏳                              |
+| 13      | Validação final + smoke test do MVP completo                              | ⏳                              |
+
+**Sequência travada (ordem de execução):**
+
+1. Mini-9.5 (materiais)
+2. Onda 7 (painel hierárquico + alinhamento)
+3. Onda 8.5 (gravações)
+4. Onda 9 (exportação)
+5. Ondas 10-13 (telas, atalhos, polimento, validação)
+
+**Justificativa da ordem:**
+
+- Mini-9.5 primeiro: trabalho pequeno, destrava material correto pras placas
+- Onda 7 antes de criar mais padrões: evita refazer padrões com UX ruim
+- Onda 8.5 antes da 9: evita refazer pipeline de export quando gravações entrarem
+- Onda 10 antes de 11/12: telas são produto, atalhos/polimento são lapidação
 
 ---
 
@@ -146,12 +202,16 @@
 - **MVP super enxuto:** apenas Editor + Banco de templates + Banco de artes geradas. Sem CRM, sem dashboard, sem Make/Trello/WhatsApp. Tudo isso vai pra Fase 2.
 - **Sem login no MVP:** single-user local. Login fica pra Fase 2 (multi-usuário).
 - **Caminho A — Rewrite total**, não migração incremental. v1 vira "spec executável das regras de negócio".
+- **Estratégia "produto completo antes de testar"** — operação já validada na prática, não vender em fatias.
 
 ### Arquitetura
 
 - **Camadas tipadas:** cada camada do SVG tem `kind: "principal" | "operation" | "visual"` (discriminated union, ADR 010).
 - **Banco de logos auto-alimentado:** toda logo usada vira asset salvo automaticamente.
-- **Materiais = PNGs reais**, não gradientes SVG. 4 PNGs do "ABS Escovado" (prata, rose, dourado, bronze) são seed da Onda 1. ABS Escovado validado para broches e placas na Onda 8; placas de Acrílico Espelhado + Sólido entram em onda futura.
+- **Materiais = PNGs reais**, não gradientes SVG. Famílias confirmadas:
+  - **ABS Escovado** (Bronze, Dourado, Prata, Rose Gold) — uso em **broches e outros produtos**
+  - **Acrílico Espelhado** (Dourado, Prata, Rose Gold) — uso em **placas profissão**
+  - **Acrílico Sólido** (Branco, Preto) — uso em **placas profissão**
 - **Sem fonte padrão por slot.** Fonte é escolhida no momento de criar o slot.
 - **Production modules deferidos** pro backlog (ADR 003).
 
@@ -190,6 +250,15 @@
 - **schemaVersion: 2** no canvasJson. Migration trivial (banco vazio).
 - **Lição crítica da Onda 6b:** testes verdes não provam que código novo está no caminho de execução. Sempre validar via DevTools que função modificada está sendo chamada no runtime real. Bug pode estar em "qual porta o runtime usa", não em "como a porta funciona". Adicionar testes de integração que exercitem o MESMO caminho do runtime — não só o caminho ideal.
 
+### Onda 8 (padrões salvos + reabertura)
+
+- **insertPattern()** cria registro novo com `crypto.randomUUID()` — separado de `upsertPatternCanvas()` (que sempre escreve em ID fixo do dev).
+- **listByProduct(productId)** filtra por produto — padrões antigos do broche não aparecem na lista de placas.
+- **SaveAsPatternDialog + LoadPatternDialog** = shadcn Dialog, NUNCA `prompt()` ou `alert()` nativos.
+- **base_svg da placa-300x90** vem de fixture (`tests/fixtures/camadas-base/placa-base.svg`) via seed (ADR 013). Limitação documentada: editar fixture exige `del banco + reseed`.
+- **Round-trip de padrão validado**: 7 testes de integração (mock do banco) + validação manual do Gabriell com 6 prints.
+- **Validação manual com print do Gabriell** substitui infra de teste de banco real — viável porque a operação já é validada na prática diária.
+
 ### Visual
 
 - **Estética industrial-utilitária** estilo Lightburn/Ableton. NÃO Canva/Figma.
@@ -217,7 +286,8 @@
 - `008-camadas-hierarquicas-bancos-componentes.md` — Camadas em 2 níveis (principal → operação) + 3 bancos novos (apliques/gravações/marcações)
 - `009-exportacao-maquina-operacao.md` — Spec completa da Onda 9: 1 SVG por (máquina, operação). Regra "marcação herda contorno". Feature "tirar miolo".
 - `010-camadas-hierarquicas.md` — Estrutura hierárquica de camadas + bancos de componentes
-- **`011-fabric6-fill-empty-string.md`** — Fabric 6 passa "none" literal pro canvas DOM, que renderiza preto. Workaround: `fill: ''` no obj.set.
+- `011-fabric6-fill-empty-string.md` — Fabric 6 passa "none" literal pro canvas DOM, que renderiza preto. Workaround: `fill: ''` no obj.set.
+- `013-base-svg-seed-onda8.md` — base_svg vem de fixture via seed (INSERT OR IGNORE + UPDATE WHERE NULL). Limitação: editar fixture exige reseed manual.
 
 ---
 
@@ -228,7 +298,7 @@ Localização: `capi-studio-v2/projeto/` (anexar quando relevante ao chat)
 - `00-README.md` — índice e instruções
 - `01-DATABASE.md` — schema SQLite com Drizzle (24 tabelas após Onda 6a)
 - `02-REQUIREMENTS.md` — requisitos funcionais MVP
-- `03-CLAUDE-CODE-KICKOFF.md` — prompt de kickoff principal, 14 ondas
+- `03-CLAUDE-CODE-KICKOFF.md` — prompt de kickoff principal, ondas atualizadas
 - `04-STITCH-PROMPT.md` — prompt em inglês pra Google Stitch
 - `05-BACKLOG.md` — Fase 2/3 documentadas
 - `06-VISION.md` — norte estratégico do produto
@@ -317,6 +387,76 @@ E eu vou rodar este checklist e te responder objetivamente:
 
 ---
 
+## 📦 Assets pendentes esperando cadastro
+
+**Localização (FORA do projeto Tauri, na "caixa de entrada" do Gabriell):**
+
+```
+C:\Users\Gabriell\Desktop\Capi Studio 0.2\assets-pendentes\
+├── materiais\
+│   ├── acrilico-espelhado-dourado.png   ← Mini-9.5
+│   ├── acrilico-espelhado-prata.png     ← Mini-9.5
+│   ├── acrilico-espelhado-rose-gold.png ← Mini-9.5
+│   ├── acrilico-solido-branco.png       ← Mini-9.5
+│   └── acrilico-solido-preto.png        ← Mini-9.5
+└── gravacoes\
+    └── profissoes\
+        ├── balanca-advogado.svg         ← Onda 8.5 (entregue)
+        └── advogado-texto.svg           ← Onda 8.5 (a entregar)
+        (futuro: medico, dentista, engenheiro, arquiteto...)
+```
+
+**Por que "assets-pendentes" fica FORA do projeto:**
+
+A pasta é a **caixa de entrada** do Gabriell — ele coloca arquivos lá quando ficam prontos no Corel/ChatGPT, e o Claude Code copia pra dentro do projeto na onda apropriada.
+
+Mantê-la fora do projeto evita:
+
+- Conflito com seeds/migrations
+- Commits acidentais de arquivos de trabalho
+- Confusão entre "asset cadastrado" vs "asset pra cadastrar"
+
+**Fluxo:**
+
+1. Gabriell coloca o arquivo em `assets-pendentes/<categoria>/`
+2. Onda apropriada roda (Mini-9.5 ou 8.5)
+3. Claude Code copia pro projeto e cadastra no banco
+4. Gabriell pode apagar de `assets-pendentes/` depois (opcional)
+
+### Materiais (Mini-9.5)
+
+5 PNGs aprovados visualmente pelo consultor + Gabriell. Resolução: 1600×900 px. PNG opaco. Estilo: foto realista de chapa de material em vista frontal, iluminação upper-left difusa.
+
+**Compatibilidade decidida:**
+
+- Acrílico Espelhado + Sólido → uso em **placas** (placa-300x90)
+- ABS Escovado (já cadastrado) → uso em **broches** e outros produtos
+
+### Gravações (Onda 8.5)
+
+SVGs exportados do Corel (vetorizados em curvas), categoria **"Profissões"**, vão pra tabela `engravings`.
+
+**Procedimento padrão de exportação (do Corel):**
+
+1. Escreve/desenha no Corel
+2. Seleciona texto/objeto
+3. Converte em curvas (botão direito → Converter em curvas)
+4. Exporta como SVG
+5. Salva em `assets-pendentes/gravacoes/profissoes/<nome>.svg`
+
+**Restrição operacional descoberta na prática (Gabriell):**
+
+> Algumas fontes "bugam" no SVG exportado pelo Corel. Solução: Gabriell evita essas fontes. Não há lista escrita — é conhecimento empírico do operador. Se uma gravação vier com problema visual após cadastro, primeiro suspeito é a fonte usada.
+
+**Diferença entre `engravings` e `logos`:**
+
+| Banco        | O que armazena                                                         | Quem cadastra                                        |
+| ------------ | ---------------------------------------------------------------------- | ---------------------------------------------------- |
+| `engravings` | Gravações **reutilizáveis** do catálogo (balança, "Advogado", caduceu) | Designer, 1 vez por categoria                        |
+| `logos`      | Logo do **cliente final** (escritório "Silva & Associados")            | Auto-alimentado quando operador faz upload no pedido |
+
+---
+
 ## 💬 Estilo de comunicação preferido
 
 - **Português brasileiro**, tom direto e franco
@@ -344,4 +484,4 @@ Eu leio o contexto, faço perguntas estratégicas se necessário, e começamos c
 
 ---
 
-_Última atualização: Onda 6b fechada — próxima Onda 6c (painel de slots) ou Onda 6.5 (UI bancos) — decisão pendente._
+_Última atualização: Onda 8 fechada (commit 17a23ae) + estratégia "produto completo" travada + decisões de pasta de assets-pendentes + balança SVG entregue + procedimento Corel documentado. Próxima: Mini-onda 9.5 (cadastrar 5 materiais novos)._

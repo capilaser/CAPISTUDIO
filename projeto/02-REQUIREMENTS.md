@@ -66,36 +66,19 @@ O canvas tem **dois modos** numa interface única (sem trocar de tela):
 - **Modo Operador** (padrão): mostra apenas os campos editáveis do padrão (logo, nome, profissão), com mockup texturizado em tempo real. Toolbar enxuta.
 - **Modo Designer**: ativado pelo botão "Edição Avançada" (toggle persistente na sessão). Libera toolbar completa: camadas, alinhamento, snap, manipulação vetorial, propriedades numéricas em mm.
 
-> ⚠️ **Operador vs Designer é diferença de layout, não de permissão.** Ambos os modos têm acesso às mesmas funções operacionais essenciais (logo, nome, profissão, material, cor, painel de camadas, histórico, salvar, exportar). O toggle "Edição Avançada" no Operador esconde apenas ferramentas de construção de padrão: criação/redimensionamento de slots, painel de propriedades numéricas em mm, réguas e guias, ungroup vetorial (Ctrl+U). **Material, cor e painel de camadas são acessíveis sem toggle em ambos os modos.**
-
 ### RF-3.2 Toolbar do Modo Operador
 
-O Modo Operador apresenta layout em 3 zonas:
-
-- **Sidebar esquerda fixa (280px)**: fluxo hierárquico Produto → Material → Cor → Padrão → Campos dinâmicos. Apenas os campos presentes no padrão escolhido aparecem (RF-3.11).
-- **Topbar do canvas**: chips de filtro + thumbnails dos padrões compatíveis. Permite trocar padrão sem sair do canvas (RF-3.12).
-- **Painel direito (280px)**: lista de camadas com chip de operação e máquina + seleção de material para a camada selecionada (RF-3.10).
-
-As ações abaixo são acessíveis nas zonas correspondentes:
-
-- Trocar logo (upload SVG/DXF/PNG ou escolher do banco) — sidebar esquerda
-- Editar nome (input de texto + seletor de fonte) — sidebar esquerda
-- Editar profissão (input de texto + seletor de fonte) — sidebar esquerda
-- Trocar textura/material — painel direito
-- Trocar cor (do material aplicado) — painel direito
-- Botão "Edição Avançada" (toggle) — header
-- Botão "Salvar como pedido" — header
-- Botão "Exportar PNG (cliente)" — header
-- Botão "Exportar SVG (corte)" — header
+- Trocar logo (upload SVG/DXF/PNG ou escolher do banco)
+- Editar nome (input de texto + seletor de fonte)
+- Editar profissão (input de texto + seletor de fonte)
+- Trocar textura/material
+- Trocar cor (do material aplicado)
+- Botão "Edição Avançada" (toggle)
+- Botão "Salvar como pedido"
+- Botão "Exportar PNG (cliente)"
+- Botão "Exportar SVG (corte)"
 
 ### RF-3.3 Toolbar do Modo Designer
-
-O Modo Designer exibe por padrão todas as ferramentas da lista abaixo. No Modo Operador, essas ferramentas ficam **atrás do toggle "Edição Avançada"** (não são removidas — são recolhidas para deixar o layout mais enxuto).
-
-**Exceções (sempre visíveis nos 2 modos):**
-
-- Histórico (Ctrl+Z / Ctrl+Shift+Z) — undo/redo é função primária
-- Painel de camadas (Opção D-completa) — visível em ambos os modos desde o início
 
 Adiciona ao toolbar Operador:
 
@@ -172,37 +155,6 @@ Slots têm posição (mm) + área máxima (mm). Visíveis no Modo Designer (over
 
 Equivalente exato do `exportProductionSVGs()` do v1.
 
-### RF-3.10 Aplicação de materiais às camadas
-
-- Cada camada `kind === "visual"` pode ter um `materialId` associado (vínculo em `LayerMeta`).
-- Camadas `kind === "production"` **ignoram** `materialId` — não recebem textura em nenhuma circunstância.
-- Seleção via 2 dropdowns encadeados: **Família** → **Cor**, com bolinha `swatch` (hex, 16px) no item de cor.
-- Dropdown fica no painel lateral direito, visível apenas quando uma camada visual está selecionada.
-- Aplicação imediata, sem confirmação: PNG do material é clipado pelo SVG base do produto.
-- Troca de material: re-render em ≤ 100ms (PNG pré-carregado em cache ao boot).
-- Padrão mestre pode definir `defaultMaterialId` — herdado pela camada ao abrir padrão.
-- Override de material no pedido salvo em `orders.canvasJson`. Padrão mestre não é tocado.
-- Camada visual sem material atribuído renderiza com fill cinza neutro (`#8a8e92`).
-
-### RF-3.11 Sidebar esquerda hierárquica
-
-Sidebar esquerda fixa de 280px, presente em ambos os modos, com fluxo top-down:
-
-1. **Produto**: seleção via cards (broche, placa, etc.)
-2. **Material**: dropdown com famílias compatíveis com o produto
-3. **Cor**: dropdown com cores da família selecionada
-4. **Padrão**: chips com padrões compatíveis com a combinação produto/material/cor
-5. **Campos dinâmicos**: seções específicas para cada slot existente no padrão escolhido (Nome, Logo, Profissão, etc.). Slots ausentes não aparecem.
-
-Operador pode adicionar campos novos via menu de contexto (botão direito) → Logo / Nome / Profissão / Texto custom.
-
-### RF-3.12 Topbar de padrões inline
-
-Acima do canvas, topbar apresenta:
-
-1. **Linha de chips de filtro**: "todos" (default ativo) + chips derivados de tags dos padrões (com-traço, sem-traço, nome-longo, centralizado, etc.). Chip ativo em cor `laser` (#dc2626).
-2. **Linha de thumbnails**: padrões compatíveis com o filtro ativo. Click troca padrão no canvas em tempo real.
-
 ---
 
 ## 4. Tela: Grid de Padrões
@@ -253,8 +205,10 @@ Acima do canvas, topbar apresenta:
 
 ### RF-6.1 Layout
 
-- 6 abas no topo: **SVGs Base** | **Padrões** | **Fontes** | **Logos** | **Mockups** | **Categorias**
+- 8 abas no topo: **SVGs Base** | **Padrões** | **Fontes** | **Logos** | **Mockups (Materiais)** | **Apliques** | **Gravações** | **Categorias**
 - Dentro de cada aba: grid/lista do conteúdo + botão "Adicionar novo" + busca.
+
+> **Nota pós-Onda 8:** as abas Apliques e Gravações foram adicionadas após decisão de produto formalizar bancos de componentes reutilizáveis (Onda 6.5 entregou Apliques; Onda 8.5 entrega Gravações).
 
 ### RF-6.2 Aba SVGs Base
 
@@ -281,13 +235,34 @@ Acima do canvas, topbar apresenta:
 - Ações: renomear, adicionar tags, deletar (com confirmação se em uso por algum pedido).
 - Upload manual também permitido (pra pré-cadastrar logos sem precisar criar pedido).
 
-### RF-6.6 Aba Mockups (texturas)
+### RF-6.6 Aba Mockups (Materiais / Texturas)
 
 - Lista de PNGs de material/textura.
-- Agrupados por família ("Acrílico Brilhoso", "Madeira", etc.) e cor.
+- Agrupados por família — famílias confirmadas no MVP:
+  - **ABS Escovado** (Bronze, Dourado, Prata, Rose Gold) — pra broches
+  - **Acrílico Espelhado** (Dourado, Prata, Rose Gold) — pra placas
+  - **Acrílico Sólido** (Branco, Preto) — pra placas
 - Ações: upload novo, atribuir a produto (compatibilidade), renomear, deletar.
 
-### RF-6.7 Aba Categorias
+### RF-6.7 Aba Apliques (entregue na Onda 6.5)
+
+- Lista de SVGs de formato (Formato D, Quadrado, Pill, e os que vierem).
+- Cada aplique: thumbnail, nome, dimensões em mm.
+- Ações: upload novo SVG (passa pelo parser Corel), renomear, deletar.
+- Apliques são "tijolos genéricos" de formato — recebem gravações por cima no canvas.
+
+### RF-6.8 Aba Gravações (entregue na Onda 8.5)
+
+- Lista de SVGs vetorizados reutilizáveis (balança, palavra "Advogado", etc).
+- Agrupados por categoria (uso `categories.scope='engraving'`).
+- Categoria inicial obrigatória: **"Profissões"**.
+- Cada gravação: thumbnail, nome, dimensões em mm, categoria.
+- Ações: upload novo SVG (passa pelo parser Corel), renomear, mover entre categorias, deletar.
+- **Origem dos SVGs:** exportados do Corel (texto convertido em curvas + objeto exportado como SVG). Procedimento operacional do Gabriell.
+- **Restrição empírica:** algumas fontes "bugam" no SVG do Corel — Gabriell evita essas fontes. Sem lista escrita; é conhecimento do operador.
+- **Diferença de `logos`:** gravação é catálogo reutilizável do Designer; logo é asset do cliente final.
+
+### RF-6.9 Aba Categorias
 
 - Lista de tags/categorias gerenciáveis.
 - Cada categoria: nome, escopo (padrão/produto/logo/svg), cor (hex).
@@ -381,29 +356,60 @@ Acima do canvas, topbar apresenta:
 
 ---
 
-## 12. Critério de aceitação do MVP (do CLAUDE.md, atualizado)
+## 12. Critério de aceitação do MVP
 
-O MVP só é considerado pronto quando o usuário consegue, **na sequência**:
+> **Atualização pós-Onda 8:** estratégia travada é **construir o produto inteiro de forma sólida antes de testar com clientes**. A operação que o Capi Studio v2 automatiza já é validada na prática diária do Gabriell — o critério de pronto é **substituir o fluxo do Corel**, não validar mercado.
+
+### 12.1 Critério principal — Substituir o Corel
+
+O MVP só é considerado pronto quando o Gabriell consegue **fechar um pedido completo sem abrir o Corel**:
 
 1. ✅ Abrir o app em ≤ 3s
-2. ✅ Fazer login
-3. ✅ Escolher um produto na Home → "Novo Padrão"
-4. ✅ Carregar a base do produto (SVG)
-5. ✅ Escolher textura/material
-6. ✅ Demarcar slots de logo, nome, profissão
-7. ✅ Salvar como padrão
-8. ✅ Voltar à Home → "Abrir Padrão"
-9. ✅ Selecionar o padrão criado → canvas abre carregado
-10. ✅ Preencher os 3 campos (logo upload, nome, profissão)
-11. ✅ Ver arte no canvas em tempo real
-12. ✅ Usar Modo Designer pra ajuste fino (mover nome 0,5mm pra cima)
-13. ✅ Salvar como pedido (com label "João Silva - Advogado")
-14. ✅ Exportar PNG mockup (vai pro `exports/`)
-15. ✅ Voltar ao Histórico → marcar como Aprovado
-16. ✅ Reabrir o pedido → exportar SVG de corte
-17. ✅ Verificar: padrão mestre intacto, pedido salvo com overrides
+2. ✅ Escolher um produto na Home → "Novo Padrão"
+3. ✅ Carregar a base do produto (SVG do banco)
+4. ✅ Escolher textura/material (ABS Escovado, Acrílico Espelhado ou Acrílico Sólido)
+5. ✅ Demarcar slots de logo, nome, profissão
+6. ✅ Adicionar apliques (Formato D, Quadrado, Pill — banco de apliques)
+7. ✅ Adicionar gravações sobre apliques (balança, palavra "Advogado", etc — banco de gravações)
+8. ✅ Salvar como padrão (com nome humano)
+9. ✅ Voltar à Home → "Abrir Padrão"
+10. ✅ Selecionar o padrão criado → canvas abre carregado
+11. ✅ Preencher os campos (logo upload, nome, profissão)
+12. ✅ Ver arte no canvas em tempo real
+13. ✅ Usar Modo Designer pra ajuste fino (mover nome 0,5mm pra cima — painel de alinhamento)
+14. ✅ Salvar como pedido (com label "João Silva - Advogado")
+15. ✅ Exportar PNG mockup (vai pro `exports/`)
+16. ✅ Voltar ao Histórico → marcar como Aprovado
+17. ✅ Reabrir o pedido → exportar SVG de corte (1 SVG por máquina envolvida)
+18. ✅ Verificar: padrão mestre intacto, pedido salvo com overrides
+19. ✅ **Resultado:** Corel não foi aberto em momento nenhum
 
 **Todos esses passos com:** sem alert nativo, sem perda de dados, sem trava de UI > 200ms.
+
+### 12.2 Critério de qualidade — Não vender em fatias
+
+- ❌ Onda intermediária NÃO conta como "produto vendável" — entrega parcial não substitui o Corel
+- ❌ Não pular ondas pra "ir mais rápido"
+- ✅ Cada onda fecha completa (Plano → Implementação → Validação → Commit)
+- ✅ Pós-MVP: ajustes pontuais e atualizações projetadas, não reescrita
+
+### 12.3 Sequência travada das ondas até o MVP completo
+
+(Atualizado pós-Onda 8. Ver detalhes no `05-BACKLOG.md` e `03-CLAUDE-CODE-KICKOFF.md`)
+
+| Ordem | Onda                                                 | Status      |
+| ----- | ---------------------------------------------------- | ----------- |
+| -     | Ondas 0–6.5, 8                                       | ✅ Fechadas |
+| 1     | Mini-9.5 — Cadastrar 5 materiais novos (Acrílico)    | ⏭️ Próxima  |
+| 2     | Onda 7 — Painel hierárquico + alinhamento Confluence | ⏳          |
+| 3     | Onda 8.5 — Gravações sobre apliques                  | ⏳          |
+| 4     | Onda 9 — Exportação PNG + SVG por máquina            | ⏳          |
+| 5     | Onda 10 — Telas restantes (Grid, Histórico, Banco)   | ⏳          |
+| 6     | Onda 11 — Atalhos + Undo/Redo (50 níveis)            | ⏳          |
+| 7     | Onda 12 — Polimento final + build MSI                | ⏳          |
+| 8     | Onda 13 — Validação final + smoke test do MVP        | ⏳          |
+
+> **Onda 6c REMOVIDA** — funcionalidade absorvida pela Onda 7.
 
 ---
 
