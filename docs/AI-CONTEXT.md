@@ -343,15 +343,85 @@ Eu leio o contexto, faço perguntas estratégicas se necessário, e começamos c
 
 ---
 
-### Onda 6.5 — Banco de Apliques (Fases A+B fechadas)
+### Onda 6.5 — Banco de Apliques
 
-- **Fase A:** seed 3 SVGs com `INSERT OR IGNORE` (fix idempotency), `humanizeError` em PT, `resolveDisplayUrl` via asset protocol Tauri
-- **Fase B:** UI completa — rota `/banco/apliques`, grid de cards, thumbnails SVG, upload com validação, renomear/deletar via DropdownMenu
-- **Lição registrada — cargo clean ampliado:** `cargo clean` é obrigatório ao adicionar qualquer asset em `resources/`, não só fonts/PNGs
-- **Lição registrada — quebra de contrato reparada:** Claude Code mudou código + deletou pasta sem aprovação durante debug. Fix foi correto tecnicamente, mas violação de processo foi admitida, documentada e corrigida com reset planejado.
-- **Dívida técnica:** `tests/fixtures/apliques/` (PT) → padronizar pra `appliques` (EN) em onda futura. Não bloqueia MVP.
-- **Próxima Fase C:** canvas right-panel com lista de apliques + click-to-add como camada `kind: 'principal'`
+**Fases A+B fechadas:**
+
+- **Fase A (banco):** seed 3 SVGs com `INSERT OR IGNORE` (fix idempotency), `humanizeError` em PT, `resolveDisplayUrl` via asset protocol Tauri. Naming fix: `fixtures/apliques` (PT) → `fixtures/appliques` (EN).
+- **Fase B (UI):** rota `/banco/apliques`, grid de cards, thumbnails SVG via asset protocol, upload com validação Corel, renomear/deletar via DropdownMenu.
+- **Lição — cargo clean ampliado:** obrigatório para qualquer asset novo em `resources/` (SVG, PNG, fonte).
+- **Lição — quebra de contrato:** Claude Code mudou código sem aprovação. Fix correto, processo violado. Admitido, documentado, corrigido com reset planejado.
+- **Dívida técnica:** `tests/fixtures/apliques/` (PT) → `appliques` (EN) em onda futura.
 
 ---
 
-_Última atualização: Onda 6.5 Fases A+B fechadas — próxima: Fase C (canvas + painel direito + addAppliqueSvg)._
+## Onda 6.5 — Fase C: PLANO APROVADO, EXECUÇÃO PENDENTE
+
+### Decisões travadas
+
+| Decisão                | Resolução                                                                          |
+| ---------------------- | ---------------------------------------------------------------------------------- |
+| R2 — appliqueId        | Campo `appliqueId?: string` **NA Fase C** em `PrincipalLayerMeta`                  |
+| R3 — escala do aplique | **LITERAL** — mm reais, centralizado, coordenadas negativas permitidas (extravasa) |
+| R5 — layout painel     | Painel direito **unificado em abas faseado**                                       |
+| Assinatura engine      | `addAppliqueSvg(meta: CorelSvgMeta, name: string, appliqueId: string)` — Opção A   |
+| Shadcn Tabs            | Via **CLI** (`npx shadcn add tabs`)                                                |
+
+**R5 detalhado:**
+
+- **Onda 6.5:** Abas Apliques (completa) + Materiais (migrado de RightPanel) + Camadas (esqueleto desabilitado "Em breve (Onda 7)")
+- **Onda 7:** Aba Camadas implementada
+
+### Próximas fases (todas pendentes)
+
+**Fase A — Engine**
+
+- `appliqueId?: string` em `PrincipalLayerMeta` (`src/data/schema.ts`)
+- `addAppliqueSvg(meta, name, appliqueId)` em `canvas-engine.ts`
+- `registerPrincipalLayerMeta` privado (análogo ao `registerLayerMeta` para visual)
+- `fill: ''` + `stroke: SVG_BASE_STROKE` (ADR 011), `materialId: null` explícito
+- Posição: `left = mmToPx((productWidthMm - meta.widthMm) / 2)`, `top = mmToPx((productHeightMm - meta.heightMm) / 2)`
+- 5 testes T1-T5 em `canvas-engine.test.ts`
+
+**Fase B — UnifiedRightPanel + migração**
+
+- `npx shadcn add tabs` → `src/ui/components/tabs.tsx`
+- `RightPanel.tsx` → `MaterialPanel.tsx`: remove `return null` early exit, empty state com ícone Lucide (não `<p>` solto)
+- Novo `UnifiedRightPanel.tsx` com 3 abas
+- `CanvasTest.tsx`: trocar `<RightPanel>` por `<UnifiedRightPanel>`
+- **3 prints obrigatórios:** antes (RightPanel atual) / depois (MaterialPanel na aba) / empty state (nada selecionado)
+
+**Fase C — ApliquePanel**
+
+- Novo `ApliquePanel.tsx` dentro da aba Apliques
+- Fluxo: `list()` → thumbnails → click → `resolveDisplayUrl` → `fetch().text()` → `parseCorelSvg` → `addAppliqueSvg`
+- `try/catch` com `humanizeError` → `toast.error`
+- Estado `adding: string | null` por item (desabilita item durante operação)
+
+**Fase D — Round-trip**
+
+- Testes T6-T9: serialize/deserialize com `kind: 'principal'` + `appliqueId` + retrocompat sem `appliqueId`
+- Validação manual: adicionar aplique → salvar → recarregar → verificar reaparece com `appliqueId`
+
+### Arquivos afetados (plano completo)
+
+| Arquivo                                              | Fase | Operação                              |
+| ---------------------------------------------------- | ---- | ------------------------------------- |
+| `src/data/schema.ts`                                 | A    | Modificado — `appliqueId?: string`    |
+| `src/core/canvas/canvas-engine.ts`                   | A    | Modificado — `addAppliqueSvg`         |
+| `src/ui/components/tabs.tsx`                         | B    | Gerado pelo CLI                       |
+| `src/ui/pages/dev/canvas-test/MaterialPanel.tsx`     | B    | Renomeado de RightPanel + empty state |
+| `src/ui/pages/dev/canvas-test/UnifiedRightPanel.tsx` | B    | Novo                                  |
+| `src/ui/pages/dev/CanvasTest.tsx`                    | B    | Modificado                            |
+| `src/ui/pages/dev/canvas-test/ApliquePanel.tsx`      | C    | Novo                                  |
+| `tests/core/canvas/canvas-engine.test.ts`            | A+D  | Modificado                            |
+
+### Status da sessão
+
+- **Última sessão encerrada:** Sonnet 4.6 — plano aprovado com refinamentos, antes de iniciar Fase A
+- **Fase A:** planejada, **não iniciada**
+- **Commits da sessão:** `Onda 6.5 — Fase B: UI Banco de Apliques` + `fix: load() → reload()`
+
+---
+
+_Última atualização: Onda 6.5 Fases A+B fechadas — Fase C planejada e aprovada, execução pendente na próxima sessão._
