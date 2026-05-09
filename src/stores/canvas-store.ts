@@ -8,13 +8,13 @@ interface CanvasStore {
   selectedFontFamily: string;
   /** capi id of the currently selected canvas object (null = nothing selected). */
   selectedLayerId: string | null;
-  /** kind of the selected layer — drives RightPanel visibility. */
-  selectedLayerKind: 'visual' | 'production' | null;
+  /** kind of the selected layer — drives RightPanel visibility (ADR 010 §1, Fase C). */
+  selectedLayerKind: 'principal' | 'operation' | 'visual' | null;
   setMode: (mode: CanvasMode) => void;
   setSelectedSlotId: (id: string | null) => void;
   setSelectedFontFamily: (family: string) => void;
   setSelectedLayerId: (id: string | null) => void;
-  setSelectedLayerKind: (kind: 'visual' | 'production' | null) => void;
+  setSelectedLayerKind: (kind: 'principal' | 'operation' | 'visual' | null) => void;
 }
 
 export const useCanvasStore = create<CanvasStore>((set) => ({

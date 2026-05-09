@@ -1,7 +1,9 @@
 import * as fabric from 'fabric';
 
-import type { LayerMeta } from '@/data/schema';
+import type { LayerMeta, VisualLayerMeta } from '@/data/schema';
 import { buildMaterialPattern, loadImage } from './material-applier';
+import type { CorelSvgMeta } from './corel-svg-parser';
+import { isOperationLayer } from './layer-meta';
 import { extractClipShapes, parseAndStripRootDimensions, type ParsedViewBox } from './svg-utils';
 import { SlotManager } from './slot-manager';
 import type { SlotMeta, SlotType } from './types';
@@ -33,6 +35,11 @@ export interface SerializedCanvas {
   capi: {
     productId: string;
     units: 'mm';
+    /**
+     * Schema version for LayerMeta format (mirrors FabricCanvasJson.capi.schemaVersion).
+     *   2 = discriminated union (ADR 010 §1, Fase C+). Absent/1 = flat (pre-Fase C).
+     */
+    schemaVersion: number;
     /** LayerMeta array — one entry per user object. Onda 5+. */
     layers: LayerMeta[];
   };
@@ -44,6 +51,12 @@ const ZOOM_MIN = 0.1;
 const ZOOM_MAX = 10;
 /** Default fill restored when a material is removed from a visual layer. */
 const DEFAULT_LAYER_FILL = 'rgba(122, 162, 247, 0.18)';
+/**
+ * Default stroke applied to base-layer paths after cleanCorelSvg strips fills.
+ * ADR 010 §3: contorno da peça = ink-700. Canvas engine is authoritative for colour.
+ * Matches tailwind token ink-700 (#2a2c2e) — do NOT use CSS var() here (Fabric doesn't resolve them).
+ */
+const SVG_BASE_STROKE = '#2a2c2e';
 
 function generateObjectId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -258,8 +271,9 @@ export class CanvasEngine {
     const clipPath = this.buildProductClipPath();
     obj.set(clipPath !== null ? { fill: pattern, clipPath } : { fill: pattern });
 
+    // Operation layers have no materialId (ADR 010 §1). Narrow before mutating.
     const meta = this.layerMeta.get(layerId);
-    if (meta) meta.materialId = materialId;
+    if (meta && !isOperationLayer(meta)) meta.materialId = materialId;
 
     this.canvas.requestRenderAll();
   }
@@ -351,8 +365,9 @@ export class CanvasEngine {
 
     obj.set({ fill: DEFAULT_LAYER_FILL, clipPath: undefined });
 
+    // Operation layers have no materialId (ADR 010 §1). Narrow before mutating.
     const meta = this.layerMeta.get(layerId);
-    if (meta) meta.materialId = null;
+    if (meta && !isOperationLayer(meta)) meta.materialId = null;
 
     this.canvas.requestRenderAll();
   }
@@ -365,12 +380,25 @@ export class CanvasEngine {
    * Scale comes from the authoritative viewBox + canvasMm (NOT from
    * `group.width`), and the SVG's root width/height are stripped first
    * so Fabric treats viewBox user units as 1:1.
+   *
+   * @deprecated Prefer `loadProductSvgFromMeta` when the SVG comes from a
+   * user upload — it reuses the already-parsed `CorelSvgMeta` and avoids
+   * double-parsing.
    */
   async loadProductSvg(svgString: string, viewBox: ParsedViewBox): Promise<void> {
     const stripped = parseAndStripRootDimensions(svgString);
     const { objects } = await fabric.loadSVGFromString(stripped);
     const validObjects = objects.filter((o): o is fabric.FabricObject => o !== null);
     if (validObjects.length === 0) return;
+
+    // ADR 010 §3: canvas engine is authoritative for base-layer colour.
+    // fill: '' = no fill in Fabric/Canvas2D. Do NOT use 'none' here — Canvas2D
+    // does not recognise 'none' as a valid fillStyle and falls back to black.
+    // (SVG fill="none" is injected by cleanCorelSvg step 9 for the SVG parser,
+    // but Fabric's Canvas2D renderer needs the empty-string sentinel instead.)
+    for (const obj of validObjects) {
+      obj.set({ fill: '', stroke: SVG_BASE_STROKE, strokeWidth: 1, strokeUniform: true });
+    }
 
     const group = fabric.util.groupSVGElements(validObjects);
 
@@ -404,6 +432,78 @@ export class CanvasEngine {
     // Coordinates are in SVG user units (mm); scale is applied at clip time.
     this.productPaths = extractClipShapes(svgString);
     this.productSvgViewBox = { width: viewBox.width, height: viewBox.height };
+
+    this.canvas.add(group);
+    this.canvas.sendObjectToBack(group);
+    this.canvas.requestRenderAll();
+  }
+
+  /**
+   * Loads the product base SVG from already-parsed `CorelSvgMeta`.
+   *
+   * Preferred over `loadProductSvg` for user-uploaded SVGs: the SVG has
+   * already passed the 6 validation gates in `parseCorelSvg`, and
+   * `meta.svgStripped` is ready for Fabric without further processing.
+   *
+   * Scale is derived from `meta.scaleFactor` (width axis), with the height
+   * axis computed independently. Both axes are guaranteed to agree within
+   * 0.1% by gate 2 of `parseCorelSvg`, so the product always renders at
+   * its exact physical size.
+   *
+   * In DEV mode, logs a warning when the SVG's physical dimensions diverge
+   * from the engine's `EngineConfig.productWidthMm` by more than 0.5% —
+   * which would indicate a mismatch between the DB product record and the
+   * file on disk.
+   */
+  async loadProductSvgFromMeta(meta: CorelSvgMeta): Promise<void> {
+    const { objects } = await fabric.loadSVGFromString(meta.svgStripped);
+    const validObjects = objects.filter((o): o is fabric.FabricObject => o !== null);
+    if (validObjects.length === 0) return;
+
+    // ADR 010 §3: canvas engine is authoritative for base-layer colour.
+    // fill: '' = no fill in Fabric/Canvas2D. Do NOT use 'none' here — Canvas2D
+    // does not recognise 'none' as a valid fillStyle and falls back to black.
+    // (SVG fill="none" is injected by cleanCorelSvg step 9 for the SVG parser,
+    // but Fabric's Canvas2D renderer needs the empty-string sentinel instead.)
+    for (const obj of validObjects) {
+      obj.set({ fill: '', stroke: SVG_BASE_STROKE, strokeWidth: 1, strokeUniform: true });
+    }
+
+    const group = fabric.util.groupSVGElements(validObjects);
+
+    const scaleX = meta.scaleFactor; // (MM_TO_PX × widthMm) / viewBoxW
+    const scaleY = mmToPx(meta.heightMm) / meta.viewBoxH; // independent axis for symmetry
+
+    if (import.meta.env.DEV) {
+      const configW = this.config.productWidthMm;
+      const drift = Math.abs(meta.widthMm - configW) / configW;
+      if (drift > 0.005) {
+        console.warn(
+          `[canvas-engine] SVG widthMm (${meta.widthMm.toFixed(3)}) differs from ` +
+            `EngineConfig.productWidthMm (${configW}) by ${(drift * 100).toFixed(2)}%. ` +
+            `Check that the product DB record matches the file.`
+        );
+      }
+    }
+
+    group.set({
+      left: 0,
+      top: 0,
+      originX: 'left',
+      originY: 'top',
+      scaleX,
+      scaleY,
+      selectable: false,
+      evented: false,
+      hoverCursor: 'default',
+      excludeFromExport: true,
+    });
+    (group as unknown as Record<string, unknown>)[BASE_OBJECT_FLAG] = true;
+
+    // svgStripped has root width/height removed but all path data intact —
+    // extractClipShapes only reads <path d="…"> elements, which are preserved.
+    this.productPaths = extractClipShapes(meta.svgStripped);
+    this.productSvgViewBox = { width: meta.viewBoxW, height: meta.viewBoxH };
 
     this.canvas.add(group);
     this.canvas.sendObjectToBack(group);
@@ -656,6 +756,7 @@ export class CanvasEngine {
       capi: {
         productId,
         units: 'mm',
+        schemaVersion: 2,
         layers,
       },
     };
@@ -696,18 +797,23 @@ export class CanvasEngine {
     this.slotManager.loadSlotsFromCanvas();
 
     // Re-apply material Patterns for all layers that had a materialId.
+    // OperationLayerMeta has no materialId field — filter it out before accessing.
     if (resolveUrl) {
       await Promise.all(
         Array.from(this.layerMeta.entries())
-          .filter(([, meta]) => meta.materialId !== null)
+          .filter(
+            ([, meta]) => !isOperationLayer(meta) && (meta as VisualLayerMeta).materialId !== null
+          )
           .map(async ([id, meta]) => {
+            // Safe: filter above guarantees meta is PrincipalLayerMeta | VisualLayerMeta.
+            const materialId = (meta as VisualLayerMeta).materialId!;
             try {
-              const url = await resolveUrl(meta.materialId!);
-              await this.applyMaterialToLayer(id, meta.materialId!, url);
+              const url = await resolveUrl(materialId);
+              await this.applyMaterialToLayer(id, materialId, url);
             } catch (err) {
               if (import.meta.env.DEV) {
                 console.warn(
-                  `[canvas-engine] Failed to re-apply material ${meta.materialId} on layer ${id}:`,
+                  `[canvas-engine] Failed to re-apply material ${materialId} on layer ${id}:`,
                   err
                 );
               }
@@ -731,17 +837,19 @@ export class CanvasEngine {
    */
   private registerLayerMeta(id: string): void {
     if (this.layerMeta.has(id)) return; // idempotent
-    this.layerMeta.set(id, {
+    // Emit VisualLayerMeta (ADR 010 §1, Fase C). Principal/operation layers are
+    // created explicitly by higher-level flows (Onda 7+), not by this internal helper.
+    const meta: VisualLayerMeta = {
       id,
+      parentLayerId: null,
       name: `Camada ${this.layerMeta.size + 1}`,
       zIndex: this.canvas.getObjects().length - 1,
       visible: true,
       locked: false,
       kind: 'visual',
-      operation: null,
-      machines: [],
       materialId: null,
-    });
+    };
+    this.layerMeta.set(id, meta);
   }
 }
 

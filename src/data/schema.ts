@@ -147,27 +147,92 @@ export const materials = sqliteTable('materials', {
 
 // ── 12. PATTERNS ──────────────────────────────────────────────────────────────
 // Master reusable templates. Saving an order NEVER mutates canvasJson (CLAUDE.md rule).
-export type FabricCanvasJson = {
-  version: string;
-  objects: FabricObject[];
-  background?: string;
-  capi?: { productId: string; units: 'mm'; layers: LayerMeta[] };
-};
-export type FabricObject = { type: string; id: string; capiSlot?: SlotMeta };
-export type LayerMeta = {
+
+// ─── LayerMeta — discriminated union (ADR 010 §1, Fase C) ─────────────────────
+//
+// Hierarchy is FIXED at 2 levels:
+//   PrincipalLayerMeta  (parentLayerId: null)       — physical piece
+//     └── OperationLayerMeta (parentLayerId: string) — machine operation on that piece
+//   VisualLayerMeta (parentLayerId: null | string)  — decorative canvas layer (retrocompat)
+//
+// Invariants enforced at runtime by validateLayerMeta() in core/canvas/layer-meta.ts.
+// TypeScript enforces correct field usage at compile-time via the discriminant `kind`.
+
+/** Camada principal — representa uma peça física (base, aplique). */
+export type PrincipalLayerMeta = {
   id: string;
+  /** Always null for principal layers (ADR 010 §1 invariant 1). */
+  parentLayerId: null;
   name: string;
   zIndex: number;
   visible: boolean;
   locked: boolean;
-  kind: 'visual' | 'production';
-  operation: string | null;
-  machines: string[];
-  /** PNG material applied to this layer. Only honoured when kind === 'visual'.
-   *  Production layers ignore this field entirely.
-   *  Persisted in canvasJson.capi.layers[]. Use (layer.materialId ?? null) when reading
-   *  legacy canvasJson that predates Onda 5. */
+  kind: 'principal';
+  /** Material (texture) applied to this piece. Persisted in canvasJson. */
   materialId: string | null;
+};
+
+/** Sub-camada de operação — operação de máquina sobre a peça física pai. */
+export type OperationLayerMeta = {
+  id: string;
+  /** FK → id of the parent PrincipalLayerMeta. Never null (ADR 010 §1 invariant 2). */
+  parentLayerId: string;
+  name: string;
+  zIndex: number;
+  visible: boolean;
+  locked: boolean;
+  kind: 'operation';
+  /** One of the 7 defined operations (corte, gravação, marcação, aplique, etc.). Required. */
+  operation: string;
+  /** Machine IDs. Min 1, max 3 (ADR 010 §1 invariant 4). Required. */
+  machines: string[];
+};
+
+/** Camada visual decorativa — retrocompat com Ondas 3-5 e para uso futuro. */
+export type VisualLayerMeta = {
+  id: string;
+  /** null = top-level visual. string = child of a principal (never child of operation). */
+  parentLayerId: string | null;
+  name: string;
+  zIndex: number;
+  visible: boolean;
+  locked: boolean;
+  kind: 'visual';
+  /** Material (texture) applied to this layer. Null when no texture is applied. */
+  materialId: string | null;
+};
+
+/** Union of all LayerMeta variants. Narrow with `kind` discriminant or type guards. */
+export type LayerMeta = PrincipalLayerMeta | OperationLayerMeta | VisualLayerMeta;
+
+/**
+ * Minimal representation of a serialized Fabric.js object stored in canvasJson.
+ * `id` is the stable Capi UUID; `capiSlot` is present for slot-typed objects (Onda 4+).
+ * Extended fields come from Fabric's own toObject — typed loosely as Record<string, unknown>.
+ */
+export type FabricObject = {
+  type: string;
+  id: string;
+  capiSlot?: SlotMeta;
+  [key: string]: unknown;
+};
+
+export type FabricCanvasJson = {
+  version: string;
+  objects: FabricObject[];
+  background?: string;
+  capi?: {
+    productId: string;
+    units: 'mm';
+    /**
+     * Schema version for the LayerMeta format within capi.layers.
+     *   1 = flat type (Ondas 3-5, pre-Fase C)
+     *   2 = discriminated union (Fase C+, ADR 010 §1)
+     * Absent = treat as version 1.
+     */
+    schemaVersion: number;
+    layers: LayerMeta[];
+  };
 };
 export type SlotMeta = {
   type: 'logo' | 'nome' | 'profissao' | 'custom';

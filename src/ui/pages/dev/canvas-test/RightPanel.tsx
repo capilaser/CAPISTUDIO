@@ -13,6 +13,7 @@ import type { MaterialFamily } from '@/data/repositories/materialFamilyRepositor
 import { listFamilies } from '@/data/repositories/materialFamilyRepository';
 import type { Material } from '@/data/repositories/materialRepository';
 import { listByFamily, resolveAssetUrl } from '@/data/repositories/materialRepository';
+import { isOperationLayer } from '@/core/canvas/layer-meta';
 import { useCanvasStore } from '@/stores/canvas-store';
 
 interface RightPanelProps {
@@ -88,7 +89,8 @@ export function RightPanel({ engineRef }: RightPanelProps) {
       return;
     }
     const meta = engineRef.current.getLayerMeta(selectedLayerId);
-    setSelectedMaterialId(meta?.materialId ?? '');
+    // OperationLayerMeta has no materialId — guard before accessing.
+    setSelectedMaterialId(meta && !isOperationLayer(meta) ? (meta.materialId ?? '') : '');
   }, [selectedLayerId, engineRef]);
 
   // Invisible when no visual layer is selected.

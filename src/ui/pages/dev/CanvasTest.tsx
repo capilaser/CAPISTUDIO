@@ -3,13 +3,13 @@ import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 
 import { CanvasEngine } from '@/core/canvas/canvas-engine';
+import { parseCorelSvg } from '@/core/canvas/corel-svg-parser';
 import {
   DEV_TEST_PATTERN_ID,
   DEV_TEST_PRODUCT_ID,
   DEV_VIEWPORT,
 } from '@/core/canvas/dev-constants';
 import { attachCanvasKeybindings } from '@/core/canvas/keybindings';
-import { parseViewBox } from '@/core/canvas/svg-utils';
 import { MM_TO_PX } from '@/core/canvas/units';
 import { getById as getMaterialById } from '@/data/repositories/materialRepository';
 import { resolveAssetUrl } from '@/data/repositories/materialRepository';
@@ -91,7 +91,12 @@ export default function CanvasTest() {
           engine.dispose();
           return;
         }
-        await engine.loadProductSvg(svgString, parseViewBox(p.viewBox));
+        // Parse + validate through all 6 gates before touching the canvas.
+        // parseCorelSvg throws user-readable errors for any quality issue —
+        // the catch block below surfaces them via toast so the user knows exactly
+        // what to fix in Corel before re-exporting.
+        const meta = parseCorelSvg(svgString);
+        await engine.loadProductSvgFromMeta(meta);
         if (cancelled) {
           engine.dispose();
           return;
@@ -117,6 +122,7 @@ export default function CanvasTest() {
                   capi: {
                     productId: p.id,
                     units: 'mm',
+                    schemaVersion: existing.canvasJson.capi?.schemaVersion ?? 1,
                     layers,
                   },
                 },

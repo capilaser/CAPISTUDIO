@@ -1,8 +1,14 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import * as fabric from 'fabric';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CanvasEngine, isBaseObject, BASE_OBJECT_FLAG } from '@/core/canvas/canvas-engine';
+import { parseCorelSvg } from '@/core/canvas/corel-svg-parser';
 import { mmToPx } from '@/core/canvas/units';
+
+const FIXTURES_DIR = join(dirname(fileURLToPath(import.meta.url)), '../../fixtures');
 
 // ── Mock material-applier so applyMaterialToLayer works without real images ──
 // buildMaterialPattern is mocked to return a real fabric.Pattern backed by a
@@ -533,6 +539,51 @@ describe('CanvasEngine', () => {
 
       // materialId still preserved in capi.layers
       expect(json.capi.layers[0].materialId).toBe('abs-escovado-prata');
+    });
+  });
+
+  // ─── loadProductSvgFromMeta — fill regression guard ──────────────────────
+  // Regression: cleanCorelSvg (Fase B) strips fill from all SVG elements.
+  // Without step 9 (inject fill="none"), Fabric 6 defaults paths to black.
+  // This test ensures shapes parsed by loadProductSvgFromMeta have fill='none'.
+
+  describe('loadProductSvgFromMeta', () => {
+    it('base group children têm fill "none" (ADR 010 §3 regression guard)', async () => {
+      const svgString = readFileSync(
+        join(FIXTURES_DIR, 'camadas-base', 'broche-simples.svg'),
+        'utf-8'
+      );
+      const meta = parseCorelSvg(svgString);
+
+      engine = new CanvasEngine(canvasEl, {
+        productWidthMm: meta.widthMm,
+        productHeightMm: meta.heightMm,
+        viewportWidthPx: 800,
+        viewportHeightPx: 500,
+      });
+      await engine.loadProductSvgFromMeta(meta);
+
+      // The base group is the only object on a fresh canvas.
+      const baseObj = engine.canvas.getObjects().find((o) => isBaseObject(o));
+      expect(baseObj).toBeDefined();
+
+      // Fabric 6 groupSVGElements behaviour:
+      //   - multi-path SVG  → returns a fabric.Group; children accessed via getObjects()
+      //   - single-path SVG → returns the element directly (no Group wrapper)
+      // broche-simples.svg has 1 path, so baseObj IS the path.
+      // fill must be '' (empty string) — NOT 'none'.
+      // Canvas2D does not recognise 'none' as a valid fillStyle and falls back to black.
+      // Fabric's sentinel for "no fill" is the empty string ''.
+      if (typeof (baseObj as fabric.Group).getObjects === 'function') {
+        const children = (baseObj as fabric.Group).getObjects();
+        expect(children.length).toBeGreaterThan(0);
+        for (const child of children) {
+          expect(child.fill).toBe('');
+        }
+      } else {
+        // Single-element result: the base object itself is the path.
+        expect(baseObj!.fill).toBe('');
+      }
     });
   });
 });
