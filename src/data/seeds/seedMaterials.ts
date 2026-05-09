@@ -1,7 +1,10 @@
 import type Database from '@tauri-apps/plugin-sql';
 
-// Family: ABS Escovado (PNG-first — replaces gradient-only materials from v1)
-const FAMILIES = [{ id: 'abs-escovado', label: 'ABS Escovado', brushed: true }] as const;
+const FAMILIES = [
+  { id: 'abs-escovado', label: 'ABS Escovado', brushed: true },
+  { id: 'acrilico-espelhado', label: 'Acrílico Espelhado', brushed: false },
+  { id: 'acrilico-solido', label: 'Acrílico Sólido', brushed: false },
+] as const;
 
 interface FallbackStop {
   offset: string;
@@ -66,6 +69,66 @@ const MATERIALS: MaterialSeed[] = [
       { offset: '0%', color: '#c4954a' },
       { offset: '48%', color: '#a47d2c' },
       { offset: '100%', color: '#6e521a' },
+    ],
+  },
+  {
+    id: 'acrilico-espelhado-dourado',
+    familyId: 'acrilico-espelhado',
+    label: 'Dourado',
+    swatch: '#d4af37',
+    pngPath: 'materials/acrilico-espelhado-dourado.png',
+    fallbackStops: [
+      { offset: '0%', color: '#f0d985' },
+      { offset: '48%', color: '#d4af37' },
+      { offset: '100%', color: '#9c8128' },
+    ],
+  },
+  {
+    id: 'acrilico-espelhado-prata',
+    familyId: 'acrilico-espelhado',
+    label: 'Prata',
+    swatch: '#c0c0c0',
+    pngPath: 'materials/acrilico-espelhado-prata.png',
+    fallbackStops: [
+      { offset: '0%', color: '#e8e8e8' },
+      { offset: '48%', color: '#c0c0c0' },
+      { offset: '100%', color: '#8a8a8a' },
+    ],
+  },
+  {
+    id: 'acrilico-espelhado-rose-gold',
+    familyId: 'acrilico-espelhado',
+    label: 'Rose Gold',
+    swatch: '#b76e79',
+    pngPath: 'materials/acrilico-espelhado-rose-gold.png',
+    fallbackStops: [
+      { offset: '0%', color: '#e8b4be' },
+      { offset: '48%', color: '#b76e79' },
+      { offset: '100%', color: '#864e58' },
+    ],
+  },
+  {
+    id: 'acrilico-solido-branco',
+    familyId: 'acrilico-solido',
+    label: 'Branco',
+    swatch: '#f5f5f5',
+    pngPath: 'materials/acrilico-solido-branco.png',
+    fallbackStops: [
+      { offset: '0%', color: '#fafafa' },
+      { offset: '48%', color: '#f5f5f5' },
+      { offset: '100%', color: '#e8e8e8' },
+    ],
+  },
+  {
+    id: 'acrilico-solido-preto',
+    familyId: 'acrilico-solido',
+    label: 'Preto',
+    swatch: '#1a1a1a',
+    pngPath: 'materials/acrilico-solido-preto.png',
+    fallbackStops: [
+      { offset: '0%', color: '#2a2a2a' },
+      { offset: '48%', color: '#1a1a1a' },
+      { offset: '100%', color: '#0d0d0d' },
     ],
   },
 ];
