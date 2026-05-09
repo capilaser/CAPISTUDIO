@@ -1,4 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
 interface Props {
@@ -6,16 +7,25 @@ interface Props {
   title: string;
   description: string;
   wave: string;
+  href?: string;
 }
 
-export function HomeCard({ icon: Icon, title, description, wave }: Props) {
+export function HomeCard({ icon: Icon, title, description, wave, href }: Props) {
+  const navigate = useNavigate();
+
+  function handleClick() {
+    if (href) {
+      navigate(href);
+    } else {
+      toast.info('Em desenvolvimento', {
+        description: 'Esta funcionalidade chega na ' + wave,
+      });
+    }
+  }
+
   return (
     <button
-      onClick={() =>
-        toast.info('Em desenvolvimento', {
-          description: 'Esta funcionalidade chega na ' + wave,
-        })
-      }
+      onClick={handleClick}
       className="flex cursor-pointer flex-col rounded-md border border-ink-700 bg-ink-900 p-6 text-left transition-all duration-150 ease-out hover:-translate-y-0.5 hover:border-ink-600 hover:shadow-sm"
     >
       <Icon size={28} className="text-ink-500" />

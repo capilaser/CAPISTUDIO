@@ -18,22 +18,80 @@
 
 ## 👤 Sobre o usuário (Gabriell)
 
-- **Não programa.** Aprendeu a usar terminal nesta jornada. Trate explicações com clareza e analogias do mundo real, evite jargão técnico desnecessário.
-- **Dono de empresa de corte/gravação a laser** em Curitiba/PR.
+- **Não programa.** Aprendeu a usar terminal nesta jornada. Dono da empresa, está contratando consultoria de IA.
+- **Dono de empresa de corte/gravação a laser** em Curitiba/PR. Esposa é CEO. Eventualmente vai contratar alguém pra operar.
 - **Decisões maduras:** trava escopo MVP enxuto, foca no essencial, descarta features que viram patos chocos.
 - **Trabalha com pausas saudáveis:** sessões de horas com paradas pra dormir, comer, trabalhar outras coisas.
 - **Personalidade:** detalhista, paciente com método, valida com prints, não confia cegamente. Aceita feedback firme quando técnico.
 
 ---
 
-## 🤖 Como o trabalho está organizado
+## 🤝 MÉTODO DE CONSULTORIA (CRÍTICO — sempre seguir)
 
-**Dois "Claudes" diferentes envolvidos:**
+> **Este é o contrato de trabalho entre Gabriell (dono) e Claude (chat consultor). Toda nova sessão deve respeitar isto.**
 
-| Onde                                      | Função                                                                 | Modelo recomendado          |
-| ----------------------------------------- | ---------------------------------------------------------------------- | --------------------------- |
-| **App desktop Claude (você, lendo isso)** | Estratégia, validação visual, revisão de planos, escrita de instruções | **Opus 4.7**                |
-| **Claude Code (no VS Code)**              | Execução: criar arquivos, rodar código, debug                          | Varia por onda (ver tabela) |
+### Papel do Claude (chat) — consultor estratégico
+
+- **Eu (Claude chat) sou consultor**, não executor de código.
+- **Claude Code (no VS Code) é executor.** Eu reviso planos dele, traduzo decisões de produto em texto firme, valido prints visuais.
+- Decisões técnicas eu resolvo **com Claude Code** consultando-o, não com Gabriell.
+- Decisões de uso/dor/objetivo eu pergunto **a Gabriell**, porque só ele pode responder.
+
+### Como Gabriell quer ser tratado
+
+> **REGRA DE OURO:** Gabriell é o dono que está contratando consultoria. Não é programador. Não pergunta a ele coisas técnicas que Claude Code consegue investigar. Pergunta a ele sobre **dor, objetivo, uso real, fluxo do dia a dia, validação visual**.
+
+| O que perguntar a Gabriell                | O que NÃO perguntar                 |
+| ----------------------------------------- | ----------------------------------- |
+| Como você usa isso no dia a dia?          | DOMParser ou regex?                 |
+| Quem mais vai operar isso?                | Onde colocar este arquivo?          |
+| Quando der erro, quem resolve?            | Estender função X ou criar nova?    |
+| Validação visual: print do canvas         | Estratégia de testes?               |
+| Tolerância: bloqueia ou aceita meia-boca? | Discriminated union ou flat type?   |
+| Quanto X mm faz diferença na produção?    | Como organizar o describe do teste? |
+
+**Quando tiver dúvida técnica:** consulte Claude Code (pede pra ele ler código, propor abordagem, investigar). NÃO transfira a dúvida pra Gabriell.
+
+### Estrutura padrão de uma onda
+
+1. **Calibração:** Claude (chat) faz perguntas de produto/uso a Gabriell
+2. **Geração:** Claude (chat) escreve texto firme pro Claude Code com decisões traduzidas
+3. **Plano:** Claude Code propõe plano (Plano / Arquivos / Risco / Teste)
+4. **Revisão:** Claude (chat) revisa o plano antes de Gabriell aprovar
+5. **Execução:** Claude Code executa em fases
+6. **Checkpoint mínimo:** Gabriell valida apenas onde sua validação é insubstituível (visual, mensagens humanas, decisões de produto)
+7. **Confirmação:** Claude (chat) valida output e confirma fechamento
+
+### Princípios de comunicação com Gabriell
+
+- **Português brasileiro**, tom direto e franco
+- **Analogias do mundo real DO PROGRAMA** (não cadeira de IKEA, não fora do contexto). Ex: "imagina que o Capi recebe um SVG do Corel..."
+- **Listas e tabelas > parágrafos longos**
+- **Push back firme** quando discordar tecnicamente, com justificativa
+- **Sem bajulação** — feedback honesto vale mais
+- **Checkpoints minimalistas** — só onde Gabriell precisa validar de verdade
+
+### Lições aprendidas (de sessões anteriores)
+
+- ⚠️ Claude Code tende a pular checkpoints — usar linguagem firme: _"PARE EXECUÇÃO. Quebra de contrato."_
+- ⚠️ Claude Code tende a atacar sintoma, não causa raiz — pedir diagnóstico antes de fix
+- ⚠️ Claude Code às vezes **inventa justificativa** pra evitar investigar problema real ("removi os logs pelo critério X" quando os logs eram outros). Pressionar com evidência cronológica.
+- ⚠️ "Auto mode" do Claude Code pula perguntas críticas — forçar respostas explícitas no kickoff
+- ✅ Validação visual com prints > confiar em descrição textual
+- ✅ Validação extra via SQL direto no banco (não confiar só no F5 test) quando persistência for crítica
+- ✅ Cada decisão arquitetural vai pra ADR em `docs/DECISIONS/`
+- ✅ **Logs no DevTools > leitura de código** quando Claude Code afirma "tudo OK" mas runtime contradiz
+- ✅ **Teste verde ≠ código no caminho de execução** — validar via runtime que função modificada está sendo chamada
+- ✅ **Causa raiz > sintoma**, sempre, sem exceção
+
+---
+
+## 🤖 Modelos do Claude Code por onda
+
+| Onde                               | Função                                                                 | Modelo recomendado          |
+| ---------------------------------- | ---------------------------------------------------------------------- | --------------------------- |
+| **App desktop Claude (consultor)** | Estratégia, validação visual, revisão de planos, escrita de instruções | **Opus 4.7**                |
+| **Claude Code (no VS Code)**       | Execução: criar arquivos, rodar código, debug                          | Varia por onda (ver tabela) |
 
 **Modelos do Claude Code por onda:**
 
@@ -42,8 +100,12 @@
 - Onda 2 ✅ → Sonnet 4.6 + médio
 - Onda 3 ✅ → Opus 4.7 + alto (Canvas Fabric.js)
 - Onda 4 ✅ → Sonnet 4.6 + médio (slots + fitText)
-- Onda 4.5 → Sonnet 4.6 (download/seed simples)
-- Ondas 5-6 → Sonnet 4.6
+- Onda 4.5 ✅ → Sonnet 4.6 (download/seed simples)
+- Onda 5 ✅ → Sonnet 4.6
+- Onda 6a ✅ → Sonnet 4.6 (schema)
+- Onda 6b ✅ → Opus 4.7 alto (parser + LayerMeta + bug Fabric)
+- Onda 6c → Sonnet 4.6 (painel de slots)
+- Onda 6.5 → Sonnet 4.6 (UI bancos)
 - Onda 7 → **Opus 4.7 + alto** (alinhamento)
 - Onda 9 → **Opus 4.7 + alto** (exportação SVG)
 - Ondas 10-12 → Sonnet 4.6 ou Haiku
@@ -51,47 +113,28 @@
 
 ---
 
-## 📋 Método de trabalho que funciona
-
-1. **Eu (chat) calibro** o texto pro Claude Code
-2. **Claude Code propõe plano** no formato: Plano / Arquivos / Risco / Teste
-3. **Eu (chat) reviso o plano** antes de Gabriell aprovar
-4. **Claude Code executa em fases** com **checkpoints A, B, C**
-5. **Gabriell valida visualmente** com prints em cada checkpoint
-6. **Eu (chat) confirmo** OK pro próximo checkpoint
-
-**Lições aprendidas:**
-
-- ⚠️ Claude Code tende a pular checkpoints — usar linguagem firme: _"PARE EXECUÇÃO. Quebra de contrato."_
-- ⚠️ Claude Code tende a atacar sintoma, não causa raiz — pedir diagnóstico antes de fix
-- ⚠️ "Auto mode" do Claude Code pula perguntas críticas — forçar respostas explícitas no kickoff
-- ✅ Validação visual com prints > confiar em descrição textual
-- ✅ Validação extra via SQL direto no banco (não confiar só no F5 test) quando persistência for crítica
-- ✅ Cada decisão arquitetural vai pra ADR em `docs/DECISIONS/`
-
----
-
 ## 🏗️ Estrutura de ondas (ROADMAP)
 
-| Onda | Tema                                                                     | Status     |
-| ---- | ------------------------------------------------------------------------ | ---------- |
-| 0    | Bootstrap (Tauri + Vite + React + TS)                                    | ✅ Fechada |
-| 1    | Banco SQLite + Seeds (19 tabelas)                                        | ✅ Fechada |
-| 2    | Home + Layout Base                                                       | ✅ Fechada |
-| 3    | Canvas Fabric.js                                                         | ✅ Fechada |
-| 4    | Slots editáveis + fitText                                                | ✅ Fechada |
-| 4.5  | Banco de Fontes Curado (5 fontes nicho profissional + FontFace API)      | ✅ Fechada |
-| 5    | Texturas (PNGs ABS Escovado)                                             | ✅ Fechada |
-| 6a   | Schema + Seeds + Bancos (apliques, engravings, markings, pattern_layers) | ✅ Fechada |
-| 6.5  | UI dos bancos (Apliques/Gravações/Marcações)                             | ⏳         |
-| 7    | Painel de Camadas hierárquico (poder, edição TIPO+MÁQUINA)               | ⏳         |
-| 7    | Sistema de alinhamento estilo Confluence                                 | ⏳         |
-| 8    | Padrões + slots persistentes                                             | ⏳         |
-| 9    | Exportação SVG por máquina/operação                                      | ⏳         |
-| 10   | Telas restantes (Abrir Padrão, Histórico, Banco)                         | ⏳         |
-| 11   | Histórico completo de pedidos                                            | ⏳         |
-| 12   | Settings                                                                 | ⏳         |
-| 13   | Validação final + polimento                                              | ⏳         |
+| Onda    | Tema                                                                 | Status                     |
+| ------- | -------------------------------------------------------------------- | -------------------------- |
+| 0       | Bootstrap (Tauri + Vite + React + TS)                                | ✅ Fechada                 |
+| 1       | Banco SQLite + Seeds (19 tabelas)                                    | ✅ Fechada                 |
+| 2       | Home + Layout Base                                                   | ✅ Fechada                 |
+| 3       | Canvas Fabric.js                                                     | ✅ Fechada                 |
+| 4       | Slots editáveis + fitText                                            | ✅ Fechada                 |
+| 4.5     | Banco de Fontes Curado (5 fontes nicho profissional + FontFace API)  | ✅ Fechada                 |
+| 5       | Texturas (PNGs ABS Escovado)                                         | ✅ Fechada                 |
+| 6a      | Schema de hierarquia (3 bancos novos)                                | ✅ Fechada                 |
+| **6b**  | **Parser Corel + Cleanup + LayerMeta hierárquico**                   | **✅ Fechada**             |
+| 6c      | Painel de Slots agrupado por camada                                  | ⏳                         |
+| **6.5** | **UI dos bancos (Apliques/Gravações/Marcações) — Fases A+B**         | **✅ Fechada (Fases A+B)** |
+| 7       | Painel de Camadas hierárquico + alinhamento estilo Confluence        | ⏳                         |
+| 8       | Padrões + slots persistentes (primeiro padrão real: Placa Profissão) | ⏳                         |
+| 9       | Exportação SVG por máquina/operação                                  | ⏳                         |
+| 10      | Telas restantes (Abrir Padrão, Histórico, Banco)                     | ⏳                         |
+| 11      | Histórico completo de pedidos                                        | ⏳                         |
+| 12      | Settings                                                             | ⏳                         |
+| 13      | Validação final + polimento                                          | ⏳                         |
 
 ---
 
@@ -105,7 +148,7 @@
 
 ### Arquitetura
 
-- **Camadas tipadas:** cada camada do SVG tem `kind: "visual" | "production"`. Visual renderiza no PNG mockup. Production exporta SVG limpo pra máquina.
+- **Camadas tipadas:** cada camada do SVG tem `kind: "principal" | "operation" | "visual"` (discriminated union, ADR 010).
 - **Banco de logos auto-alimentado:** toda logo usada vira asset salvo automaticamente.
 - **Materiais = PNGs reais**, não gradientes SVG. 4 PNGs do "ABS Escovado" (prata, rose, dourado, bronze) são seed da Onda 1.
 - **Sem fonte padrão por slot.** Fonte é escolhida no momento de criar o slot.
@@ -125,10 +168,9 @@
 
 - 5 famílias curadas embutidas em `src-tauri/resources/fonts/` (variable fonts + Bebas Neue estática)
 - Variable fonts cobrem regular + bold no mesmo arquivo (peso `100 900`)
-- Carregamento via `new FontFace(...).load() + document.fonts.add()` — **NÃO `@font-face` passivo** (gera falso negativo no `check()`, browser só baixa quando algum elemento usa a fonte)
-- Asset protocol Tauri 2.x: `enable: true + scope: ["**"]` no `security` do `tauri.conf.json` — **sem isso → ERR_CONNECTION_REFUSED**
-- ⚠️ Cargo não detecta mudanças em `resources/` — executar `cargo clean` ao adicionar PNGs/fonts novas
-- Pré-release: revisar scope `["**"]` para algo mais restrito (ex: `["$RESOURCE/**"]`)
+- Carregamento via `new FontFace(...).load() + document.fonts.add()` — **NÃO `@font-face` passivo**
+- Asset protocol Tauri 2.x: `enable: true + scope: ["**"]` no `security` do `tauri.conf.json`
+- ⚠️ Cargo não detecta mudanças em `resources/` — executar `cargo clean` ao adicionar **qualquer** asset novo (SVGs, PNGs, fonts). Não só fonts.
 
 ### Slots e fitText (Onda 4)
 
@@ -136,25 +178,16 @@
 - `fitText` reduz fonte sem quebrar linha; min 6pt, max 24pt, passo 0.5pt; função pura com `measureFn` injetada
 - Placeholder de logo vazio = `fabric.Group` gerenciado pelo `SlotManager`, não componente React
 - Conteúdo dos slots = `fabric.Text` (read-only), nunca `fabric.IText`
-- ⚠️ **Cache do Fabric 6:** usar `.set({ prop: value })`, nunca atribuição direta. Bug só aparece no Tauri (Chromium), não em jsdom — testes passam mas bug existe visualmente.
-- `@font-face` não carregado no WebView ainda — `fitText` mede com fallback `system-ui`. Corrige na Onda 4.5.
+- ⚠️ **Cache do Fabric 6:** usar `.set({ prop: value })`, nunca atribuição direta
 
-### Texturas (Onda 5)
+### Onda 6b (parser Corel + cleanup + LayerMeta)
 
-- Materiais aplicados via `fabric.Pattern` como fill da camada, com `clipPath` baseado no contorno do produto (`absolutePositioned: true`)
-- Cenário 1 (clipPath + Pattern ortogonal) escolhido após refute do Cenário 2 (canvas pré-renderizado) por bug de patternTransform com objeto maior que produto
-- Strip + restore simétrico de fill e clipPath em `serialize()` preserva invariante: serialize não modifica estado visual do canvas
-- Cache `materialImageCache` + `preloadMaterials` reduz trocas para < 0.5ms (meta RF-8.1 era < 200ms — 1000× mais rápido)
-- ⚠️ Riscos conhecidos Fabric 6.9.1: Issue #8517 (toDataUrl + absolutePositioned) → follow-up Onda 9; Issue #7742 (Group clipPath) → mitigado via compound path string
-
-### Onda 6a — Schema hierárquico + bancos de componentes
-
-- 4 tabelas novas: `pattern_layers`, `appliques`, `engravings`, `markings` — todas seguem mesmo shape (id, name, filePath, thumbnail, dimensões, tags, metadata, soft delete)
-- Coluna `parent_layer_id` em `pattern_slots` (nullable, FK lógica → `pattern_layers`)
-- Convenção dual de filePath: `"resource://"` (fixtures embutidas) e `"appdata://"` (uploads do usuário). Resolver em `src/services/svgPathResolver.ts`
-- Fixtures de seed (4 svg-bases + 3 apliques) ficam em `src-tauri/resources/fixtures/`, **NUNCA copiadas pra appData**. Padrão coerente com Onda 4.5 (banco de fontes)
-- `INSERT OR REPLACE` em seeds — revisitar quando `pattern_layers` virar FK para `svg_bases` (Onda 6b+)
-- ADR 010 documenta hierarquia de camadas em 2 níveis fixos (principal → operação)
+- **Parser Corel SVG** puro em `src/core/canvas/corel-svg-parser.ts`. Valida: dimensões em mm, aspect ratio uniforme, sem `<text>`/`<image>`/`<use>` (rejeita com mensagens humanas em PT). Postura: rigor + clareza + sem mágica.
+- **cleanCorelSvg** descarta `<style>`, `<font>`, `<metadata>`, fills, strokes, classes CSS. Promove `fill-rule`/`clip-rule` de inline style pra atributo SVG próprio (ADR 010 §3 cumprido).
+- **fill nos shape elements:** SVG raw recebe `fill="none"` (SVG entende). No Fabric, `obj.set({ fill: '' })` — Fabric 6 passa "none" literal pro canvas DOM, que renderiza preto. String vazia evita o bug. Documentado em ADR 011.
+- **LayerMeta como discriminated union** com 3 variantes (Principal/Operation/Visual) + 7 invariantes validadas em runtime. TypeScript barra combinações inválidas em compile-time.
+- **schemaVersion: 2** no canvasJson. Migration trivial (banco vazio).
+- **Lição crítica da Onda 6b:** testes verdes não provam que código novo está no caminho de execução. Sempre validar via DevTools que função modificada está sendo chamada no runtime real. Bug pode estar em "qual porta o runtime usa", não em "como a porta funciona". Adicionar testes de integração que exercitem o MESMO caminho do runtime — não só o caminho ideal.
 
 ### Visual
 
@@ -178,11 +211,12 @@
 - `003-production-modules-deferred.md` — Conceito ainda imaturo, fica pra futuro
 - `004-product-layers-svg-nullable.md` — Coluna nullable até product_layers ser populado de fato
 - `005-canvas-engine-fabric-mm.md` — Canvas em mm com DPI=4, viewBox autoritativo do banco
-- `006-onda-4-slots-fittext.md` — Slots, fitText, body/overlay, placeholder, bug cache Fabric 6
-- `007-onda-4.5-banco-fontes.md` — 5 fontes curadas, FontFace API ativa, asset protocol Tauri 2.x OPT-IN, cargo clean obrigatório
-- `008-onda-5-texturas-camada.md` — Texturas via fabric.Pattern + clipPath, cache de imagens, strip+restore em serialize, riscos Fabric 6.9.1 (issues #8517, #7742)
-- `009-onda-5-layout-sidebar-topbar.md` — Layout sidebar esquerda hierárquica + topbar de chips de padrões + painel direito de camadas Opção D-completa
-- `010-camadas-hierarquicas-bancos-componentes.md` — Hierarquia de camadas em 2 níveis, tabelas de bancos, convenção dual filePath resource://+appdata://, FK parentLayerId
+- `006-onda-4-slots-fittext.md` — Slots editáveis, fitText, body/overlay, placeholder, bug cache Fabric 6
+- `007-onda-4.5-banco-fontes.md` — 5 fontes curadas, FontFace API ativa, asset protocol Tauri 2.x OPT-IN, cargo clean obrigatório ao adicionar resources
+- `008-camadas-hierarquicas-bancos-componentes.md` — Camadas em 2 níveis (principal → operação) + 3 bancos novos (apliques/gravações/marcações)
+- `009-exportacao-maquina-operacao.md` — Spec completa da Onda 9: 1 SVG por (máquina, operação). Regra "marcação herda contorno". Feature "tirar miolo".
+- `010-camadas-hierarquicas.md` — Estrutura hierárquica de camadas + bancos de componentes
+- **`011-fabric6-fill-empty-string.md`** — Fabric 6 passa "none" literal pro canvas DOM, que renderiza preto. Workaround: `fill: ''` no obj.set.
 
 ---
 
@@ -191,11 +225,12 @@
 Localização: `capi-studio-v2/projeto/` (anexar quando relevante ao chat)
 
 - `00-README.md` — índice e instruções
-- `01-DATABASE.md` — schema SQLite com Drizzle (19 tabelas)
+- `01-DATABASE.md` — schema SQLite com Drizzle (24 tabelas após Onda 6a)
 - `02-REQUIREMENTS.md` — requisitos funcionais MVP
 - `03-CLAUDE-CODE-KICKOFF.md` — prompt de kickoff principal, 14 ondas
 - `04-STITCH-PROMPT.md` — prompt em inglês pra Google Stitch
 - `05-BACKLOG.md` — Fase 2/3 documentadas
+- `06-VISION.md` — norte estratégico do produto
 
 ---
 
@@ -262,8 +297,6 @@ E eu vou rodar este checklist e te responder objetivamente:
 | 5   | Recomendação: continua / considere cortar / corte agora |
 | 6   | Se cortar: template do próximo chat já preenchido       |
 
-**Quando rodar:** sempre que sentir dúvida se vale continuar nesse chat ou abrir novo.
-
 ---
 
 ## 🛠️ Stack e versões fixadas
@@ -286,7 +319,7 @@ E eu vou rodar este checklist e te responder objetivamente:
 ## 💬 Estilo de comunicação preferido
 
 - **Português brasileiro**, tom direto e franco
-- **Analogias do mundo real** quando explicar conceito técnico
+- **Analogias do mundo real DO PROGRAMA** quando explicar conceito técnico (não cadeira de IKEA, não fora de contexto)
 - **Listas e tabelas** > parágrafos longos
 - **Emojis** OK em moderação (estrutura, não decoração)
 - **Não bajulação** — feedback honesto vale mais
@@ -310,4 +343,15 @@ Eu leio o contexto, faço perguntas estratégicas se necessário, e começamos c
 
 ---
 
-_Última atualização: Onda 6a fechada — próxima Onda 6b (parser SVG + LayerMeta refactor)_
+### Onda 6.5 — Banco de Apliques (Fases A+B fechadas)
+
+- **Fase A:** seed 3 SVGs com `INSERT OR IGNORE` (fix idempotency), `humanizeError` em PT, `resolveDisplayUrl` via asset protocol Tauri
+- **Fase B:** UI completa — rota `/banco/apliques`, grid de cards, thumbnails SVG, upload com validação, renomear/deletar via DropdownMenu
+- **Lição registrada — cargo clean ampliado:** `cargo clean` é obrigatório ao adicionar qualquer asset em `resources/`, não só fonts/PNGs
+- **Lição registrada — quebra de contrato reparada:** Claude Code mudou código + deletou pasta sem aprovação durante debug. Fix foi correto tecnicamente, mas violação de processo foi admitida, documentada e corrigida com reset planejado.
+- **Dívida técnica:** `tests/fixtures/apliques/` (PT) → padronizar pra `appliques` (EN) em onda futura. Não bloqueia MVP.
+- **Próxima Fase C:** canvas right-panel com lista de apliques + click-to-add como camada `kind: 'principal'`
+
+---
+
+_Última atualização: Onda 6.5 Fases A+B fechadas — próxima: Fase C (canvas + painel direito + addAppliqueSvg)._

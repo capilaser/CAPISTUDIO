@@ -93,6 +93,55 @@ export async function create(input: CreateAppliqueInput): Promise<void> {
   );
 }
 
+export interface UpdateAppliqueInput {
+  name?: string;
+  thumbnailPath?: string | null;
+  widthMm?: number;
+  heightMm?: number;
+  tags?: string[];
+  metadata?: Record<string, unknown> | null;
+}
+
+/** Partial update — only the provided fields are written. No-op if id not found or deleted. */
+export async function update(id: string, input: UpdateAppliqueInput): Promise<void> {
+  const sets: string[] = [];
+  const values: unknown[] = [];
+
+  if (input.name !== undefined) {
+    sets.push('name = ?');
+    values.push(input.name);
+  }
+  if (input.thumbnailPath !== undefined) {
+    sets.push('thumbnail_path = ?');
+    values.push(input.thumbnailPath);
+  }
+  if (input.widthMm !== undefined) {
+    sets.push('width_mm = ?');
+    values.push(input.widthMm);
+  }
+  if (input.heightMm !== undefined) {
+    sets.push('height_mm = ?');
+    values.push(input.heightMm);
+  }
+  if (input.tags !== undefined) {
+    sets.push('tags = ?');
+    values.push(JSON.stringify(input.tags));
+  }
+  if (input.metadata !== undefined) {
+    sets.push('metadata = ?');
+    values.push(input.metadata !== null ? JSON.stringify(input.metadata) : null);
+  }
+
+  if (sets.length === 0) return;
+
+  values.push(id);
+  const db = await getDb();
+  await db.execute(
+    `UPDATE appliques SET ${sets.join(', ')} WHERE id = ? AND deleted_at IS NULL`,
+    values
+  );
+}
+
 /** Soft-delete an applique by id. No-op if already deleted. */
 export async function softDelete(id: string): Promise<void> {
   const db = await getDb();

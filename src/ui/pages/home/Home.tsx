@@ -26,8 +26,9 @@ const CARDS = [
   {
     icon: Database,
     title: 'Banco de Ativos',
-    description: 'Gerenciar fontes, materiais e SVGs',
-    wave: 'Onda 10',
+    description: 'Gerenciar apliques, gravações e marcações',
+    wave: 'Onda 6.5',
+    href: '/banco/apliques',
   },
 ] as const;
 

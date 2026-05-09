@@ -1,0 +1,170 @@
+import { useRef, useState } from 'react';
+
+import { humanizeError } from '@/core/canvas/corel-svg-errors';
+import { parseCorelSvg, type CorelSvgMeta } from '@/core/canvas/corel-svg-parser';
+import { create as createApplique } from '@/data/repositories/appliqueRepository';
+import { saveAppliqueFile } from '@/services/applique-storage';
+import { Button } from '@/ui/components/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/ui/components/dialog';
+import { Input } from '@/ui/components/input';
+import { Label } from '@/ui/components/label';
+
+interface Props {
+  open: boolean;
+  onClose: () => void;
+  onSaved: () => void;
+}
+
+type Step = 'pick' | 'name';
+
+export function UploadApliqueDialog({ open, onClose, onSaved }: Props) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [step, setStep] = useState<Step>('pick');
+  const [error, setError] = useState<string | null>(null);
+  const [meta, setMeta] = useState<CorelSvgMeta | null>(null);
+  const [rawSvg, setRawSvg] = useState<string>('');
+  const [name, setName] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  function reset() {
+    setStep('pick');
+    setError(null);
+    setMeta(null);
+    setRawSvg('');
+    setName('');
+    setSaving(false);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }
+
+  function handleClose() {
+    reset();
+    onClose();
+  }
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setError(null);
+    const content = await file.text();
+
+    try {
+      const parsed = parseCorelSvg(content);
+      setMeta(parsed);
+      setRawSvg(content);
+      setName(file.name.replace(/\.svg$/i, ''));
+      setStep('name');
+    } catch (err) {
+      setError(humanizeError(err as Error));
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }
+
+  async function handleSave() {
+    if (!meta || !name.trim()) return;
+
+    setSaving(true);
+    try {
+      const id = crypto.randomUUID();
+      const absolutePath = await saveAppliqueFile(id, rawSvg);
+      await createApplique({
+        id,
+        name: name.trim(),
+        filePath: absolutePath,
+        widthMm: meta.widthMm,
+        heightMm: meta.heightMm,
+      });
+      reset();
+      onSaved();
+    } catch (err) {
+      setError(`Erro ao salvar: ${String(err)}`);
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
+      <DialogContent className="border-ink-700 bg-ink-900 text-ink-100 sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="font-display text-sm font-medium text-ink-100">
+            Adicionar aplique
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {/* File picker — always visible */}
+          <div className="space-y-1.5">
+            <Label className="text-xs text-ink-400">Arquivo SVG</Label>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".svg"
+              onChange={handleFileChange}
+              className="block w-full cursor-pointer rounded-md border border-ink-700 bg-ink-800 px-3 py-2 text-sm text-ink-200 file:mr-3 file:cursor-pointer file:rounded file:border-0 file:bg-ink-700 file:px-2 file:py-1 file:text-xs file:text-ink-100 hover:border-ink-600"
+            />
+          </div>
+
+          {/* Error message */}
+          {error && (
+            <p className="rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
+              {error}
+            </p>
+          )}
+
+          {/* Step 2: dimensions preview + name input */}
+          {step === 'name' && meta && (
+            <>
+              <div className="rounded-md border border-ink-700 bg-ink-800 px-3 py-2">
+                <span className="text-xs text-ink-400">Dimensões detectadas: </span>
+                <span className="font-mono tabular-nums text-xs text-ink-100">
+                  {meta.widthMm.toFixed(1)} × {meta.heightMm.toFixed(1)} mm
+                </span>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="applique-name" className="text-xs text-ink-400">
+                  Nome
+                </Label>
+                <Input
+                  id="applique-name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Ex: Aplique Formato D"
+                  className="border-ink-700 bg-ink-800 text-ink-100 focus-visible:ring-laser-muted"
+                  autoFocus
+                />
+              </div>
+            </>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleClose}
+            className="text-ink-400 hover:text-ink-100"
+          >
+            Cancelar
+          </Button>
+          {step === 'name' && (
+            <Button
+              size="sm"
+              onClick={handleSave}
+              disabled={!name.trim() || saving}
+              className="bg-ink-700 text-ink-100 hover:bg-ink-600"
+            >
+              {saving ? 'Salvando…' : 'Salvar'}
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}

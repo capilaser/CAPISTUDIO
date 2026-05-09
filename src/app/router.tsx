@@ -3,6 +3,7 @@ import { Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 
 import CanvasTest from '@/ui/pages/dev/CanvasTest';
 import MaterialsTestPage from '@/ui/pages/dev/MaterialsTestPage';
+import BancoApliquesPagina from '@/ui/pages/banco-apliques/BancoApliquesPagina';
 import DevDbCheck from '@/ui/pages/DevDbCheck';
 import Home from '@/ui/pages/Home';
 
@@ -35,6 +36,7 @@ export function RouterContent() {
   return (
     <Routes>
       <Route path="/" element={<Home />} />
+      <Route path="/banco/apliques" element={<BancoApliquesPagina />} />
       {import.meta.env.DEV && <Route path="/dev/db-check" element={<DevDbCheck />} />}
       {import.meta.env.DEV && <Route path="/dev/canvas-test" element={<CanvasTest />} />}
       {import.meta.env.DEV && <Route path="/dev/materials-test" element={<MaterialsTestPage />} />}
