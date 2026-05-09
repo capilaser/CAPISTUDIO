@@ -691,5 +691,75 @@ describe('CanvasEngine', () => {
 
       expect(engine.getLayerMeta(id)!.materialId).toBe('abs-escovado-prata');
     });
+
+    it('T6: serialize → deserialize preserva kind, appliqueId, name e posição', async () => {
+      const svgString = readFileSync(join(FIXTURES_DIR, 'apliques', 'aplique-3-pill.svg'), 'utf-8');
+      const meta = parseCorelSvg(svgString);
+      engine = new CanvasEngine(canvasEl, baseConfig);
+
+      const id = await engine.addAppliqueSvg(meta, 'Aplique Pill', 'aplique-3-pill');
+      const objBefore = engine.canvas
+        .getObjects()
+        .find((o) => !isBaseObject(o) && (o as unknown as Record<string, unknown>).id === id)!;
+      const leftBefore = objBefore.left;
+      const topBefore = objBefore.top;
+      const scaleXBefore = objBefore.scaleX;
+
+      const snapshot = engine.serialize('placa-300x90');
+      await engine.deserialize(snapshot);
+
+      // LayerMeta restaurado de capi.layers
+      const restored = engine.getLayerMeta(id);
+      expect(restored).not.toBeNull();
+      expect(restored!.kind).toBe('principal');
+      expect(restored!.appliqueId).toBe('aplique-3-pill');
+      expect(restored!.name).toBe('Aplique Pill');
+
+      // Objeto Fabric restaurado com posição e escala intactas
+      const objAfter = engine.canvas
+        .getObjects()
+        .find((o) => !isBaseObject(o) && (o as unknown as Record<string, unknown>).id === id)!;
+      expect(objAfter).toBeDefined();
+      expect(objAfter.left).toBeCloseTo(leftBefore, 5);
+      expect(objAfter.top).toBeCloseTo(topBefore, 5);
+      // Fabric serializa floats com 4 casas decimais em toObject() — tolerância 3 decimais
+      expect(objAfter.scaleX).toBeCloseTo(scaleXBefore!, 3);
+    });
+
+    it('T7: deserialize com appliqueId ausente (JSON legado) não quebra', async () => {
+      engine = new CanvasEngine(canvasEl, baseConfig);
+
+      // Simula JSON gerado antes da Fase A: kind='principal' mas sem appliqueId
+      const legacySnapshot = {
+        version: '6.0.0',
+        objects: [],
+        capi: {
+          productId: 'broche-60x25',
+          units: 'mm' as const,
+          schemaVersion: 2,
+          layers: [
+            {
+              id: 'legacy-id-001',
+              parentLayerId: null,
+              name: 'Camada Legacy',
+              zIndex: 0,
+              visible: true,
+              locked: false,
+              kind: 'principal' as const,
+              materialId: null,
+              // appliqueId ausente — simula JSON pré-Fase A
+            },
+          ],
+        },
+      };
+
+      // Não deve lançar exceção
+      await expect(engine.deserialize(legacySnapshot)).resolves.toBeUndefined();
+
+      // LayerMeta restaurado sem crash — appliqueId pode ser undefined ou null
+      const meta = engine.getLayerMeta('legacy-id-001');
+      expect(meta).not.toBeNull();
+      expect(meta!.kind).toBe('principal');
+    });
   });
 });
