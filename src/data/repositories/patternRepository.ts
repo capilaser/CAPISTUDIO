@@ -105,6 +105,48 @@ export async function getPatternById(id: string): Promise<Pattern | null> {
   return rows[0] ? toPattern(rows[0]) : null;
 }
 
+/** Summary used by LoadPatternDialog — name + updatedAt, no canvas_json parse. */
+export interface PatternListItem {
+  id: string;
+  name: string;
+  updatedAt: number;
+}
+
+/**
+ * Lists all active patterns for a given product, ordered by most-recently updated.
+ * Filters by product_id — does NOT return patterns from other products (e.g. broche).
+ */
+export async function listByProduct(productId: string): Promise<PatternListItem[]> {
+  const db = await getDb();
+  return db.select<PatternListItem[]>(
+    `SELECT id, name, updated_at as updatedAt
+       FROM patterns
+      WHERE product_id = ? AND deleted_at IS NULL
+      ORDER BY updated_at DESC`,
+    [productId]
+  );
+}
+
+/**
+ * Inserts a new pattern record with a caller-supplied UUID.
+ * Does NOT upsert — throws on duplicate id (use crypto.randomUUID() to avoid).
+ * Returns the id passed in (for chaining / test assertions).
+ */
+export async function insertPattern(
+  id: string,
+  productId: string,
+  name: string,
+  canvasJson: string
+): Promise<string> {
+  const db = await getDb();
+  await db.execute(
+    `INSERT INTO patterns (id, product_id, name, wave, tags, canvas_json)
+     VALUES (?, ?, ?, ?, '[]', ?)`,
+    [id, productId, name, 8, canvasJson]
+  );
+  return id;
+}
+
 /**
  * Insert-or-update: writes canvas_json against `id`. On insert, fills
  * required fields with safe defaults (name is derived from the id).

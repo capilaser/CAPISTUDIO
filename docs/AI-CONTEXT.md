@@ -115,26 +115,27 @@
 
 ## 🏗️ Estrutura de ondas (ROADMAP)
 
-| Onda    | Tema                                                                 | Status                     |
-| ------- | -------------------------------------------------------------------- | -------------------------- |
-| 0       | Bootstrap (Tauri + Vite + React + TS)                                | ✅ Fechada                 |
-| 1       | Banco SQLite + Seeds (19 tabelas)                                    | ✅ Fechada                 |
-| 2       | Home + Layout Base                                                   | ✅ Fechada                 |
-| 3       | Canvas Fabric.js                                                     | ✅ Fechada                 |
-| 4       | Slots editáveis + fitText                                            | ✅ Fechada                 |
-| 4.5     | Banco de Fontes Curado (5 fontes nicho profissional + FontFace API)  | ✅ Fechada                 |
-| 5       | Texturas (PNGs ABS Escovado)                                         | ✅ Fechada                 |
-| 6a      | Schema de hierarquia (3 bancos novos)                                | ✅ Fechada                 |
-| **6b**  | **Parser Corel + Cleanup + LayerMeta hierárquico**                   | **✅ Fechada**             |
-| 6c      | Painel de Slots agrupado por camada                                  | ⏳                         |
-| **6.5** | **UI dos bancos (Apliques/Gravações/Marcações) — Fases A+B**         | **✅ Fechada (Fases A+B)** |
-| 7       | Painel de Camadas hierárquico + alinhamento estilo Confluence        | ⏳                         |
-| 8       | Padrões + slots persistentes (primeiro padrão real: Placa Profissão) | ⏳                         |
-| 9       | Exportação SVG por máquina/operação                                  | ⏳                         |
-| 10      | Telas restantes (Abrir Padrão, Histórico, Banco)                     | ⏳                         |
-| 11      | Histórico completo de pedidos                                        | ⏳                         |
-| 12      | Settings                                                             | ⏳                         |
-| 13      | Validação final + polimento                                          | ⏳                         |
+| Onda    | Tema                                                                | Status                             |
+| ------- | ------------------------------------------------------------------- | ---------------------------------- |
+| 0       | Bootstrap (Tauri + Vite + React + TS)                               | ✅ Fechada                         |
+| 1       | Banco SQLite + Seeds (19 tabelas)                                   | ✅ Fechada                         |
+| 2       | Home + Layout Base                                                  | ✅ Fechada                         |
+| 3       | Canvas Fabric.js                                                    | ✅ Fechada                         |
+| 4       | Slots editáveis + fitText                                           | ✅ Fechada                         |
+| 4.5     | Banco de Fontes Curado (5 fontes nicho profissional + FontFace API) | ✅ Fechada                         |
+| 5       | Texturas (PNGs ABS Escovado)                                        | ✅ Fechada                         |
+| 6a      | Schema de hierarquia (3 bancos novos)                               | ✅ Fechada                         |
+| **6b**  | **Parser Corel + Cleanup + LayerMeta hierárquico**                  | **✅ Fechada**                     |
+| 6c      | Painel de Slots agrupado por camada                                 | ⏳ (pulada — vai junto com Onda 7) |
+| **6.5** | **UI dos bancos (Apliques/Gravações/Marcações) — Fases A+B+C+D**    | **✅ Fechada**                     |
+| 7       | Painel de Camadas hierárquico + alinhamento estilo Confluence       | ⏳                                 |
+| **8**   | **Padrões salvos + round-trip (Placa Advogado)**                    | **✅ Fechada**                     |
+| 8.5     | Gravações sobre apliques (balança + "Advogado")                     | ⏳                                 |
+| 9       | Exportação SVG por máquina/operação                                 | ⏳ (recomendado ANTES da 8.5)      |
+| 10      | Telas restantes (Abrir Padrão, Histórico, Banco)                    | ⏳                                 |
+| 11      | Histórico completo de pedidos                                       | ⏳                                 |
+| 12      | Settings                                                            | ⏳                                 |
+| 13      | Validação final + polimento                                         | ⏳                                 |
 
 ---
 
@@ -150,7 +151,7 @@
 
 - **Camadas tipadas:** cada camada do SVG tem `kind: "principal" | "operation" | "visual"` (discriminated union, ADR 010).
 - **Banco de logos auto-alimentado:** toda logo usada vira asset salvo automaticamente.
-- **Materiais = PNGs reais**, não gradientes SVG. 4 PNGs do "ABS Escovado" (prata, rose, dourado, bronze) são seed da Onda 1.
+- **Materiais = PNGs reais**, não gradientes SVG. 4 PNGs do "ABS Escovado" (prata, rose, dourado, bronze) são seed da Onda 1. ABS Escovado validado para broches e placas na Onda 8; placas de Acrílico Espelhado + Sólido entram em onda futura.
 - **Sem fonte padrão por slot.** Fonte é escolhida no momento de criar o slot.
 - **Production modules deferidos** pro backlog (ADR 003).
 
@@ -170,7 +171,7 @@
 - Variable fonts cobrem regular + bold no mesmo arquivo (peso `100 900`)
 - Carregamento via `new FontFace(...).load() + document.fonts.add()` — **NÃO `@font-face` passivo**
 - Asset protocol Tauri 2.x: `enable: true + scope: ["**"]` no `security` do `tauri.conf.json`
-- ⚠️ Cargo não detecta mudanças em `resources/` — executar `cargo clean` ao adicionar **qualquer** asset novo (SVGs, PNGs, fonts). Não só fonts.
+- ⚠️ Cargo não detecta mudanças em `resources/` — executar `cargo clean` ao adicionar PNGs/fonts novas
 
 ### Slots e fitText (Onda 4)
 
@@ -343,85 +344,4 @@ Eu leio o contexto, faço perguntas estratégicas se necessário, e começamos c
 
 ---
 
-### Onda 6.5 — Banco de Apliques
-
-**Fases A+B fechadas:**
-
-- **Fase A (banco):** seed 3 SVGs com `INSERT OR IGNORE` (fix idempotency), `humanizeError` em PT, `resolveDisplayUrl` via asset protocol Tauri. Naming fix: `fixtures/apliques` (PT) → `fixtures/appliques` (EN).
-- **Fase B (UI):** rota `/banco/apliques`, grid de cards, thumbnails SVG via asset protocol, upload com validação Corel, renomear/deletar via DropdownMenu.
-- **Lição — cargo clean ampliado:** obrigatório para qualquer asset novo em `resources/` (SVG, PNG, fonte).
-- **Lição — quebra de contrato:** Claude Code mudou código sem aprovação. Fix correto, processo violado. Admitido, documentado, corrigido com reset planejado.
-- **Dívida técnica:** `tests/fixtures/apliques/` (PT) → `appliques` (EN) em onda futura.
-
----
-
-## Onda 6.5 — Fase C: PLANO APROVADO, EXECUÇÃO PENDENTE
-
-### Decisões travadas
-
-| Decisão                | Resolução                                                                          |
-| ---------------------- | ---------------------------------------------------------------------------------- |
-| R2 — appliqueId        | Campo `appliqueId?: string` **NA Fase C** em `PrincipalLayerMeta`                  |
-| R3 — escala do aplique | **LITERAL** — mm reais, centralizado, coordenadas negativas permitidas (extravasa) |
-| R5 — layout painel     | Painel direito **unificado em abas faseado**                                       |
-| Assinatura engine      | `addAppliqueSvg(meta: CorelSvgMeta, name: string, appliqueId: string)` — Opção A   |
-| Shadcn Tabs            | Via **CLI** (`npx shadcn add tabs`)                                                |
-
-**R5 detalhado:**
-
-- **Onda 6.5:** Abas Apliques (completa) + Materiais (migrado de RightPanel) + Camadas (esqueleto desabilitado "Em breve (Onda 7)")
-- **Onda 7:** Aba Camadas implementada
-
-### Próximas fases (todas pendentes)
-
-**Fase A — Engine**
-
-- `appliqueId?: string` em `PrincipalLayerMeta` (`src/data/schema.ts`)
-- `addAppliqueSvg(meta, name, appliqueId)` em `canvas-engine.ts`
-- `registerPrincipalLayerMeta` privado (análogo ao `registerLayerMeta` para visual)
-- `fill: ''` + `stroke: SVG_BASE_STROKE` (ADR 011), `materialId: null` explícito
-- Posição: `left = mmToPx((productWidthMm - meta.widthMm) / 2)`, `top = mmToPx((productHeightMm - meta.heightMm) / 2)`
-- 5 testes T1-T5 em `canvas-engine.test.ts`
-
-**Fase B — UnifiedRightPanel + migração**
-
-- `npx shadcn add tabs` → `src/ui/components/tabs.tsx`
-- `RightPanel.tsx` → `MaterialPanel.tsx`: remove `return null` early exit, empty state com ícone Lucide (não `<p>` solto)
-- Novo `UnifiedRightPanel.tsx` com 3 abas
-- `CanvasTest.tsx`: trocar `<RightPanel>` por `<UnifiedRightPanel>`
-- **3 prints obrigatórios:** antes (RightPanel atual) / depois (MaterialPanel na aba) / empty state (nada selecionado)
-
-**Fase C — ApliquePanel**
-
-- Novo `ApliquePanel.tsx` dentro da aba Apliques
-- Fluxo: `list()` → thumbnails → click → `resolveDisplayUrl` → `fetch().text()` → `parseCorelSvg` → `addAppliqueSvg`
-- `try/catch` com `humanizeError` → `toast.error`
-- Estado `adding: string | null` por item (desabilita item durante operação)
-
-**Fase D — Round-trip**
-
-- Testes T6-T9: serialize/deserialize com `kind: 'principal'` + `appliqueId` + retrocompat sem `appliqueId`
-- Validação manual: adicionar aplique → salvar → recarregar → verificar reaparece com `appliqueId`
-
-### Arquivos afetados (plano completo)
-
-| Arquivo                                              | Fase | Operação                              |
-| ---------------------------------------------------- | ---- | ------------------------------------- |
-| `src/data/schema.ts`                                 | A    | Modificado — `appliqueId?: string`    |
-| `src/core/canvas/canvas-engine.ts`                   | A    | Modificado — `addAppliqueSvg`         |
-| `src/ui/components/tabs.tsx`                         | B    | Gerado pelo CLI                       |
-| `src/ui/pages/dev/canvas-test/MaterialPanel.tsx`     | B    | Renomeado de RightPanel + empty state |
-| `src/ui/pages/dev/canvas-test/UnifiedRightPanel.tsx` | B    | Novo                                  |
-| `src/ui/pages/dev/CanvasTest.tsx`                    | B    | Modificado                            |
-| `src/ui/pages/dev/canvas-test/ApliquePanel.tsx`      | C    | Novo                                  |
-| `tests/core/canvas/canvas-engine.test.ts`            | A+D  | Modificado                            |
-
-### Status da sessão
-
-- **Última sessão encerrada:** Sonnet 4.6 — plano aprovado com refinamentos, antes de iniciar Fase A
-- **Fase A:** planejada, **não iniciada**
-- **Commits da sessão:** `Onda 6.5 — Fase B: UI Banco de Apliques` + `fix: load() → reload()`
-
----
-
-_Última atualização: Onda 6.5 Fases A+B fechadas — Fase C planejada e aprovada, execução pendente na próxima sessão._
+_Última atualização: Onda 6b fechada — próxima Onda 6c (painel de slots) ou Onda 6.5 (UI bancos) — decisão pendente._

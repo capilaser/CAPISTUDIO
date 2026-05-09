@@ -17,8 +17,10 @@ import { getPatternById, upsertPatternCanvas } from '@/data/repositories/pattern
 import { getProductById, type Product } from '@/data/repositories/productRepository';
 import { useCanvasStore } from '@/stores/canvas-store';
 import { Button } from '@/ui/components/button';
+import { LoadPatternDialog } from './canvas-test/LoadPatternDialog';
 import { ModeToggle } from './canvas-test/ModeToggle';
 import { OperatorInputs } from './canvas-test/OperatorInputs';
+import { SaveAsPatternDialog } from './canvas-test/SaveAsPatternDialog';
 import { UnifiedRightPanel } from './canvas-test/UnifiedRightPanel';
 import { SlotCreatorButtons } from './canvas-test/SlotCreatorButtons';
 
@@ -33,6 +35,8 @@ export default function CanvasTest() {
   const [ready, setReady] = useState(false);
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
+  const [saveAsOpen, setSaveAsOpen] = useState(false);
+  const [loadOpen, setLoadOpen] = useState(false);
 
   const { mode, setSelectedSlotId, setSelectedLayerId, setSelectedLayerKind } = useCanvasStore();
 
@@ -82,11 +86,13 @@ export default function CanvasTest() {
           viewportHeightPx: DEV_VIEWPORT.heightPx,
         });
 
-        const svgRes = await fetch(`/products/${DEV_TEST_PRODUCT_ID}.svg`);
-        if (!svgRes.ok) {
-          throw new Error(`Failed to load product SVG: ${svgRes.status}`);
+        // ADR 013: base_svg comes from the DB (seeded from fixture), not a static fetch.
+        // p.baseSvg is already returned by productRepository.getProductById().
+        if (!p.baseSvg) {
+          throw new Error(
+            `Product '${DEV_TEST_PRODUCT_ID}' has no base_svg in the database. Re-seed the DB.`
+          );
         }
-        const svgString = await svgRes.text();
         if (cancelled) {
           engine.dispose();
           return;
@@ -95,7 +101,7 @@ export default function CanvasTest() {
         // parseCorelSvg throws user-readable errors for any quality issue —
         // the catch block below surfaces them via toast so the user knows exactly
         // what to fix in Corel before re-exporting.
-        const meta = parseCorelSvg(svgString);
+        const meta = parseCorelSvg(p.baseSvg);
         await engine.loadProductSvgFromMeta(meta);
         if (cancelled) {
           engine.dispose();
@@ -215,6 +221,40 @@ export default function CanvasTest() {
     setSelectedLayerKind(null);
   }
 
+  async function handleLoadPattern(patternId: string): Promise<void> {
+    const engine = engineRef.current;
+    const p = productRef.current;
+    if (!engine || !p) return;
+
+    const { getPatternById: loadPattern } = await import('@/data/repositories/patternRepository');
+    const pattern = await loadPattern(patternId);
+    if (!pattern?.canvasJson) return;
+
+    const layers = pattern.canvasJson.capi?.layers ?? [];
+    await engine.deserialize(
+      {
+        version: pattern.canvasJson.version,
+        objects: pattern.canvasJson.objects as Array<Record<string, unknown>>,
+        capi: {
+          productId: p.id,
+          units: 'mm',
+          schemaVersion: pattern.canvasJson.capi?.schemaVersion ?? 2,
+          layers,
+        },
+      },
+      async (materialId) => {
+        const { getById: getMat, resolveAssetUrl: resolveUrl } =
+          await import('@/data/repositories/materialRepository');
+        const mat = await getMat(materialId);
+        if (!mat) throw new Error(`Material not found: ${materialId}`);
+        return resolveUrl(mat);
+      }
+    );
+    engine.loadSlotsFromCanvas();
+    setSelectedLayerId(null);
+    setSelectedLayerKind(null);
+  }
+
   return (
     <main className="flex min-h-full flex-col bg-ink-950 text-ink-100">
       <header className="sticky top-0 flex items-center justify-between border-b border-ink-700 bg-ink-900 px-4 py-2 font-mono text-xs">
@@ -258,6 +298,27 @@ export default function CanvasTest() {
         >
           {saving ? 'Salvando…' : 'Salvar'}
         </Button>
+
+        <div className="h-4 w-px bg-ink-700" />
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setSaveAsOpen(true)}
+          disabled={!ready}
+          className="font-mono text-[11px]"
+        >
+          Salvar como padrão
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setLoadOpen(true)}
+          disabled={!ready}
+          className="font-mono text-[11px]"
+        >
+          Abrir padrão
+        </Button>
         <span className="ml-auto font-mono text-[11px] text-ink-500">
           Ctrl+S salvar · Ctrl+= zoom · Ctrl+0 reset · Space+drag pan
         </span>
@@ -282,6 +343,30 @@ export default function CanvasTest() {
         {/* OperatorInputs: visible only in operator mode */}
         {mode === 'operator' && <OperatorInputs engineRef={engineRef} />}
       </div>
+
+      {/* Dialogs — Onda 8, Checkpoint C */}
+      {/* productId uses `product` state (not productRef.current) to avoid
+          reading refs during render (react-hooks/refs lint rule).
+          getCanvasJson is a stable callback — engineRef.current is read
+          inside the callback body (at call time, not at render time). */}
+      <SaveAsPatternDialog
+        open={saveAsOpen}
+        productId={product?.id ?? ''}
+        getCanvasJson={() => {
+          const engine = engineRef.current;
+          const p = productRef.current;
+          if (!engine || !p) return '';
+          return JSON.stringify(engine.serialize(p.id));
+        }}
+        onClose={() => setSaveAsOpen(false)}
+        onSaved={() => setSaveAsOpen(false)}
+      />
+      <LoadPatternDialog
+        open={loadOpen}
+        productId={product?.id ?? DEV_TEST_PRODUCT_ID}
+        onClose={() => setLoadOpen(false)}
+        onLoad={handleLoadPattern}
+      />
 
       <footer className="border-t border-ink-800 bg-ink-900/60 px-4 py-2 font-mono text-[11px] text-ink-400">
         {product ? (
