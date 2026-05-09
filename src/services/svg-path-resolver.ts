@@ -17,10 +17,32 @@ export async function resolveDisplayUrl(filePath: string): Promise<string> {
     const resourcePath = filePath.slice(RESOURCE_PREFIX.length);
     const absolutePath = await resolveResource('resources/' + resourcePath);
     const assetUrl = convertFileSrc(absolutePath);
-    console.debug('[svg-path-resolver]', { filePath, resourcePath, absolutePath, assetUrl });
+    console.log('[svg-path-resolver] resolveDisplayUrl', {
+      filePath,
+      resourcePath,
+      absolutePath,
+      assetUrl,
+    });
     return assetUrl;
   }
   const assetUrl = convertFileSrc(filePath);
-  console.debug('[svg-path-resolver]', { filePath, assetUrl });
+  console.log('[svg-path-resolver] resolveDisplayUrl (absolute)', { filePath, assetUrl });
   return assetUrl;
+}
+
+/**
+ * Resolves a stored filePath to an absolute OS path suitable for IPC file reads.
+ *
+ * Unlike resolveDisplayUrl (which produces a Tauri asset URL for <img>),
+ * this returns the raw filesystem path needed by read_applique_file IPC.
+ *
+ *   - "resource://fixtures/..." → resolveResource → absolute path
+ *   - Absolute path            → returned as-is
+ */
+export async function resolveAbsolutePath(filePath: string): Promise<string> {
+  if (filePath.startsWith(RESOURCE_PREFIX)) {
+    const resourcePath = filePath.slice(RESOURCE_PREFIX.length);
+    return resolveResource('resources/' + resourcePath);
+  }
+  return filePath;
 }

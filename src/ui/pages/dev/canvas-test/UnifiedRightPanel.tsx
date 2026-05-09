@@ -13,6 +13,7 @@ import { Layers } from 'lucide-react';
 
 import type { CanvasEngine } from '@/core/canvas/canvas-engine';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/ui/components/tabs';
+import { ApliquePanel } from './ApliquePanel';
 import { MaterialPanel } from './MaterialPanel';
 
 interface UnifiedRightPanelProps {
@@ -41,13 +42,9 @@ export function UnifiedRightPanel({ engineRef }: UnifiedRightPanelProps) {
           </TabsTrigger>
         </TabsList>
 
-        {/* Apliques — placeholder para Fase C */}
+        {/* Apliques — ApliquePanel (Fase C) */}
         <TabsContent value="apliques" className="min-h-0 flex-1 overflow-y-auto">
-          <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-sm text-ink-400">
-            <Layers className="h-8 w-8 opacity-50" />
-            <p>Banco de Apliques</p>
-            <p className="text-xs text-ink-500">Em breve (Fase C)</p>
-          </div>
+          <ApliquePanel engineRef={engineRef} />
         </TabsContent>
 
         {/* Materiais — conteúdo migrado do RightPanel */}

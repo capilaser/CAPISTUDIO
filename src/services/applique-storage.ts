@@ -9,3 +9,8 @@ export async function saveAppliqueFile(id: string, content: string): Promise<str
 export async function deleteAppliqueFile(path: string): Promise<void> {
   return invoke('delete_applique_file', { path });
 }
+
+/** Reads an applique SVG file from disk and returns its content as a string. */
+export async function readAppliqueFile(path: string): Promise<string> {
+  return invoke<string>('read_applique_file', { path });
+}

@@ -9,8 +9,9 @@
  * Reused by: UploadApliqueDialog (Onda 6.5), future upload dialogs for
  * engravings and markings (Onda 6.6).
  */
-export function humanizeError(error: Error): string {
-  const msg = error.message;
+export function humanizeError(error: unknown): string {
+  const msg =
+    typeof error === 'string' ? error : error instanceof Error ? error.message : String(error);
 
   // Error 1: XML malformed — message starts with "SVG inválido:".
   // The technical detail in parentheses is logged to console, not shown to user.
