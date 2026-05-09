@@ -1,6 +1,6 @@
 import * as fabric from 'fabric';
 
-import type { LayerMeta, VisualLayerMeta } from '@/data/schema';
+import type { LayerMeta, PrincipalLayerMeta, VisualLayerMeta } from '@/data/schema';
 import { buildMaterialPattern, loadImage } from './material-applier';
 import type { CorelSvgMeta } from './corel-svg-parser';
 import { isOperationLayer } from './layer-meta';
@@ -511,6 +511,67 @@ export class CanvasEngine {
   }
 
   /**
+   * Loads an applique SVG onto the canvas as a new principal layer.
+   *
+   * Positioning is literal + centred relative to the product viewBox (R3):
+   *   left = mmToPx((productWidthMm  − meta.widthMm)  / 2)
+   *   top  = mmToPx((productHeightMm − meta.heightMm) / 2)
+   * If the applique is larger than the product, left/top go negative — this is
+   * intentional (applique extravasates the product boundary by design).
+   *
+   * @param meta       Parsed CorelSvgMeta (from parseCorelSvg)
+   * @param name       Human-readable layer name shown in the layers panel
+   * @param appliqueId FK → appliques.id in the local database
+   * @returns          Stable capi id of the created layer
+   */
+  async addAppliqueSvg(meta: CorelSvgMeta, name: string, appliqueId: string): Promise<string> {
+    const { objects } = await fabric.loadSVGFromString(meta.svgStripped);
+    const validObjects = objects.filter((o): o is fabric.FabricObject => o !== null);
+    if (validObjects.length === 0) {
+      throw new Error(
+        `[canvas-engine] addAppliqueSvg: no drawable shapes in SVG for applique "${appliqueId}".`
+      );
+    }
+
+    // ADR 011: fill: '' = transparent in Fabric/Canvas2D. Do NOT use 'none'.
+    for (const obj of validObjects) {
+      obj.set({ fill: '', stroke: SVG_BASE_STROKE, strokeWidth: 1, strokeUniform: true });
+    }
+
+    const group = fabric.util.groupSVGElements(validObjects);
+
+    const scaleX = meta.scaleFactor;
+    const scaleY = mmToPx(meta.heightMm) / meta.viewBoxH;
+
+    // R3: literal centering — applique may extravasate when larger than product.
+    const left = mmToPx((this.config.productWidthMm - meta.widthMm) / 2);
+    const top = mmToPx((this.config.productHeightMm - meta.heightMm) / 2);
+
+    group.set({ left, top, originX: 'left', originY: 'top', scaleX, scaleY });
+
+    const id = generateObjectId();
+    (group as unknown as Record<string, unknown>).id = id;
+
+    this.canvas.add(group);
+    this.canvas.requestRenderAll();
+
+    const principalMeta: PrincipalLayerMeta = {
+      id,
+      parentLayerId: null,
+      name,
+      zIndex: this.canvas.getObjects().length - 1,
+      visible: true,
+      locked: false,
+      kind: 'principal',
+      materialId: null,
+      appliqueId,
+    };
+    this.layerMeta.set(id, principalMeta);
+
+    return id;
+  }
+
+  /**
    * Adds a user-editable rectangle in product mm coordinates.
    * Top-left positioning, dimensions in mm.
    * Automatically registers a LayerMeta entry (kind='visual').
@@ -837,8 +898,8 @@ export class CanvasEngine {
    */
   private registerLayerMeta(id: string): void {
     if (this.layerMeta.has(id)) return; // idempotent
-    // Emit VisualLayerMeta (ADR 010 §1, Fase C). Principal/operation layers are
-    // created explicitly by higher-level flows (Onda 7+), not by this internal helper.
+    // Emit VisualLayerMeta (ADR 010 §1). Principal layers are created explicitly
+    // by addAppliqueSvg (Onda 6.5 Fase A+). Operation layers are deferred to Onda 7+.
     const meta: VisualLayerMeta = {
       id,
       parentLayerId: null,

@@ -170,6 +170,8 @@ export type PrincipalLayerMeta = {
   kind: 'principal';
   /** Material (texture) applied to this piece. Persisted in canvasJson. */
   materialId: string | null;
+  /** FK → appliques.id. null when the principal layer is the product base (not an applique). */
+  appliqueId: string | null;
 };
 
 /** Sub-camada de operação — operação de máquina sobre a peça física pai. */

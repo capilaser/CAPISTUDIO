@@ -586,4 +586,110 @@ describe('CanvasEngine', () => {
       }
     });
   });
+
+  // ─── addAppliqueSvg (Onda 6.5 Fase A) ────────────────────────────────────
+
+  describe('addAppliqueSvg', () => {
+    // Fixture: aplique-3-pill (95.2×15.2mm) — menor que o produto 60×25, sem extravasamento
+    // Fixture: aplique-1-formato-d (100.2×90.2mm) — maior que o produto 60×25, extravasamento esperado
+
+    it('T1: retorna string (id estável) após adicionar aplique', async () => {
+      const svgString = readFileSync(join(FIXTURES_DIR, 'apliques', 'aplique-3-pill.svg'), 'utf-8');
+      const meta = parseCorelSvg(svgString);
+      engine = new CanvasEngine(canvasEl, baseConfig);
+
+      const id = await engine.addAppliqueSvg(meta, 'Aplique Pill', 'aplique-3-pill');
+
+      expect(typeof id).toBe('string');
+      expect(id.length).toBeGreaterThan(0);
+    });
+
+    it('T2: getLayerMeta retorna kind=principal, appliqueId correto, materialId=null', async () => {
+      const svgString = readFileSync(join(FIXTURES_DIR, 'apliques', 'aplique-3-pill.svg'), 'utf-8');
+      const meta = parseCorelSvg(svgString);
+      engine = new CanvasEngine(canvasEl, baseConfig);
+
+      const id = await engine.addAppliqueSvg(meta, 'Aplique Pill', 'aplique-3-pill');
+      const layerMeta = engine.getLayerMeta(id);
+
+      expect(layerMeta).not.toBeNull();
+      expect(layerMeta!.kind).toBe('principal');
+      expect(layerMeta!.appliqueId).toBe('aplique-3-pill');
+      expect(layerMeta!.materialId).toBeNull();
+      expect(layerMeta!.id).toBe(id);
+    });
+
+    it('T2b: duas chamadas geram ids distintos em getAllLayerMetas', async () => {
+      const svgString = readFileSync(join(FIXTURES_DIR, 'apliques', 'aplique-3-pill.svg'), 'utf-8');
+      const meta = parseCorelSvg(svgString);
+      engine = new CanvasEngine(canvasEl, baseConfig);
+
+      const id1 = await engine.addAppliqueSvg(meta, 'Aplique A', 'aplique-3-pill');
+      const id2 = await engine.addAppliqueSvg(meta, 'Aplique B', 'aplique-3-pill');
+
+      expect(id1).not.toBe(id2);
+      const allMetas = engine.getAllLayerMetas();
+      expect(allMetas.has(id1)).toBe(true);
+      expect(allMetas.has(id2)).toBe(true);
+    });
+
+    it('T3: canvas.getObjects() aumenta em 1 após addAppliqueSvg', async () => {
+      const svgString = readFileSync(join(FIXTURES_DIR, 'apliques', 'aplique-3-pill.svg'), 'utf-8');
+      const meta = parseCorelSvg(svgString);
+      engine = new CanvasEngine(canvasEl, baseConfig);
+
+      const countBefore = engine.canvas.getObjects().length;
+      await engine.addAppliqueSvg(meta, 'Aplique Pill', 'aplique-3-pill');
+      const countAfter = engine.canvas.getObjects().length;
+
+      expect(countAfter).toBe(countBefore + 1);
+    });
+
+    it('T4: serialize().capi.layers contém a camada principal com appliqueId preservado', async () => {
+      const svgString = readFileSync(join(FIXTURES_DIR, 'apliques', 'aplique-3-pill.svg'), 'utf-8');
+      const meta = parseCorelSvg(svgString);
+      engine = new CanvasEngine(canvasEl, baseConfig);
+
+      const id = await engine.addAppliqueSvg(meta, 'Aplique Pill', 'aplique-3-pill');
+      const data = engine.serialize('placa-300x90');
+
+      const layer = data.capi.layers.find((l) => l.id === id);
+      expect(layer).toBeDefined();
+      expect(layer!.kind).toBe('principal');
+      expect(layer!.appliqueId).toBe('aplique-3-pill');
+    });
+
+    it('T5: aplique maior que produto → group.left e group.top negativos (extravasamento)', async () => {
+      // aplique-1-formato-d: 100.2×90.2mm > produto 60×25mm
+      // left = mmToPx((60 - 100.2) / 2) = mmToPx(-20.1) < 0
+      // top  = mmToPx((25 - 90.2)  / 2) = mmToPx(-32.6) < 0
+      const svgString = readFileSync(
+        join(FIXTURES_DIR, 'apliques', 'aplique-1-formato-d.svg'),
+        'utf-8'
+      );
+      const meta = parseCorelSvg(svgString);
+      engine = new CanvasEngine(canvasEl, baseConfig);
+
+      await engine.addAppliqueSvg(meta, 'Aplique D', 'aplique-1-formato-d');
+
+      const userObjects = engine.canvas.getObjects().filter((o) => !isBaseObject(o));
+      expect(userObjects).toHaveLength(1);
+      const group = userObjects[0];
+      expect(group.left).toBeLessThan(0);
+      expect(group.top).toBeLessThan(0);
+    });
+
+    it('T5b: applyMaterialToLayer sobre camada criada por addAppliqueSvg atualiza materialId', async () => {
+      const svgString = readFileSync(join(FIXTURES_DIR, 'apliques', 'aplique-3-pill.svg'), 'utf-8');
+      const meta = parseCorelSvg(svgString);
+      engine = new CanvasEngine(canvasEl, baseConfig);
+
+      const id = await engine.addAppliqueSvg(meta, 'Aplique Pill', 'aplique-3-pill');
+      expect(engine.getLayerMeta(id)!.materialId).toBeNull();
+
+      await engine.applyMaterialToLayer(id, 'abs-escovado-prata', 'http://asset.localhost/mat.png');
+
+      expect(engine.getLayerMeta(id)!.materialId).toBe('abs-escovado-prata');
+    });
+  });
 });
