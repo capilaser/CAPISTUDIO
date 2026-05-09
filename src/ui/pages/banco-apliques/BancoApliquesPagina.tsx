@@ -109,7 +109,7 @@ export default function BancoApliquesPagina() {
         onClose={() => setUploadOpen(false)}
         onSaved={async () => {
           setUploadOpen(false);
-          await load();
+          await reload();
         }}
       />
 
