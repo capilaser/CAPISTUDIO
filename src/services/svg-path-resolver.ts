@@ -16,18 +16,9 @@ export async function resolveDisplayUrl(filePath: string): Promise<string> {
   if (filePath.startsWith(RESOURCE_PREFIX)) {
     const resourcePath = filePath.slice(RESOURCE_PREFIX.length);
     const absolutePath = await resolveResource('resources/' + resourcePath);
-    const assetUrl = convertFileSrc(absolutePath);
-    console.log('[svg-path-resolver] resolveDisplayUrl', {
-      filePath,
-      resourcePath,
-      absolutePath,
-      assetUrl,
-    });
-    return assetUrl;
+    return convertFileSrc(absolutePath);
   }
-  const assetUrl = convertFileSrc(filePath);
-  console.log('[svg-path-resolver] resolveDisplayUrl (absolute)', { filePath, assetUrl });
-  return assetUrl;
+  return convertFileSrc(filePath);
 }
 
 /**
