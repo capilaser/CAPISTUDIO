@@ -19,7 +19,7 @@ import { useCanvasStore } from '@/stores/canvas-store';
 import { Button } from '@/ui/components/button';
 import { ModeToggle } from './canvas-test/ModeToggle';
 import { OperatorInputs } from './canvas-test/OperatorInputs';
-import { RightPanel } from './canvas-test/RightPanel';
+import { UnifiedRightPanel } from './canvas-test/UnifiedRightPanel';
 import { SlotCreatorButtons } from './canvas-test/SlotCreatorButtons';
 
 const TEST_RECT_MM = { width: 20, height: 10 };
@@ -263,7 +263,7 @@ export default function CanvasTest() {
         </span>
       </div>
 
-      {/* 3-column layout: canvas | RightPanel (material) | OperatorInputs */}
+      {/* 3-column layout: canvas | UnifiedRightPanel | OperatorInputs */}
       <div className="flex flex-1 overflow-hidden">
         <div className="flex flex-1 items-center justify-center p-6">
           {error ? (
@@ -277,8 +277,8 @@ export default function CanvasTest() {
             />
           )}
         </div>
-        {/* RightPanel: visible whenever a visual layer is selected (both modes) */}
-        <RightPanel engineRef={engineRef} />
+        {/* UnifiedRightPanel: always visible, 3 tabs (Apliques | Materiais | Camadas) */}
+        <UnifiedRightPanel engineRef={engineRef} />
         {/* OperatorInputs: visible only in operator mode */}
         {mode === 'operator' && <OperatorInputs engineRef={engineRef} />}
       </div>

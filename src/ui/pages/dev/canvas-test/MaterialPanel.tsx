@@ -1,12 +1,15 @@
 /**
- * RightPanel.tsx — Onda 5, Checkpoint B
+ * MaterialPanel.tsx — Onda 6.5 Fase B
  *
- * Layer material picker: appears only when a visual layer is selected on canvas.
- * Shows cascading family → material dropdowns with 16px swatch per material.
+ * Material picker for the active canvas layer.
+ * Rendered inside UnifiedRightPanel (aba Materiais).
  *
- * DEV-only component (rendered from CanvasTest).
+ * Active when selectedLayerKind === 'visual' OR 'principal'.
+ * Shows empty state (Lucide icon) when nothing is selected or
+ * when an operation layer is active.
  */
 import { type ChangeEvent, type RefObject, useEffect, useState } from 'react';
+import { Layers } from 'lucide-react';
 
 import type { CanvasEngine } from '@/core/canvas/canvas-engine';
 import type { MaterialFamily } from '@/data/repositories/materialFamilyRepository';
@@ -16,11 +19,11 @@ import { listByFamily, resolveAssetUrl } from '@/data/repositories/materialRepos
 import { isOperationLayer } from '@/core/canvas/layer-meta';
 import { useCanvasStore } from '@/stores/canvas-store';
 
-interface RightPanelProps {
+interface MaterialPanelProps {
   engineRef: RefObject<CanvasEngine | null>;
 }
 
-export function RightPanel({ engineRef }: RightPanelProps) {
+export function MaterialPanel({ engineRef }: MaterialPanelProps) {
   const selectedLayerId = useCanvasStore((s) => s.selectedLayerId);
   const selectedLayerKind = useCanvasStore((s) => s.selectedLayerKind);
 
@@ -29,16 +32,10 @@ export function RightPanel({ engineRef }: RightPanelProps) {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [selectedMaterialId, setSelectedMaterialId] = useState<string>('');
   const [applying, setApplying] = useState(false);
-  // Initialize to true — we start loading immediately on mount.
   const [loadingFamilies, setLoadingFamilies] = useState(true);
-  // fetchedFamilyId tracks the last successfully-fetched family.
-  // loadingMaterials is derived: true whenever selectedFamilyId differs.
-  // This avoids calling setState synchronously inside an effect.
   const [fetchedFamilyId, setFetchedFamilyId] = useState<string>('');
   const loadingMaterials = !!selectedFamilyId && fetchedFamilyId !== selectedFamilyId;
 
-  // Load families once on mount.
-  // loadingFamilies is initialized to true so no sync setState is needed here.
   useEffect(() => {
     let cancelled = false;
     listFamilies()
@@ -48,7 +45,7 @@ export function RightPanel({ engineRef }: RightPanelProps) {
         if (fams.length > 0) setSelectedFamilyId(fams[0].id);
       })
       .catch((err) => {
-        if (import.meta.env.DEV) console.error('[RightPanel] listFamilies error:', err);
+        if (import.meta.env.DEV) console.error('[MaterialPanel] listFamilies error:', err);
       })
       .finally(() => {
         if (!cancelled) setLoadingFamilies(false);
@@ -58,9 +55,6 @@ export function RightPanel({ engineRef }: RightPanelProps) {
     };
   }, []);
 
-  // Load materials whenever family changes.
-  // fetchedFamilyId drives the effect; updating it stops the fetch loop.
-  // No sync setState in the effect body — loadingMaterials is derived above.
   useEffect(() => {
     if (!selectedFamilyId || selectedFamilyId === fetchedFamilyId) return;
     let cancelled = false;
@@ -72,8 +66,7 @@ export function RightPanel({ engineRef }: RightPanelProps) {
       })
       .catch((err) => {
         if (!cancelled) {
-          if (import.meta.env.DEV) console.error('[RightPanel] listByFamily error:', err);
-          // Mark fetched (even on error) so loading state clears.
+          if (import.meta.env.DEV) console.error('[MaterialPanel] listByFamily error:', err);
           setFetchedFamilyId(selectedFamilyId);
         }
       });
@@ -82,19 +75,25 @@ export function RightPanel({ engineRef }: RightPanelProps) {
     };
   }, [selectedFamilyId, fetchedFamilyId]);
 
-  // Sync selectedMaterialId from the layer's current materialId when layer changes.
   useEffect(() => {
     if (!selectedLayerId || !engineRef.current) {
       setSelectedMaterialId('');
       return;
     }
     const meta = engineRef.current.getLayerMeta(selectedLayerId);
-    // OperationLayerMeta has no materialId — guard before accessing.
     setSelectedMaterialId(meta && !isOperationLayer(meta) ? (meta.materialId ?? '') : '');
   }, [selectedLayerId, engineRef]);
 
-  // Invisible when no visual layer is selected.
-  if (selectedLayerKind !== 'visual' || !selectedLayerId) return null;
+  // Empty state: nothing selected, or operation layer active.
+  if (selectedLayerKind !== 'visual' && selectedLayerKind !== 'principal') {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-ink-400 text-sm">
+        <Layers className="h-8 w-8 opacity-50" />
+        <p>Selecione uma camada</p>
+        <p className="text-xs">para editar material</p>
+      </div>
+    );
+  }
 
   async function handleApply(materialId: string) {
     const engine = engineRef.current;
@@ -109,7 +108,7 @@ export function RightPanel({ engineRef }: RightPanelProps) {
       await engine.applyMaterialToLayer(selectedLayerId, mat.id, url);
       setSelectedMaterialId(mat.id);
     } catch (err) {
-      if (import.meta.env.DEV) console.error('[RightPanel] applyMaterialToLayer error:', err);
+      if (import.meta.env.DEV) console.error('[MaterialPanel] applyMaterialToLayer error:', err);
     } finally {
       setApplying(false);
     }
@@ -128,7 +127,7 @@ export function RightPanel({ engineRef }: RightPanelProps) {
   }
 
   return (
-    <aside className="flex w-[280px] shrink-0 flex-col gap-4 overflow-y-auto border-l border-ink-700 bg-ink-900 p-4">
+    <div className="flex flex-col gap-4 p-4">
       <p className="font-mono text-[11px] font-medium uppercase tracking-wider text-ink-400">
         Material da Camada
       </p>
@@ -166,7 +165,7 @@ export function RightPanel({ engineRef }: RightPanelProps) {
       <div className="flex flex-col gap-1.5">
         <label className="font-mono text-[11px] font-medium text-ink-300">Família</label>
         {loadingFamilies ? (
-          <p className="font-mono text-[10px] text-ink-600 animate-pulse">Carregando…</p>
+          <p className="animate-pulse font-mono text-[10px] text-ink-600">Carregando…</p>
         ) : (
           <select
             value={selectedFamilyId}
@@ -182,11 +181,11 @@ export function RightPanel({ engineRef }: RightPanelProps) {
         )}
       </div>
 
-      {/* Material list — button-per-material with 16px swatch */}
+      {/* Material list */}
       <div className="flex flex-col gap-1.5">
         <label className="font-mono text-[11px] font-medium text-ink-300">
           Cor / Variante
-          {loadingMaterials && <span className="ml-1 text-ink-600 animate-pulse">…</span>}
+          {loadingMaterials && <span className="ml-1 animate-pulse text-ink-600">…</span>}
         </label>
 
         {!loadingMaterials && materials.length === 0 && (
@@ -211,14 +210,13 @@ export function RightPanel({ engineRef }: RightPanelProps) {
                   .filter(Boolean)
                   .join(' ')}
               >
-                {/* 16px swatch */}
                 <span
                   className="inline-block shrink-0 rounded-full border border-ink-600"
                   style={{ width: 16, height: 16, backgroundColor: m.swatch }}
                   title={m.swatch}
                 />
                 <span className="truncate">{m.label}</span>
-                {isSelected && <span className="ml-auto text-laser text-[10px]">✓</span>}
+                {isSelected && <span className="ml-auto text-[10px] text-laser">✓</span>}
               </button>
             );
           })}
@@ -229,6 +227,6 @@ export function RightPanel({ engineRef }: RightPanelProps) {
       <div className="mt-auto border-t border-ink-800 pt-3 font-mono text-[10px] text-ink-600">
         layer: {selectedLayerId?.slice(0, 8)}…{selectedMaterialId && ` · ${selectedMaterialId}`}
       </div>
-    </aside>
+    </div>
   );
 }
