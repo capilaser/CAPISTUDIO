@@ -7,7 +7,9 @@ import { isOperationLayer } from './layer-meta';
 import { extractClipShapes, parseAndStripRootDimensions, type ParsedViewBox } from './svg-utils';
 import { SlotManager } from './slot-manager';
 import type { SlotMeta, SlotType } from './types';
-import { mmToPx } from './units';
+import { mmToPx, pxToMm } from './units';
+import { computeSnapCandidates, applySnapResult } from './alignment/snap-engine';
+import type { RectMm, SnapCandidate } from './alignment/snap-targets';
 
 export interface EngineConfig {
   productWidthMm: number;
@@ -109,6 +111,16 @@ export class CanvasEngine {
    */
   private readonly materialImageCache = new Map<string, HTMLImageElement>();
 
+  /**
+   * Runtime snap options supplied by useSnapToCanvas hook.
+   * Null = snap desabilitado (hook não conectado ainda).
+   * O campo `isAltDown` é lido a cada evento de moving — não precisa de re-set.
+   */
+  private snapOptions: {
+    /** Retorna true quando Alt está pressionado (lido via ref do hook). */
+    isAltDown: () => boolean;
+  } | null = null;
+
   /** Optional callback — set from outside to receive slot selection changes. */
   onSlotSelectionChange?: (id: string | null) => void;
 
@@ -128,6 +140,11 @@ export class CanvasEngine {
       preserveObjectStacking: true,
       selection: true,
     });
+
+    // Snap handlers must be registered BEFORE SlotManager so that when
+    // object:moving fires, snap corrects left/top first, then SlotManager
+    // reads the already-snapped coordinates to sync the overlay.
+    this.attachSnapHandlers();
 
     this.slotManager = new SlotManager(
       this.canvas,
@@ -215,6 +232,173 @@ export class CanvasEngine {
     });
     this.canvas.on('selection:cleared', () => {
       this.onLayerSelectionChange?.(null, null);
+    });
+  }
+
+  // ─── Snap ─────────────────────────────────────────────────────────────────
+
+  /**
+   * Connects the snap system to the canvas. Called by useSnapToCanvas hook.
+   *
+   * `isAltDown` is a stable getter (reads a ref) — no re-registration needed
+   * when Alt state changes.
+   *
+   * Scope: only object:moving and selection:moving are intercepted.
+   * object:scaling / object:rotating are intentionally excluded (Fase B scope).
+   */
+  setSnapOptions(opts: { isAltDown: () => boolean } | null): void {
+    this.snapOptions = opts;
+  }
+
+  /**
+   * Returns the bounding box (in mm) of the parent of the given object.
+   *
+   * Parent is resolved via LayerMeta.parentLayerId:
+   *   - null / missing  → parent is the product canvas (returns null)
+   *   - valid id        → bounding box of that Fabric object in mm
+   *
+   * Called by attachSnapHandlers before each computeSnapCandidates call.
+   */
+  getParentBoundsForObject(objectId: string): RectMm | null {
+    const meta = this.layerMeta.get(objectId);
+    if (!meta || !meta.parentLayerId) return null;
+
+    const parentObj = findById(this.canvas, meta.parentLayerId);
+    if (!parentObj) return null;
+
+    const w = (parentObj.width ?? 0) * (parentObj.scaleX ?? 1);
+    const h = (parentObj.height ?? 0) * (parentObj.scaleY ?? 1);
+    return {
+      left: pxToMm(parentObj.left ?? 0),
+      top: pxToMm(parentObj.top ?? 0),
+      width: pxToMm(w),
+      height: pxToMm(h),
+    };
+  }
+
+  /**
+   * Registers object:moving and selection:moving handlers that apply snap.
+   * Called in the constructor BEFORE SlotManager is instantiated so that
+   * snap corrects left/top before SlotManager reads it to sync the overlay.
+   *
+   * Guards:
+   *   - snapOptions null  → hook not connected yet, pass-through
+   *   - __capiBase        → product base SVG, never snaps
+   *   - isPanModeActive   → pan mode, drag is pan not object move
+   *   - altKeyDown        → user suppressed snap
+   */
+  private attachSnapHandlers(): void {
+    const canvasDims = () => ({
+      width: this.config.productWidthMm,
+      height: this.config.productHeightMm,
+    });
+
+    /**
+     * Builds the SnapCandidate list: all user objects except the moving one,
+     * base SVG, invisible objects, and slot overlays (excludeFromExport + no id).
+     *
+     * Slot overlays are decorative Rects with no capi id — they should not act
+     * as snap targets. Slot bodies DO have a capi id and are valid targets.
+     */
+    const buildCandidates = (excludeId: string | undefined): SnapCandidate[] => {
+      const result: SnapCandidate[] = [];
+      for (const obj of this.canvas.getObjects()) {
+        if (isBaseObject(obj)) continue;
+        if (!obj.visible) continue;
+        const rec = obj as unknown as Record<string, unknown>;
+        const id = typeof rec.id === 'string' ? rec.id : undefined;
+        // Slot overlays: excludeFromExport=true AND no capi id → skip
+        if (!id) continue;
+        if (id === excludeId) continue;
+
+        const w = (obj.width ?? 0) * (obj.scaleX ?? 1);
+        const h = (obj.height ?? 0) * (obj.scaleY ?? 1);
+        result.push({
+          id,
+          rect: {
+            left: pxToMm(obj.left ?? 0),
+            top: pxToMm(obj.top ?? 0),
+            width: pxToMm(w),
+            height: pxToMm(h),
+          },
+        });
+      }
+      return result;
+    };
+
+    // ── object:moving — handles both single objects and ActiveSelection ───────
+    //
+    // In Fabric 6, `selection:moving` does not exist. When the user drags a
+    // multi-selection, Fabric emits `object:moving` with e.target being an
+    // ActiveSelection. We branch on instanceof to compute the correct bbox.
+    //
+    // Multi-selection (ActiveSelection):
+    //   set({left, top}) on the ActiveSelection moves all children together.
+    //   If children drift or the group shifts unexpectedly, STOP and report to
+    //   Gabriell — do not attempt to fix independently (Condição 2).
+    this.canvas.on('object:moving', (e) => {
+      if (!this.snapOptions) return;
+      if (this.isPanModeActive) return;
+
+      const obj = e.target;
+      // Condição 3: base SVG must never snap even if somehow movable.
+      if (isBaseObject(obj)) return;
+
+      let movingRect: RectMm;
+      let objectId: string | undefined;
+      let parentBounds: RectMm | null;
+      let candidates: SnapCandidate[];
+
+      if (obj instanceof fabric.ActiveSelection) {
+        // Multi-selection: use group bounding box, no single parent.
+        const w = (obj.width ?? 0) * (obj.scaleX ?? 1);
+        const h = (obj.height ?? 0) * (obj.scaleY ?? 1);
+        movingRect = {
+          left: pxToMm(obj.left ?? 0),
+          top: pxToMm(obj.top ?? 0),
+          width: pxToMm(w),
+          height: pxToMm(h),
+        };
+        parentBounds = null;
+        // Exclude all objects that are part of the active selection.
+        const selectedIds = new Set(
+          obj
+            .getObjects()
+            .map((o) => (o as unknown as Record<string, unknown>).id as string | undefined)
+            .filter((id): id is string => typeof id === 'string')
+        );
+        candidates = buildCandidates(undefined).filter((c) => !selectedIds.has(c.id));
+      } else {
+        // Single object.
+        const rec = obj as unknown as Record<string, unknown>;
+        objectId = typeof rec.id === 'string' ? rec.id : undefined;
+
+        const w = (obj.width ?? 0) * (obj.scaleX ?? 1);
+        const h = (obj.height ?? 0) * (obj.scaleY ?? 1);
+        movingRect = {
+          left: pxToMm(obj.left ?? 0),
+          top: pxToMm(obj.top ?? 0),
+          width: pxToMm(w),
+          height: pxToMm(h),
+        };
+        parentBounds = objectId ? this.getParentBoundsForObject(objectId) : null;
+        candidates = buildCandidates(objectId);
+      }
+
+      const result = computeSnapCandidates(movingRect, candidates, canvasDims(), {
+        toleranceMm: 1,
+        gridMm: 1,
+        altKeyDown: this.snapOptions.isAltDown(),
+        parentBounds,
+      });
+
+      const applied = applySnapResult(movingRect, result);
+      const newLeftPx = mmToPx(applied.left);
+      const newTopPx = mmToPx(applied.top);
+
+      // ADR 011 / ADR 005: always use obj.set() — never direct assignment.
+      obj.set({ left: newLeftPx, top: newTopPx });
+      obj.setCoords();
     });
   }
 

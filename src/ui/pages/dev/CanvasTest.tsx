@@ -16,6 +16,7 @@ import { resolveAssetUrl } from '@/data/repositories/materialRepository';
 import { getPatternById, upsertPatternCanvas } from '@/data/repositories/patternRepository';
 import { getProductById, type Product } from '@/data/repositories/productRepository';
 import { useCanvasStore } from '@/stores/canvas-store';
+import { useAltKey } from '@/hooks/useAltKey';
 import { Button } from '@/ui/components/button';
 import { LoadPatternDialog } from './canvas-test/LoadPatternDialog';
 import { ModeToggle } from './canvas-test/ModeToggle';
@@ -39,6 +40,8 @@ export default function CanvasTest() {
   const [loadOpen, setLoadOpen] = useState(false);
 
   const { mode, setSelectedSlotId, setSelectedLayerId, setSelectedLayerKind } = useCanvasStore();
+
+  const altKeyRef = useAltKey();
 
   async function handleSave() {
     const engine = engineRef.current;
@@ -165,6 +168,10 @@ export default function CanvasTest() {
           setSelectedLayerId(id);
           setSelectedLayerKind(meta?.kind ?? null);
         };
+        // Connect snap — must run after engine is fully initialised so that
+        // snapOptions is set before the first object:moving fires.
+        // altKeyRef is a stable ref — the closure always reads the current value.
+        engine.setSnapOptions({ isAltDown: () => altKeyRef.current });
         engineRef.current = engine;
         detachKeys = attachCanvasKeybindings({
           onZoomIn: () => engine.zoomBy(1.1),
@@ -185,12 +192,15 @@ export default function CanvasTest() {
     return () => {
       cancelled = true;
       detachKeys?.();
+      engineRef.current?.setSnapOptions(null);
       engineRef.current?.dispose();
       engineRef.current = null;
       productRef.current = null;
     };
     // Zustand setters are stable references — listing them satisfies exhaustive-deps
-    // without causing re-runs.
+    // without causing re-runs. altKeyRef is a stable ref object — its identity never
+    // changes, so it doesn't need to be in deps (same pattern as engineRef, canvasRef).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setSelectedSlotId, setSelectedLayerId, setSelectedLayerKind]);
 
   // Sync Zustand mode → canvas engine whenever mode changes.

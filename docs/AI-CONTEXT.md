@@ -144,7 +144,7 @@ Justificativa: [...]
 - Onda 6b ✅ → Opus 4.7 alto (parser + LayerMeta + bug Fabric)
 - Onda 6.5 ✅ → Sonnet 4.6 (UI Apliques completa)
 - Onda 8 ✅ → Sonnet 4.6 (padrões salvos + reabertura)
-- **Mini-9.5 → Sonnet 4.6** (cadastrar materiais — trabalho pequeno)
+- Mini-9.5 ✅ → Sonnet 4.6 (cadastrar materiais — fechada commit 94de574)
 - **Onda 7 → Opus 4.7 + alto** (alinhamento + painel hierárquico)
 - **Onda 8.5 → Sonnet 4.6** (gravações sobre apliques)
 - **Onda 9 → Opus 4.7 + alto** (exportação SVG por máquina/operação)
@@ -169,8 +169,10 @@ Justificativa: [...]
 | 6c      | ❌ **REMOVIDA** — funcionalidade absorvida pela Onda 7                    | ❌ Removida                     |
 | 6.5     | UI Apliques completa                                                      | ✅ Fechada                      |
 | **8**   | **Padrões salvos + reabertura (Placa Advogado)**                          | **✅ Fechada (commit 17a23ae)** |
-| **9.5** | **Mini-onda — Cadastrar 5 materiais novos (Acrílico Espelhado + Sólido)** | **⏭️ PRÓXIMA**                  |
-| 7       | Painel de Camadas hierárquico + alinhamento estilo Confluence             | ⏳                              |
+| **9.5** | **Mini-onda — Cadastrar 5 materiais novos (Acrílico Espelhado + Sólido)** | **✅ Fechada (commit 94de574)** |
+| **7a**  | **Snap (Fases A+B) — motor matemático + integração Fabric**               | **✅ Fechada**                  |
+| **7b**  | **Snap (Fases C-F) — guias visuais, toolbar, modo medição, grade**        | **⏭️ PRÓXIMA**                  |
+| 7       | Painel de Camadas hierárquico (ex-7b original, renomeado)                 | ⏳                              |
 | 8.5     | Gravações sobre apliques (balança + texto profissão)                      | ⏳                              |
 | 9       | Exportação SVG por máquina/operação + PNG mockup                          | ⏳                              |
 | 10      | Telas restantes (Grid Padrões, Histórico, Banco Ativos)                   | ⏳                              |
@@ -288,6 +290,7 @@ Justificativa: [...]
 - `010-camadas-hierarquicas.md` — Estrutura hierárquica de camadas + bancos de componentes
 - `011-fabric6-fill-empty-string.md` — Fabric 6 passa "none" literal pro canvas DOM, que renderiza preto. Workaround: `fill: ''` no obj.set.
 - `013-base-svg-seed-onda8.md` — base_svg vem de fixture via seed (INSERT OR IGNORE + UPDATE WHERE NULL). Limitação: editar fixture exige reseed manual.
+- `014-snap-system.md` — Sistema de snap completo (Onda 7a Fases A+B): motor puro, integração Fabric, race condition resolvida, decisões de tolerância/Alt/grade.
 
 ---
 
@@ -484,4 +487,4 @@ Eu leio o contexto, faço perguntas estratégicas se necessário, e começamos c
 
 ---
 
-_Última atualização: Onda 8 fechada (commit 17a23ae) + estratégia "produto completo" travada + decisões de pasta de assets-pendentes + balança SVG entregue + procedimento Corel documentado. Próxima: Mini-onda 9.5 (cadastrar 5 materiais novos)._
+_Última atualização: Onda 7a Fases A+B fechadas — snap motor puro (23 testes, 95% cobertura) + integração Fabric com race condition resolvida. ADR 014 criado. Próxima: Onda 7b (Fases C-F: guias visuais, toolbar de alinhamento, modo medição, grade visível)._

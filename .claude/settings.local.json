@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git mv *)",
+      "Bash(npm run *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\Gabriell\\\\Desktop\\\\Capi Studio 0.2\\\\capi-studio-v2\\\\src-tauri\\\\resources\\\\materials\" | Select-Object Name, @{N='KB';E={[math]::Round\\($_.Length/1KB,0\\)}} | Format-Table -AutoSize)",
+      "Bash(cargo clean *)",
+      "Bash(echo \"PID: $!\")",
+      "Read(//tmp/**)"
+    ]
+  }
+}
