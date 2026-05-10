@@ -30,6 +30,7 @@ import {
 import { CanvasEngine, isBaseObject } from '@/core/canvas/canvas-engine';
 import { applyAlignment, type AlignmentCommand } from '@/core/canvas/alignment/alignment-commands';
 import type { RectMm } from '@/core/canvas/alignment/snap-targets';
+import { getCapiId } from '@/core/canvas/capi-id';
 import { mmToPx, pxToMm } from '@/core/canvas/units';
 import { Button } from '@/ui/components/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ui/components/tooltip';
@@ -182,7 +183,9 @@ export function AlignmentToolbar({ engineRef }: Props): React.ReactElement | nul
     const rectBefore = fabricObjectToRectMm(obj);
 
     // Referência: pai imediato (slot dentro de aplique → aplique) ou canvas.
-    const objectId = (obj as unknown as Record<string, unknown>).id as string | undefined;
+    // Usa getCapiId — slots não têm obj.id direto, o id mora em capiSlot.id.
+    // Sem essa abstração, slots silently faziam fallback pra canvas (Fix #1, Causa #B).
+    const objectId = getCapiId(obj as unknown as Record<string, unknown>);
     const parentBounds = objectId ? engine.getParentBoundsForObject(objectId) : null;
     const referenceBounds: RectMm = parentBounds ?? {
       left: 0,
