@@ -13,11 +13,20 @@ export function useAltKey(): React.RefObject<boolean> {
     const onKey = (e: KeyboardEvent): void => {
       if (e.key === 'Alt') altKeyRef.current = e.type === 'keydown';
     };
+    // Reset ao perder foco — evita "Alt grudado" após Alt+Tab.
+    // No Windows, o sistema intercepta Alt+Tab para trocar de janela e o
+    // evento keyup nunca chega ao listener; sem esse reset, o snap fica
+    // desligado pra sempre até o usuário pressionar e soltar Alt de novo.
+    const onBlur = (): void => {
+      altKeyRef.current = false;
+    };
     window.addEventListener('keydown', onKey);
     window.addEventListener('keyup', onKey);
+    window.addEventListener('blur', onBlur);
     return () => {
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('keyup', onKey);
+      window.removeEventListener('blur', onBlur);
       altKeyRef.current = false;
     };
   }, []);

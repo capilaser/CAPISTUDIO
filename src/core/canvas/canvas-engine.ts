@@ -9,7 +9,8 @@ import { SlotManager } from './slot-manager';
 import type { SlotMeta, SlotType } from './types';
 import { mmToPx, pxToMm } from './units';
 import { computeSnapCandidates, applySnapResult } from './alignment/snap-engine';
-import type { RectMm, SnapCandidate } from './alignment/snap-targets';
+import type { RectMm, SnapCandidate, SnapResult, SnapTarget } from './alignment/snap-targets';
+import { guidesShouldChange } from './alignment/guides-diff';
 
 export interface EngineConfig {
   productWidthMm: number;
@@ -120,6 +121,30 @@ export class CanvasEngine {
     /** Retorna true quando Alt está pressionado (lido via ref do hook). */
     isAltDown: () => boolean;
   } | null = null;
+
+  // ─── Snap visual guides (Onda 7b, Fase C) ──────────────────────────────────
+  // Guias visuais cyan tracejadas exibidas durante drag quando snap está ativo.
+  // Estado e renderização vivem no engine porque dependem de `this.canvas`.
+  // ADR 014: motor matemático é função pura — guias visuais só consomem SnapResult.
+
+  /** Linhas-guia atualmente no canvas, uma por eixo (null quando não há snap nesse eixo). */
+  private currentGuides: { x: fabric.Line | null; y: fabric.Line | null } = {
+    x: null,
+    y: null,
+  };
+
+  /** Último SnapResult aplicado — usado pelo diff em `guidesShouldChange`. */
+  private lastSnapResult: SnapResult | null = null;
+
+  /**
+   * Animações de fade-out em curso, uma por eixo.
+   * Cancellers (referência da `ValueAnimation` para chamar `.abort()`).
+   * Limpos quando a animação completa OU quando um novo drag começa.
+   */
+  private fadeAnimations: {
+    x: { abort: () => void } | null;
+    y: { abort: () => void } | null;
+  } = { x: null, y: null };
 
   /** Optional callback — set from outside to receive slot selection changes. */
   onSlotSelectionChange?: (id: string | null) => void;
@@ -399,6 +424,196 @@ export class CanvasEngine {
       // ADR 011 / ADR 005: always use obj.set() — never direct assignment.
       obj.set({ left: newLeftPx, top: newTopPx });
       obj.setCoords();
+
+      // Fase C: novo drag tem prioridade total sobre fade em curso.
+      // Cancelamos qualquer fade pendente ANTES de renderizar a nova guia,
+      // senão o onComplete do fade pode remover a linha que acabamos de criar.
+      this.cancelFadeAnimations();
+      this.renderGuides(result);
+    });
+
+    // mouse:up — dispara fade-out das guias atualmente visíveis.
+    // Não checa isPanModeActive: em pan mode, currentGuides já está vazio
+    // (object:moving nem chega ao bloco de render), então fadeOutGuides é no-op.
+    this.canvas.on('mouse:up', () => {
+      this.fadeOutGuides();
+    });
+  }
+
+  // ─── Snap visual guides — render & fade (Fase C) ──────────────────────────
+
+  /** Cor das guias. Decisão travada (ADR 015 — Fase G). */
+  private static readonly GUIDE_STROKE = '#00d4ff';
+  private static readonly GUIDE_DASH: [number, number] = [8, 4];
+  private static readonly FADE_DURATION_MS = 200;
+
+  /**
+   * Aplica o resultado do snap às guias visuais.
+   *
+   * Para cada eixo, decide via `guidesShouldChange`:
+   *   create → desenha nova fabric.Line e adiciona ao canvas
+   *   update → move a Line existente (set({x1,x2,y1,y2})) — sem recriar
+   *   remove → remove instantaneamente (sem fade — fade é só no mouse:up)
+   *   noop   → não toca
+   *
+   * Atualiza `lastSnapResult` ao final.
+   */
+  private renderGuides(next: SnapResult): void {
+    const diff = guidesShouldChange(this.lastSnapResult, next);
+
+    this.applyGuideAction('x', diff.x, next.x);
+    this.applyGuideAction('y', diff.y, next.y);
+
+    this.lastSnapResult = next;
+
+    // Render explícito após criar/mover linhas — object:moving não dispara
+    // re-render automático para objetos adicionados depois do início do gesto.
+    this.canvas.requestRenderAll();
+  }
+
+  private applyGuideAction(
+    axis: 'x' | 'y',
+    action: 'create' | 'update' | 'remove' | 'noop',
+    target: SnapTarget | null
+  ): void {
+    if (action === 'noop') return;
+
+    if (action === 'remove') {
+      const existing = this.currentGuides[axis];
+      if (existing) {
+        this.canvas.remove(existing);
+        this.currentGuides[axis] = null;
+        if (import.meta.env.DEV) {
+          console.log('[Guides]', 'remove', 'axis=', axis);
+        }
+      }
+      return;
+    }
+
+    // create / update precisam de target.
+    if (!target) return;
+
+    if (action === 'update') {
+      const existing = this.currentGuides[axis];
+      if (existing) {
+        const coords = this.guideCoordsPx(target);
+        existing.set({ ...coords, opacity: 1 });
+        if (import.meta.env.DEV) {
+          console.log('[Guides]', 'update', 'axis=', axis, 'source=', target.source);
+        }
+        return;
+      }
+      // Defensivo: caso `update` chegue sem linha existente (estado dessincronizado),
+      // tratamos como create — mais robusto que crashar.
+    }
+
+    // action === 'create'
+    const line = this.createGuideLine(target);
+    this.currentGuides[axis] = line;
+    this.canvas.add(line);
+    if (import.meta.env.DEV) {
+      console.log('[Guides]', 'create', 'axis=', axis, 'source=', target.source);
+    }
+  }
+
+  /** Converte guideStart/guideEnd (mm) para coordenadas px do canvas Fabric. */
+  private guideCoordsPx(target: SnapTarget): {
+    x1: number;
+    y1: number;
+    x2: number;
+    y2: number;
+  } {
+    return {
+      x1: mmToPx(target.guideStart.x),
+      y1: mmToPx(target.guideStart.y),
+      x2: mmToPx(target.guideEnd.x),
+      y2: mmToPx(target.guideEnd.y),
+    };
+  }
+
+  /** Cria uma fabric.Line cyan tracejada para o target informado. */
+  private createGuideLine(target: SnapTarget): fabric.Line {
+    const { x1, y1, x2, y2 } = this.guideCoordsPx(target);
+    const line = new fabric.Line([x1, y1, x2, y2], {
+      stroke: CanvasEngine.GUIDE_STROKE,
+      strokeWidth: 1,
+      strokeDashArray: [...CanvasEngine.GUIDE_DASH],
+      // strokeUniform: 1px visual constante mesmo com zoom alto/baixo.
+      strokeUniform: true,
+      // Não interativa, não exportada, não selecionável.
+      selectable: false,
+      evented: false,
+      hoverCursor: 'default',
+      excludeFromExport: true,
+      // Garante que sai do toJSON() normal — não persiste em canvasJson.
+      // (excludeFromExport já cobre toObject; duplicamos por clareza.)
+      objectCaching: false,
+      opacity: 1,
+    });
+    return line;
+  }
+
+  /**
+   * Fade-out 200ms das guias atualmente visíveis (chamado em mouse:up).
+   * Anima opacity 1→0 e remove do canvas no onComplete.
+   *
+   * Se um novo drag começar antes do término do fade, `cancelFadeAnimations`
+   * (chamado no início de `object:moving`) aborta a animação e limpa estado
+   * antes que o `onComplete` rode — evita "linha-fantasma" e race com
+   * renderGuides.
+   */
+  private fadeOutGuides(): void {
+    (['x', 'y'] as const).forEach((axis) => {
+      const line = this.currentGuides[axis];
+      if (!line) return;
+
+      if (import.meta.env.DEV) {
+        console.log('[Guides]', 'fade-start', 'axis=', axis);
+      }
+
+      const animation = fabric.util.animate({
+        startValue: 1,
+        endValue: 0,
+        duration: CanvasEngine.FADE_DURATION_MS,
+        onChange: (v: number) => {
+          line.set({ opacity: v });
+          // Doc Fabric: dentro de animate.onChange usar renderAll, não requestRenderAll.
+          this.canvas.renderAll();
+        },
+        onComplete: () => {
+          // Pode ter sido cancelado e currentGuides já zerado pelo cancelFadeAnimations.
+          if (this.currentGuides[axis] === line) {
+            this.canvas.remove(line);
+            this.currentGuides[axis] = null;
+          }
+          this.fadeAnimations[axis] = null;
+          if (import.meta.env.DEV) {
+            console.log('[Guides]', 'fade-end', 'axis=', axis);
+          }
+          this.canvas.requestRenderAll();
+        },
+      });
+      this.fadeAnimations[axis] = animation;
+    });
+
+    // Após disparar o fade, lastSnapResult deixa de refletir guia visível —
+    // o próximo object:moving deve tratar como "sem guia anterior".
+    this.lastSnapResult = null;
+  }
+
+  /**
+   * Cancela qualquer fade-out em curso (chamado no início de cada object:moving).
+   * Importante: a guia animada continua no canvas com a opacity em que estava —
+   * `renderGuides` em seguida vai sobrescrever opacity=1 (no caso update) ou
+   * remover/recriar (caso remove/create).
+   */
+  private cancelFadeAnimations(): void {
+    (['x', 'y'] as const).forEach((axis) => {
+      const anim = this.fadeAnimations[axis];
+      if (anim) {
+        anim.abort();
+        this.fadeAnimations[axis] = null;
+      }
     });
   }
 
@@ -797,6 +1012,14 @@ export class CanvasEngine {
    * Also clears the SlotManager's internal map and all LayerMeta entries.
    */
   clearUserObjects(): void {
+    // Fase C: cancela fade em curso e zera referências às guias visuais —
+    // elas serão removidas junto com os outros user objects, mas o estado
+    // interno (`currentGuides`, `lastSnapResult`) precisa ser resetado para
+    // não apontar para fabric.Lines fora do canvas.
+    this.cancelFadeAnimations();
+    this.currentGuides = { x: null, y: null };
+    this.lastSnapResult = null;
+
     const toRemove = this.canvas.getObjects().filter((o) => !isBaseObject(o));
     toRemove.forEach((o) => this.canvas.remove(o));
     this.canvas.discardActiveObject();
@@ -943,8 +1166,11 @@ export class CanvasEngine {
    */
   serialize(productId: string): SerializedCanvas {
     // Ensure user objects have ids.
+    // Fase C: pula `excludeFromExport: true` (snap guides, slot overlays sem id)
+    // — eles não vão pro toJSON e não devem receber id parasita aqui.
     this.canvas.forEachObject((o) => {
       if (isBaseObject(o)) return;
+      if (o.excludeFromExport) return;
       const rec = o as unknown as Record<string, unknown>;
       if (typeof rec.id !== 'string' || !rec.id) {
         rec.id = generateObjectId();
@@ -1071,6 +1297,10 @@ export class CanvasEngine {
   }
 
   dispose(): void {
+    // Fase C: cancelar fade-outs em curso antes de descartar o canvas.
+    // Sem isso, animation frames pendentes podem disparar callbacks em um canvas
+    // já disposed (acessando this.canvas.remove / renderAll com state inválido).
+    this.cancelFadeAnimations();
     void this.canvas.dispose();
   }
 
