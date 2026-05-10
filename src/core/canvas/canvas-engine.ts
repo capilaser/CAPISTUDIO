@@ -1033,10 +1033,17 @@ export class CanvasEngine {
   /**
    * Creates a new slot at the centre of the product area and returns its metadata.
    * Automatically registers a LayerMeta entry for the slot (kind='visual').
+   *
+   * @param parentLayerId  Optional. capi id of an existing principal layer (aplique).
+   *                       When provided, the slot's LayerMeta will reference it as
+   *                       parent — this is what lets `getParentBoundsForObject`
+   *                       resolve a slot inside an aplique to its parent's bounds
+   *                       (ADR 014 §6, used by snap and Onda 7b alignment toolbar).
+   *                       null/undefined → slot lives directly on the product canvas.
    */
-  createSlot(type: SlotType): SlotMeta {
+  createSlot(type: SlotType, parentLayerId?: string | null): SlotMeta {
     const meta = this.slotManager.createSlot(type);
-    this.registerLayerMeta(meta.id);
+    this.registerLayerMeta(meta.id, parentLayerId ?? null);
     return meta;
   }
 
@@ -1309,14 +1316,18 @@ export class CanvasEngine {
   /**
    * Registers a new LayerMeta entry with default values for a visual layer.
    * Called after every user-object creation (addRectangle, createSlot).
+   *
+   * @param parentLayerId  capi id of the parent layer (e.g. aplique) when the
+   *                       new layer lives inside another. null = root-level
+   *                       (parent is the product canvas).
    */
-  private registerLayerMeta(id: string): void {
+  private registerLayerMeta(id: string, parentLayerId: string | null = null): void {
     if (this.layerMeta.has(id)) return; // idempotent
     // Emit VisualLayerMeta (ADR 010 §1). Principal layers are created explicitly
     // by addAppliqueSvg (Onda 6.5 Fase A+). Operation layers are deferred to Onda 7+.
     const meta: VisualLayerMeta = {
       id,
-      parentLayerId: null,
+      parentLayerId,
       name: `Camada ${this.layerMeta.size + 1}`,
       zIndex: this.canvas.getObjects().length - 1,
       visible: true,

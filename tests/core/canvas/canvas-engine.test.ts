@@ -122,6 +122,31 @@ describe('CanvasEngine', () => {
     expect(engine.getLayerMeta(id)).toBeNull();
   });
 
+  // ── Fix #2 (Onda 7b) — slot nasce com parentLayerId correto ───────────────
+  // Sem o param, parentLayerId é null (slot solto na placa). Com o param,
+  // referencia o aplique-pai imediato — habilita ADR 014 §6 (snap + alignment).
+
+  it('createSlot sem parentLayerId → LayerMeta tem parentLayerId === null', () => {
+    engine = new CanvasEngine(canvasEl, baseConfig);
+    const meta = engine.createSlot('nome');
+    const layerMeta = engine.getLayerMeta(meta.id);
+
+    expect(layerMeta).not.toBeNull();
+    expect(layerMeta!.parentLayerId).toBeNull();
+    expect(layerMeta!.kind).toBe('visual');
+  });
+
+  it('createSlot com parentLayerId → LayerMeta referencia o aplique como pai', () => {
+    engine = new CanvasEngine(canvasEl, baseConfig);
+    const FAKE_APLIQUE_ID = 'aplique-uuid-fake';
+
+    const meta = engine.createSlot('nome', FAKE_APLIQUE_ID);
+    const layerMeta = engine.getLayerMeta(meta.id);
+
+    expect(layerMeta).not.toBeNull();
+    expect(layerMeta!.parentLayerId).toBe(FAKE_APLIQUE_ID);
+  });
+
   it('zoomBy multiplies and clamps zoom', () => {
     engine = new CanvasEngine(canvasEl, baseConfig);
     expect(engine.canvas.getZoom()).toBe(1);
