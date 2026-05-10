@@ -120,6 +120,10 @@ export class SlotManager {
       entry.body.setCoords();
       entry.overlay.set(geo);
       entry.overlay.setCoords();
+      // Fix DEBT #4 (Onda 7.5): caminho programático/painel também precisa
+      // sincronizar content. 'commit' porque é mudança final de dimensão —
+      // texto refaz fitText com o novo maxWidth/maxHeight.
+      this.syncContentToBody(entry, 'commit');
     }
 
     setCapiSlot(entry.body, updated);
@@ -378,6 +382,92 @@ export class SlotManager {
     this.slots.clear();
   }
 
+  // ─── Content sync (Onda 7.5 — Fix DEBT #4) ────────────────────────────────
+
+  /**
+   * Sincroniza entry.content com a posição/tamanho atual do entry.body.
+   *
+   * Causa raiz do bug (Onda 4): os listeners de transformação foram escritos
+   * antes do conceito de content existir (`addText`/`addLogo` chegaram em
+   * checkpoints posteriores). Quando content chegou, ele era posicionado
+   * apenas na criação. Drag/scale/modified jamais o atualizavam.
+   *
+   * Modos:
+   *   - 'transform' (durante object:moving / object:scaling, 60fps):
+   *       - Texto: recentraliza no centro do body. NÃO refaz fitText (custoso).
+   *       - Logo:  reescala proporcional + recentraliza.
+   *   - 'commit' (em object:modified ou updateSlot, 1× por gesto):
+   *       - Texto: refaz fitText completo com novo maxWidth/maxHeight.
+   *       - Logo:  idêntico ao 'transform' (não há cálculo a refazer).
+   *
+   * Decisão tomada na calibração: durante drag/resize o texto fica do mesmo
+   * tamanho seguindo o body; ao soltar, encolhe/cresce pra caber. Sem isso,
+   * usuário descobre só no export que o texto estourou.
+   */
+  private syncContentToBody(entry: SlotEntry, phase: 'transform' | 'commit'): void {
+    if (!entry.content) return;
+
+    const body = entry.body;
+    const bodyLeftPx = body.left ?? 0;
+    const bodyTopPx = body.top ?? 0;
+    const bodyWidthPx = (body.width ?? 0) * (body.scaleX ?? 1);
+    const bodyHeightPx = (body.height ?? 0) * (body.scaleY ?? 1);
+
+    if (entry.content instanceof fabric.Text) {
+      // Texto: posicionado com originX/Y='center' no centro do body.
+      entry.content.set({
+        left: bodyLeftPx + bodyWidthPx / 2,
+        top: bodyTopPx + bodyHeightPx / 2,
+      });
+
+      if (phase === 'commit') {
+        // Refaz fitText com as novas dimensões do slot — recalcula fontSize.
+        // Usa o texto, fontFamily e medidas atuais do próprio fabric.Text.
+        // pxToMm pra alimentar fitText (que pensa em mm), depois pt→px no set.
+        const textStr = entry.content.text ?? '';
+        const fontFamily = entry.content.fontFamily ?? 'Montserrat';
+        if (textStr.length > 0) {
+          const result = fitText({
+            text: textStr,
+            maxWidth: pxToMm(bodyWidthPx),
+            maxHeight: pxToMm(bodyHeightPx),
+            fontFamily,
+            measureFn: fabricMeasure,
+          });
+          entry.content.set({ fontSize: result.fontSize * PT_TO_PX });
+        }
+      }
+      entry.content.setCoords();
+      return;
+    }
+
+    if (entry.content instanceof fabric.Group) {
+      // Logo: reescalar proporcional, manter centralizado no body.
+      // group.width / group.height são tamanho NATURAL (Fabric não muta com scale),
+      // então recalcular scale do zero a cada chamada não acumula — idempotente.
+      const group = entry.content;
+      const natW = group.width || bodyWidthPx;
+      const natH = group.height || bodyHeightPx;
+      const scale = Math.min(bodyWidthPx / natW, bodyHeightPx / natH);
+      const scaledW = natW * scale;
+      const scaledH = natH * scale;
+      group.set({
+        left: bodyLeftPx + (bodyWidthPx - scaledW) / 2,
+        top: bodyTopPx + (bodyHeightPx - scaledH) / 2,
+        scaleX: scale,
+        scaleY: scale,
+      });
+      group.setCoords();
+      return;
+    }
+
+    // Outro tipo de content (FabricImage, etc) — tratamento futuro se aparecer.
+    // Por enquanto, posicionamos no canto superior-esquerdo do body sem reescalar,
+    // pra ao menos seguir o drag (mínima cirurgia, comportamento previsível).
+    entry.content.set({ left: bodyLeftPx, top: bodyTopPx });
+    entry.content.setCoords();
+  }
+
   // ─── Canvas event listeners ───────────────────────────────────────────────
 
   private attachCanvasListeners(): void {
@@ -387,6 +477,8 @@ export class SlotManager {
       if (!entry) return;
       entry.overlay.set({ left: e.target.left ?? 0, top: e.target.top ?? 0 });
       entry.overlay.setCoords();
+      // Fix DEBT #4 (Onda 7.5): content também precisa seguir o drag.
+      this.syncContentToBody(entry, 'transform');
     });
 
     // Size sync during scale (object:rotating is ignored — lockRotation=true on body).
@@ -400,6 +492,9 @@ export class SlotManager {
         scaleY: e.target.scaleY ?? 1,
       });
       entry.overlay.setCoords();
+      // Fix DEBT #4 (Onda 7.5): content recentraliza/reescala durante resize.
+      // Texto NÃO refaz fitText aqui (custoso a 60fps); refit acontece em commit.
+      this.syncContentToBody(entry, 'transform');
     });
 
     // Persist final position + size into meta after any transform.
@@ -421,6 +516,11 @@ export class SlotManager {
         scaleY: body.scaleY ?? 1,
       });
       entry.overlay.setCoords();
+      // Fix DEBT #4 (Onda 7.5): commit final — texto refaz fitText com novas
+      // dimensões. Resolve bug latente também: callers que disparam
+      // `canvas.fire('object:modified', { target: child })` programaticamente
+      // (AlignmentToolbar da Fase D fazia isso e o content ficava parado).
+      this.syncContentToBody(entry, 'commit');
     });
 
     // Selection visual feedback (strokeWidth 2 on selected slot overlay).
@@ -499,6 +599,13 @@ export class SlotManager {
       evented: false,
       excludeFromExport: true,
       hoverCursor: 'default',
+      // Fix DEBT #3 (Onda 7.5): cache padrão do Fabric 6 deixa a borda
+      // tracejada defasada durante object:scaling rápido — a borda renderizada
+      // é do frame anterior. objectCaching:false força redraw a cada frame.
+      // Custo: 1 retângulo, negligível. Padrão idêntico ao das measurement/
+      // proximity lines da Onda 7b (ADR 015 §3) e referência ADR 006 sobre
+      // bug de cache do Fabric 6.
+      objectCaching: false,
     });
   }
 }
