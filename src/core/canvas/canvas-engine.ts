@@ -34,6 +34,29 @@ export interface EngineConfig {
  */
 export const CAPI_CUSTOM_PROPS = ['id', 'capiSlot'] as const;
 
+/**
+ * Nó da árvore exibida no painel de camadas (Onda 7).
+ * - 'principal' = aplique/base, sempre raiz, com `children` (slots/operations/visuais).
+ * - 'visual' | 'operation' = nó folha (Onda 7 não permite filhos de filhos).
+ */
+export type LayerNode =
+  | {
+      kind: 'principal';
+      id: string;
+      name: string;
+      visible: boolean;
+      locked: boolean;
+      children: LayerNode[];
+    }
+  | {
+      kind: 'visual' | 'operation';
+      id: string;
+      name: string;
+      visible: boolean;
+      locked: boolean;
+      parentId: string | null;
+    };
+
 export interface SerializedCanvas {
   version: string;
   objects: Array<Record<string, unknown>>;
@@ -649,6 +672,310 @@ export class CanvasEngine {
   /** Returns a snapshot of all LayerMeta entries (for restore after deserialize). */
   getAllLayerMetas(): Map<string, LayerMeta> {
     return new Map(this.layerMeta);
+  }
+
+  // ─── Layer operations (Onda 7 — painel de camadas) ────────────────────────
+
+  /**
+   * Encontra o objeto Fabric correspondente a um capi id. Diferente do
+   * `findById` interno (que só lê `obj.id`), este helper usa `getCapiId`
+   * pra resolver slots (cujo id mora em `capiSlot.id`, não em `obj.id`).
+   *
+   * Mesmo padrão do Fix #1 da Fase D — mantém coerência entre os helpers
+   * que precisam achar qualquer tipo de user object.
+   */
+  private findByCapiId(id: string): fabric.FabricObject | undefined {
+    return this.canvas
+      .getObjects()
+      .find((o) => !isBaseObject(o) && getCapiId(o as unknown as Record<string, unknown>) === id);
+  }
+
+  /**
+   * Alterna visibilidade de uma camada no canvas.
+   *
+   * **Contrato com a Onda 9 (export):** este método NÃO mexe em
+   * `excludeFromExport`. Apenas seta `obj.visible` no Fabric e
+   * `LayerMeta.visible` no Map. A camada continua **persistindo no
+   * canvasJson** mesmo invisível — abrir o padrão depois mantém o
+   * estado de invisibilidade carregado.
+   *
+   * A Onda 9 (exportação SVG/PNG) é que vai LER `LayerMeta.visible` no
+   * momento do export e PULAR as invisíveis. Ver
+   * `docs/IDEAS/onda-9-export-respeita-layer-visible.md` — nota técnica
+   * crítica que documenta esse contrato.
+   *
+   * Por que não `excludeFromExport: true`? Esse flag faz o `serialize`
+   * pular o objeto do canvasJson, então salvar padrão → reabrir =
+   * camada desaparece. Bug grave pego em flight na calibração da Onda 7.
+   */
+  setLayerVisibility(id: string, visible: boolean): void {
+    const meta = this.layerMeta.get(id);
+    if (!meta) return;
+    meta.visible = visible;
+
+    const obj = this.findByCapiId(id);
+    if (obj) {
+      obj.set({ visible });
+      obj.setCoords();
+    }
+
+    // Fabric 6 não tem 'layer-meta-changed' no tipo CanvasEvents; uso `fire`
+    // com cast (mesmo padrão usado em outras fases pra eventos sintéticos
+    // que UI componentes consomem). Listener no painel também faz cast no on().
+    (this.canvas as unknown as { fire: (n: string, o: unknown) => void }).fire(
+      'layer-meta-changed',
+      { layerId: id, kind: meta.kind }
+    );
+    this.canvas.requestRenderAll();
+  }
+
+  /**
+   * Alterna trava da camada.
+   *
+   * Decisão (Onda 7): camada travada **pode** ser selecionada mas **não
+   * pode** ser movida, escalada ou rotacionada. Útil pra "fixar uma
+   * referência" mas ainda poder clicar pra ver dados.
+   *
+   * Detalhe técnico: slot-manager seta `lockRotation: true` no body de
+   * todo slot por padrão (invariante do sistema — slots nunca rotacionam).
+   * No destravar, este método NÃO mexe em `lockRotation` pra slots/visuais
+   * — mantém o invariante intacto. Para layers principais (apliques) o
+   * `lockRotation` é alternado normalmente.
+   */
+  setLayerLocked(id: string, locked: boolean): void {
+    const meta = this.layerMeta.get(id);
+    if (!meta) return;
+    meta.locked = locked;
+
+    const obj = this.findByCapiId(id);
+    if (obj) {
+      const isPrincipal = meta.kind === 'principal';
+      obj.set({
+        lockMovementX: locked,
+        lockMovementY: locked,
+        lockScalingX: locked,
+        lockScalingY: locked,
+        // Slots/visuais preservam lockRotation=true (invariante do slot-manager).
+        // Apenas para principais alternamos rotation lock junto com os outros.
+        ...(isPrincipal ? { lockRotation: locked } : {}),
+        selectable: true,
+        evented: true,
+      });
+      obj.setCoords();
+    }
+
+    // Fabric 6 não tem 'layer-meta-changed' no tipo CanvasEvents; uso `fire`
+    // com cast (mesmo padrão usado em outras fases pra eventos sintéticos
+    // que UI componentes consomem). Listener no painel também faz cast no on().
+    (this.canvas as unknown as { fire: (n: string, o: unknown) => void }).fire(
+      'layer-meta-changed',
+      { layerId: id, kind: meta.kind }
+    );
+    this.canvas.requestRenderAll();
+  }
+
+  /**
+   * Renomeia uma camada. No-op se newName for vazio (validação no caller
+   * via RenameInput, mas garantia também aqui).
+   */
+  renameLayer(id: string, newName: string): void {
+    const trimmed = newName.trim();
+    if (!trimmed) return;
+    const meta = this.layerMeta.get(id);
+    if (!meta) return;
+    meta.name = trimmed;
+    // Fabric 6 não tem 'layer-meta-changed' no tipo CanvasEvents; uso `fire`
+    // com cast (mesmo padrão usado em outras fases pra eventos sintéticos
+    // que UI componentes consomem). Listener no painel também faz cast no on().
+    (this.canvas as unknown as { fire: (n: string, o: unknown) => void }).fire(
+      'layer-meta-changed',
+      { layerId: id, kind: meta.kind }
+    );
+  }
+
+  /**
+   * Deleta uma camada. Para `kind === 'principal'`, deleta também todos
+   * os filhos (`parentLayerId === id`) em cascata — invariante de
+   * hierarquia do MVP: slot órfão dentro de aplique deletado é estado
+   * quebrado.
+   *
+   * Retorna a lista de ids deletados (pro caller mostrar em toast/log).
+   *
+   * Rejeita: tentativa de deletar a base do produto (sem efeito, retorna
+   * `{ deletedIds: [] }`).
+   */
+  deleteLayer(id: string): { deletedIds: string[] } {
+    const meta = this.layerMeta.get(id);
+    if (!meta) return { deletedIds: [] };
+
+    const deletedIds: string[] = [];
+
+    // Cascade: se principal, descobre filhos primeiro.
+    if (meta.kind === 'principal') {
+      for (const [childId, childMeta] of this.layerMeta.entries()) {
+        if (childMeta.parentLayerId === id) {
+          const childObj = this.findByCapiId(childId);
+          if (childObj) this.canvas.remove(childObj);
+          this.layerMeta.delete(childId);
+          deletedIds.push(childId);
+        }
+      }
+    }
+
+    // Remove o objeto principal/visual.
+    const obj = this.findByCapiId(id);
+    if (obj) this.canvas.remove(obj);
+    this.layerMeta.delete(id);
+    deletedIds.push(id);
+
+    this.canvas.discardActiveObject();
+    // Fabric 6 não tem 'layer-meta-changed' no tipo CanvasEvents; uso `fire`
+    // com cast (mesmo padrão usado em outras fases pra eventos sintéticos
+    // que UI componentes consomem). Listener no painel também faz cast no on().
+    (this.canvas as unknown as { fire: (n: string, o: unknown) => void }).fire(
+      'layer-meta-changed',
+      { layerId: id, kind: meta.kind }
+    );
+    this.canvas.requestRenderAll();
+    return { deletedIds };
+  }
+
+  /**
+   * Sobe ou desce a camada na z-order do canvas. Atualiza
+   * `LayerMeta.zIndex` lendo o índice pós-mudança do canvas, mantendo
+   * canvasJson + Fabric sincronizados.
+   *
+   * No-op quando a camada já está no topo (para 'up') ou no fundo
+   * (para 'down') — Fabric simplesmente não faz nada nesse caso.
+   */
+  moveLayer(id: string, direction: 'up' | 'down'): void {
+    const meta = this.layerMeta.get(id);
+    if (!meta) return;
+    const obj = this.findByCapiId(id);
+    if (!obj) return;
+
+    if (direction === 'up') {
+      this.canvas.bringObjectForward(obj);
+    } else {
+      this.canvas.sendObjectBackwards(obj);
+    }
+
+    // Sincroniza zIndex do LayerMeta com a nova posição do objeto no canvas.
+    const newIdx = this.canvas.getObjects().indexOf(obj);
+    if (newIdx >= 0) meta.zIndex = newIdx;
+
+    // Fabric 6 não tem 'layer-meta-changed' no tipo CanvasEvents; uso `fire`
+    // com cast (mesmo padrão usado em outras fases pra eventos sintéticos
+    // que UI componentes consomem). Listener no painel também faz cast no on().
+    (this.canvas as unknown as { fire: (n: string, o: unknown) => void }).fire(
+      'layer-meta-changed',
+      { layerId: id, kind: meta.kind }
+    );
+    this.canvas.requestRenderAll();
+  }
+
+  /**
+   * Muda o `parentLayerId` de uma camada. Usado pelo dropdown "Mover
+   * pra..." no painel — operação puramente de metadata (não muda a
+   * posição visual do objeto no canvas).
+   *
+   * Após a mudança, snap e alignment automaticamente respeitam o novo
+   * pai via `getParentBoundsForObject` (Fix #1 + Fix #2 da Fase D).
+   *
+   * Restrições mínimas:
+   *   - Camadas principais (`kind === 'principal'`) não aceitam pai
+   *     (parentLayerId sempre null). Tentativa é silenciosamente ignorada.
+   *   - Tentar usar id inexistente como pai é silenciosamente ignorada.
+   *   - Permitido reparent para null (solto / sem aplique pai).
+   */
+  reparentLayer(id: string, newParentId: string | null): void {
+    const meta = this.layerMeta.get(id);
+    if (!meta) return;
+
+    // Invariante ADR 010 §1: principais sempre têm parentLayerId=null.
+    if (meta.kind === 'principal') return;
+
+    // Valida que o novo pai existe e é principal (quando não-null).
+    if (newParentId !== null) {
+      const parentMeta = this.layerMeta.get(newParentId);
+      if (!parentMeta || parentMeta.kind !== 'principal') return;
+    }
+
+    meta.parentLayerId = newParentId;
+    // Fabric 6 não tem 'layer-meta-changed' no tipo CanvasEvents; uso `fire`
+    // com cast (mesmo padrão usado em outras fases pra eventos sintéticos
+    // que UI componentes consomem). Listener no painel também faz cast no on().
+    (this.canvas as unknown as { fire: (n: string, o: unknown) => void }).fire(
+      'layer-meta-changed',
+      { layerId: id, kind: meta.kind }
+    );
+  }
+
+  /**
+   * Constrói a estrutura hierárquica das camadas pra renderização no
+   * painel. Apliques (`kind === 'principal'`) viram nós raiz com seus
+   * filhos. Visuais/operações com `parentLayerId === null` viram nós
+   * raiz "soltos" (sem aplique pai).
+   *
+   * Ordenação: respeita a z-order do canvas (objetos no fundo vêm
+   * primeiro no array — usuário verá os de cima no canvas listados
+   * no topo do painel via reverse no caller).
+   */
+  getLayersHierarchy(): LayerNode[] {
+    const canvasObjects = this.canvas.getObjects();
+    const indexOf = (id: string): number => {
+      const obj = this.findByCapiId(id);
+      return obj ? canvasObjects.indexOf(obj) : -1;
+    };
+
+    // Tipos locais pra evitar narrowing pain — separamos principal e leaf.
+    type PrincipalNode = Extract<LayerNode, { kind: 'principal' }>;
+    type LeafNode = Extract<LayerNode, { kind: 'visual' | 'operation' }>;
+
+    const principals: PrincipalNode[] = [];
+    const orphans: LeafNode[] = [];
+
+    // Primeiro passe: monta os principais.
+    for (const meta of this.layerMeta.values()) {
+      if (meta.kind === 'principal') {
+        principals.push({
+          kind: 'principal',
+          id: meta.id,
+          name: meta.name,
+          visible: meta.visible,
+          locked: meta.locked,
+          children: [],
+        });
+      }
+    }
+    const principalById = new Map<string, PrincipalNode>(principals.map((p) => [p.id, p]));
+
+    // Segundo passe: distribui filhos pros pais ou pra órfãos.
+    for (const meta of this.layerMeta.values()) {
+      if (meta.kind === 'principal') continue;
+      const node: LeafNode = {
+        kind: meta.kind,
+        id: meta.id,
+        name: meta.name,
+        visible: meta.visible,
+        locked: meta.locked,
+        parentId: meta.parentLayerId ?? null,
+      };
+      const parent = meta.parentLayerId ? principalById.get(meta.parentLayerId) : undefined;
+      if (parent) {
+        parent.children.push(node);
+      } else {
+        orphans.push(node);
+      }
+    }
+
+    // Ordena por z-index do canvas (topo do array = z mais alto).
+    const byZ = (a: LayerNode, b: LayerNode): number => indexOf(b.id) - indexOf(a.id);
+    principals.sort(byZ);
+    for (const p of principals) p.children.sort(byZ);
+    orphans.sort(byZ);
+
+    return [...principals, ...orphans];
   }
 
   // ─── Material API ─────────────────────────────────────────────────────────
