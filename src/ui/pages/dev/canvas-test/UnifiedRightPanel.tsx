@@ -1,18 +1,18 @@
 /**
- * UnifiedRightPanel.tsx — Onda 6.5 Fase B
+ * UnifiedRightPanel.tsx — Onda 6.5 Fase B + Onda 7
  *
  * Always-visible right panel (w-[280px] shrink-0) with 3 tabs:
- *   - Apliques  : placeholder (content delivered in Fase C)
+ *   - Apliques  : ApliquePanel (Onda 6.5 Fase C)
  *   - Materiais : MaterialPanel (migrated from RightPanel)
- *   - Camadas   : disabled skeleton ("Em breve — Onda 7")
+ *   - Camadas   : LayerPanel (Onda 7 — preenche o slot antes desabilitado)
  *
  * DEV-only component rendered from CanvasTest.
  */
 import { type RefObject } from 'react';
-import { Layers } from 'lucide-react';
 
 import type { CanvasEngine } from '@/core/canvas/canvas-engine';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/ui/components/tabs';
+import { LayerPanel } from '@/ui/canvas/LayerPanel';
 import { ApliquePanel } from './ApliquePanel';
 import { MaterialPanel } from './MaterialPanel';
 
@@ -31,14 +31,8 @@ export function UnifiedRightPanel({ engineRef }: UnifiedRightPanelProps) {
           <TabsTrigger value="materiais" className="font-mono text-[11px]">
             Materiais
           </TabsTrigger>
-          <TabsTrigger
-            value="camadas"
-            aria-disabled="true"
-            tabIndex={-1}
-            className="pointer-events-none font-mono text-[11px] opacity-40"
-          >
+          <TabsTrigger value="camadas" className="font-mono text-[11px]">
             Camadas
-            <span className="ml-1.5 text-[9px] text-ink-400">Onda 7</span>
           </TabsTrigger>
         </TabsList>
 
@@ -52,13 +46,9 @@ export function UnifiedRightPanel({ engineRef }: UnifiedRightPanelProps) {
           <MaterialPanel engineRef={engineRef} />
         </TabsContent>
 
-        {/* Camadas — skeleton desabilitado */}
+        {/* Camadas — Onda 7 */}
         <TabsContent value="camadas" className="min-h-0 flex-1 overflow-y-auto">
-          <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-sm text-ink-400">
-            <Layers className="h-8 w-8 opacity-50" />
-            <p>Painel de Camadas</p>
-            <p className="text-xs text-ink-500">Em breve (Onda 7)</p>
-          </div>
+          <LayerPanel engineRef={engineRef} />
         </TabsContent>
       </Tabs>
     </aside>
