@@ -145,7 +145,9 @@ Justificativa: [...]
 - Onda 6.5 ✅ → Sonnet 4.6 (UI Apliques completa)
 - Onda 8 ✅ → Sonnet 4.6 (padrões salvos + reabertura)
 - Mini-9.5 ✅ → Sonnet 4.6 (cadastrar materiais — fechada commit 94de574)
-- **Onda 7 → Opus 4.7 + alto** (alinhamento + painel hierárquico)
+- Onda 7a ✅ → Opus 4.7 + alto (motor de snap + integração Fabric)
+- **Onda 7b Fases C+D ✅ → Opus 4.7 1M** (guias visuais, toolbar de alinhamento)
+- **Onda 7b Fase E → Opus 4.7 + alto** (modo medição)
 - **Onda 8.5 → Sonnet 4.6** (gravações sobre apliques)
 - **Onda 9 → Opus 4.7 + alto** (exportação SVG por máquina/operação)
 - Ondas 10-12 → Sonnet 4.6 ou Haiku
@@ -155,30 +157,34 @@ Justificativa: [...]
 
 ## 🏗️ Estrutura de ondas (ROADMAP)
 
-| Onda    | Tema                                                                      | Status                          |
-| ------- | ------------------------------------------------------------------------- | ------------------------------- |
-| 0       | Bootstrap (Tauri + Vite + React + TS)                                     | ✅ Fechada                      |
-| 1       | Banco SQLite + Seeds (24 tabelas pós-6a)                                  | ✅ Fechada                      |
-| 2       | Home + Layout Base                                                        | ✅ Fechada                      |
-| 3       | Canvas Fabric.js                                                          | ✅ Fechada                      |
-| 4       | Slots editáveis + fitText                                                 | ✅ Fechada                      |
-| 4.5     | Banco de Fontes Curado (5 fontes)                                         | ✅ Fechada                      |
-| 5       | Texturas (PNGs ABS Escovado)                                              | ✅ Fechada                      |
-| 6a      | Schema de hierarquia (3 bancos novos)                                     | ✅ Fechada                      |
-| 6b      | Parser Corel + Cleanup + LayerMeta hierárquico                            | ✅ Fechada                      |
-| 6c      | ❌ **REMOVIDA** — funcionalidade absorvida pela Onda 7                    | ❌ Removida                     |
-| 6.5     | UI Apliques completa                                                      | ✅ Fechada                      |
-| **8**   | **Padrões salvos + reabertura (Placa Advogado)**                          | **✅ Fechada (commit 17a23ae)** |
-| **9.5** | **Mini-onda — Cadastrar 5 materiais novos (Acrílico Espelhado + Sólido)** | **✅ Fechada (commit 94de574)** |
-| **7a**  | **Snap (Fases A+B) — motor matemático + integração Fabric**               | **✅ Fechada**                  |
-| **7b**  | **Snap (Fases C-F) — guias visuais, toolbar, modo medição, grade**        | **⏭️ PRÓXIMA**                  |
-| 7       | Painel de Camadas hierárquico (ex-7b original, renomeado)                 | ⏳                              |
-| 8.5     | Gravações sobre apliques (balança + texto profissão)                      | ⏳                              |
-| 9       | Exportação SVG por máquina/operação + PNG mockup                          | ⏳                              |
-| 10      | Telas restantes (Grid Padrões, Histórico, Banco Ativos)                   | ⏳                              |
-| 11      | Atalhos globais + Undo/Redo (50 níveis)                                   | ⏳                              |
-| 12      | Polimento final + build MSI Windows                                       | ⏳                              |
-| 13      | Validação final + smoke test do MVP completo                              | ⏳                              |
+| Onda    | Tema                                                                      | Status                                       |
+| ------- | ------------------------------------------------------------------------- | -------------------------------------------- |
+| 0       | Bootstrap (Tauri + Vite + React + TS)                                     | ✅ Fechada                                   |
+| 1       | Banco SQLite + Seeds (24 tabelas pós-6a)                                  | ✅ Fechada                                   |
+| 2       | Home + Layout Base                                                        | ✅ Fechada                                   |
+| 3       | Canvas Fabric.js                                                          | ✅ Fechada                                   |
+| 4       | Slots editáveis + fitText                                                 | ✅ Fechada                                   |
+| 4.5     | Banco de Fontes Curado (5 fontes)                                         | ✅ Fechada                                   |
+| 5       | Texturas (PNGs ABS Escovado)                                              | ✅ Fechada                                   |
+| 6a      | Schema de hierarquia (3 bancos novos)                                     | ✅ Fechada                                   |
+| 6b      | Parser Corel + Cleanup + LayerMeta hierárquico                            | ✅ Fechada                                   |
+| 6c      | ❌ **REMOVIDA** — funcionalidade absorvida pela Onda 7                    | ❌ Removida                                  |
+| 6.5     | UI Apliques completa                                                      | ✅ Fechada                                   |
+| **8**   | **Padrões salvos + reabertura (Placa Advogado)**                          | **✅ Fechada (commit 17a23ae)**              |
+| **9.5** | **Mini-onda — Cadastrar 5 materiais novos (Acrílico Espelhado + Sólido)** | **✅ Fechada (commit 94de574)**              |
+| **7a**  | **Snap (Fases A+B) — motor matemático + integração Fabric**               | **✅ Fechada (commit 8cb037f)**              |
+| **7b**  | **Snap Fase C — guias visuais cyan + fix Alt+Tab**                        | **✅ Fechada (commit 0ccd989)**              |
+| **7b**  | **Snap Fase D — toolbar de alinhamento (6 botões)**                       | **✅ Fechada (06d7442 + 9713f3b + db84315)** |
+| **7b**  | **Snap Fase E — modo medição (V+H entre objs)**                           | **⏭️ PRÓXIMA**                               |
+| **7b**  | **Snap Fase F — pontinhos da grade (toggle)**                             | ⏳                                           |
+| **7b**  | **Snap Fase G — costura final + ADR 015**                                 | ⏳                                           |
+| 7       | Painel de Camadas hierárquico (ex-7b original, renomeado)                 | ⏳                                           |
+| 8.5     | Gravações sobre apliques (balança + texto profissão)                      | ⏳                                           |
+| 9       | Exportação SVG por máquina/operação + PNG mockup                          | ⏳                                           |
+| 10      | Telas restantes (Grid Padrões, Histórico, Banco Ativos)                   | ⏳                                           |
+| 11      | Atalhos globais + Undo/Redo (50 níveis)                                   | ⏳                                           |
+| 12      | Polimento final + build MSI Windows                                       | ⏳                                           |
+| 13      | Validação final + smoke test do MVP completo                              | ⏳                                           |
 
 **Sequência travada (ordem de execução):**
 
@@ -251,6 +257,24 @@ Justificativa: [...]
 - **LayerMeta como discriminated union** com 3 variantes (Principal/Operation/Visual) + 7 invariantes validadas em runtime. TypeScript barra combinações inválidas em compile-time.
 - **schemaVersion: 2** no canvasJson. Migration trivial (banco vazio).
 - **Lição crítica da Onda 6b:** testes verdes não provam que código novo está no caminho de execução. Sempre validar via DevTools que função modificada está sendo chamada no runtime real. Bug pode estar em "qual porta o runtime usa", não em "como a porta funciona". Adicionar testes de integração que exercitem o MESMO caminho do runtime — não só o caminho ideal.
+
+### Onda 7b Fases C+D (guias visuais + toolbar de alinhamento)
+
+- **Linhas-guia visuais cyan** (`#00d4ff`, 1px tracejado [8,4], `strokeUniform`) renderizadas em `fabric.Line` dentro do canvas (vivem no espaço de coordenadas do produto, com `excludeFromExport: true`). Render-on-change: só redesenha quando snap muda; remove instantâneo quando guia some no meio do drag; fade-out 200ms só no `mouse:up`. Cancelamento explícito de `fabric.util.animate` quando novo drag começa antes do fade terminar.
+- **`guides-diff.ts` (função pura)**: decide por eixo entre `create | update | remove | noop`. Lógica testável em Node sem Fabric. Padrão repetido da Fase A — separar matemática pura de efeitos.
+- **Fix Alt+Tab**: `useAltKey` registra listener de `blur` na window. Windows intercepta `keyup` do Alt em Alt+Tab e o snap ficaria desligado pra sempre sem esse reset. Comentário no código preserva o "porquê" (alguém pode achar redundante e remover).
+- **Toolbar de alinhamento** = segunda linha condicional, aparece quando há ≥1 objeto selecionado. 6 botões: alinhar L/CenterH/R/Top/CenterV/Bottom (ícones `lucide-react`). Slide-down 150ms ao abrir, saída instantânea. State local `hasSelection` via `selection:created/updated/cleared` direto no canvas — sem store global (toolbar é UI, não domínio).
+- **`alignment-commands.ts` (função pura)**: 6 funções + dispatcher. 1 obj usa `referenceBounds` (caller decide); 2+ objs ignora ref e calcula min/max/média entre os próprios rects (Figma-style). 16 testes, cobertura 100%.
+- **Multi-seleção em ActiveSelection**: usa padrão **desagrupar/reagrupar** (`discardActiveObject` → `set` absoluto em cada filho top-level → `new ActiveSelection(filhos, { canvas })`). Robusto a transformações futuras (rotação, escala) — matemática manual de matriz quebra com transforms.
+- **`getCapiId(obj)` (função pura, Fix #1)**: helper canônico para resolver id capi. Caminho 1: `obj.id` (rect, aplique). Caminho 2: `obj.capiSlot.id` (slot — slot-manager nunca seta `body.id`). Sem essa abstração, slots silently faziam fallback pra canvas em alignment.
+- **`createSlot(type, parentLayerId?)` aceita pai opcional (Fix #2)**: `SlotCreatorButtons.resolveParentAppliqueId(engine)` percorre seleção e retorna primeiro objeto com `kind === 'principal'`. Critério unificado, sem heurística geométrica. Resolve ADR 014 §6 no caminho de criação (slot dentro de aplique nasce com `parentLayerId = aplique.id`).
+- **Lição reforçada da Onda 6b**: testes da função pura passaram (com `parentBounds = aplique`), mas runtime falhou porque o **caller** montava `referenceBounds` errado (mismatch obj.id vs capiSlot.id). Diagnóstico: leitura cuidadosa do código eliminou as 4 hipóteses sem precisar de runtime do Gabriell. Testes verdes ≠ caminho de execução real.
+- **Dívidas técnicas conhecidas (registrar no ADR 015 da Fase G):**
+  1. 6 fluxos de regressão da Fase B não testados explicitamente
+  2. Bug Alt+Tab com **mouse pressionado** trava drag (mouseup interceptado pelo Windows). Diferente do bug do Alt resolvido — esse continua aberto como follow-up.
+  3. `entry.content` (texto fitText, logo) dentro do slot não segue o body em drag/scale/alignment (bug pré-existente do slot-manager, não introduzido pela Onda 7b).
+  4. Caller do alignment (`AlignmentToolbar`) não tem teste de integração (exigiria mock pesado de Fabric — over-engineering aceito).
+  5. `coverage/` foi commitado acidentalmente na Onda 7a (`8cb037f`); migrar pra `.gitignore` em commit separado quando conveniente.
 
 ### Onda 8 (padrões salvos + reabertura)
 
@@ -487,4 +511,4 @@ Eu leio o contexto, faço perguntas estratégicas se necessário, e começamos c
 
 ---
 
-_Última atualização: Onda 7a Fases A+B fechadas — snap motor puro (23 testes, 95% cobertura) + integração Fabric com race condition resolvida. ADR 014 criado. Próxima: Onda 7b (Fases C-F: guias visuais, toolbar de alinhamento, modo medição, grade visível)._
+_Última atualização: Onda 7b Fases C+D fechadas — guias visuais cyan (`guides-diff.ts` puro), toolbar de alinhamento com 6 botões (`alignment-commands.ts` puro, 16 testes, 100% cobertura), Fix #1 (`getCapiId` resolve mismatch obj.id vs capiSlot.id), Fix #2 (slot nasce com parentLayerId correto). Fix Alt+Tab via blur listener. 4 commits: 0ccd989, 06d7442, 9713f3b, db84315. 216 testes verdes. Próxima: Onda 7b Fase E (modo medição V+H entre objetos selecionados)._
