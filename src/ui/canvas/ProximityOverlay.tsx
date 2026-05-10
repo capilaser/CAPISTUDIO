@@ -207,25 +207,6 @@ export function ProximityOverlay({ engineRef }: Props): React.ReactElement | nul
         // transform via ref (que ainda era null nesta passagem).
         scheduleRecompute();
       }
-
-      if (import.meta.env.DEV) {
-        console.log(
-          '[Proximity]',
-          'target=',
-          target.id,
-          'rect=',
-          target.rect.left.toFixed(1),
-          target.rect.top.toFixed(1),
-          'top=',
-          result.top.toFixed(2),
-          'bottom=',
-          result.bottom.toFixed(2),
-          'left=',
-          result.left.toFixed(2),
-          'right=',
-          result.right.toFixed(2)
-        );
-      }
     };
 
     const scheduleRecompute = (): void => {

@@ -520,9 +520,6 @@ export class CanvasEngine {
       if (existing) {
         this.canvas.remove(existing);
         this.currentGuides[axis] = null;
-        if (import.meta.env.DEV) {
-          console.log('[Guides]', 'remove', 'axis=', axis);
-        }
       }
       return;
     }
@@ -535,9 +532,6 @@ export class CanvasEngine {
       if (existing) {
         const coords = this.guideCoordsPx(target);
         existing.set({ ...coords, opacity: 1 });
-        if (import.meta.env.DEV) {
-          console.log('[Guides]', 'update', 'axis=', axis, 'source=', target.source);
-        }
         return;
       }
       // Defensivo: caso `update` chegue sem linha existente (estado dessincronizado),
@@ -548,9 +542,6 @@ export class CanvasEngine {
     const line = this.createGuideLine(target);
     this.currentGuides[axis] = line;
     this.canvas.add(line);
-    if (import.meta.env.DEV) {
-      console.log('[Guides]', 'create', 'axis=', axis, 'source=', target.source);
-    }
   }
 
   /** Converte guideStart/guideEnd (mm) para coordenadas px do canvas Fabric. */
@@ -604,10 +595,6 @@ export class CanvasEngine {
       const line = this.currentGuides[axis];
       if (!line) return;
 
-      if (import.meta.env.DEV) {
-        console.log('[Guides]', 'fade-start', 'axis=', axis);
-      }
-
       const animation = fabric.util.animate({
         startValue: 1,
         endValue: 0,
@@ -624,9 +611,6 @@ export class CanvasEngine {
             this.currentGuides[axis] = null;
           }
           this.fadeAnimations[axis] = null;
-          if (import.meta.env.DEV) {
-            console.log('[Guides]', 'fade-end', 'axis=', axis);
-          }
           this.canvas.requestRenderAll();
         },
       });

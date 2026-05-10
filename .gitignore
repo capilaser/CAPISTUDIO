@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Test coverage output (regenerated por `npm test` — não versionar)
+coverage/
+
 # Tauri/Rust build artifacts (the src-tauri/ has its own .gitignore too)
 src-tauri/target
 src-tauri/gen

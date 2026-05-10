@@ -144,19 +144,6 @@ export function AlignmentToolbar({ engineRef }: Props): React.ReactElement | nul
       };
       const rectsAfter = applyAlignment(command, rectsBefore, canvasBounds);
 
-      if (import.meta.env.DEV) {
-        console.log(
-          '[Align]',
-          command,
-          'rects=',
-          children.length,
-          'before=',
-          rectsBefore.map((r) => ({ l: r.left, t: r.top })),
-          'after=',
-          rectsAfter.map((r) => ({ l: r.left, t: r.top }))
-        );
-      }
-
       // Desagrupa: limpa seleção, aplica posições absolutas em cada filho top-level,
       // reagrupa para preservar UX. Padrão Figma — sobrevive a transformações futuras
       // (rotação, escala) que matemática manual não sobreviveria.
@@ -195,21 +182,6 @@ export function AlignmentToolbar({ engineRef }: Props): React.ReactElement | nul
     };
 
     const [rectAfter] = applyAlignment(command, [rectBefore], referenceBounds);
-
-    if (import.meta.env.DEV) {
-      console.log(
-        '[Align]',
-        command,
-        'rects=',
-        1,
-        'ref=',
-        parentBounds ? 'parent' : 'canvas',
-        'before=',
-        { l: rectBefore.left, t: rectBefore.top },
-        'after=',
-        { l: rectAfter.left, t: rectAfter.top }
-      );
-    }
 
     obj.set({ left: mmToPx(rectAfter.left), top: mmToPx(rectAfter.top) });
     obj.setCoords();

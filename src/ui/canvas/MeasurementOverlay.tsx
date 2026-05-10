@@ -202,22 +202,6 @@ export function MeasurementOverlay({ engineRef }: Props): React.ReactElement | n
         // do Fabric também cobre isso indiretamente, mas garantia explícita.
         scheduleRecompute();
       }
-
-      if (import.meta.env.DEV) {
-        console.log(
-          '[Measurement]',
-          'A=',
-          a.left.toFixed(1),
-          a.top.toFixed(1),
-          'B=',
-          b.left.toFixed(1),
-          b.top.toFixed(1),
-          'V=',
-          distance.v.toFixed(2),
-          'H=',
-          distance.h.toFixed(2)
-        );
-      }
     };
 
     const scheduleRecompute = (): void => {
