@@ -26,6 +26,7 @@ import { UnifiedRightPanel } from './canvas-test/UnifiedRightPanel';
 import { SlotCreatorButtons } from './canvas-test/SlotCreatorButtons';
 import { AlignmentToolbar } from '@/ui/canvas/AlignmentToolbar';
 import { MeasurementOverlay } from '@/ui/canvas/MeasurementOverlay';
+import { ProximityOverlay } from '@/ui/canvas/ProximityOverlay';
 import { RulerToggle } from '@/ui/canvas/RulerToggle';
 
 const TEST_RECT_MM = { width: 20, height: 10 };
@@ -351,6 +352,11 @@ export default function CanvasTest() {
       {/* Onda 7b — Fase E: caixinhas DOM com distância V/H entre 2 selecionados.
           Mesmo padrão de mount: só após ready (engine vivo). */}
       {ready && <MeasurementOverlay engineRef={engineRef} />}
+
+      {/* Onda 7b — Fase E2: 4 caixinhas DOM com distância do objeto selecionado
+          até a coisa mais próxima em cada direção (ou borda da placa). Aparece
+          quando há exatamente 1 objeto selecionado, independente do Ruler. */}
+      {ready && <ProximityOverlay engineRef={engineRef} />}
 
       {/* 3-column layout: canvas | UnifiedRightPanel | OperatorInputs */}
       <div className="flex flex-1 overflow-hidden">

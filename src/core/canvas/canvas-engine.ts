@@ -11,6 +11,8 @@ import { mmToPx, pxToMm } from './units';
 import { computeSnapCandidates, applySnapResult } from './alignment/snap-engine';
 import type { RectMm, SnapCandidate, SnapResult, SnapTarget } from './alignment/snap-targets';
 import { guidesShouldChange } from './alignment/guides-diff';
+import type { ProximityResult } from './alignment/proximity-calculator';
+import { getCapiId } from './capi-id';
 
 export interface EngineConfig {
   productWidthMm: number;
@@ -158,6 +160,19 @@ export class CanvasEngine {
     v: null,
     h: null,
   };
+
+  // ─── Proximity lines (Onda 7b, Fase E2) ────────────────────────────────────
+  // 4 fabric.Line tracejadas violeta (#a78bfa) ligando o target às coisas mais
+  // próximas em cada uma das 4 direções (acima, abaixo, esquerda, direita).
+  // Caixinhas DOM com texto vivem em ProximityOverlay.tsx.
+
+  /** Linhas de proximidade atualmente no canvas, uma por direção. */
+  private proximityLines: {
+    top: fabric.Line | null;
+    bottom: fabric.Line | null;
+    left: fabric.Line | null;
+    right: fabric.Line | null;
+  } = { top: null, bottom: null, left: null, right: null };
 
   /** Optional callback — set from outside to receive slot selection changes. */
   onSlotSelectionChange?: (id: string | null) => void;
@@ -1035,6 +1050,8 @@ export class CanvasEngine {
     // Fase E: idem para as linhas de medição. Reset das refs aqui evita
     // o filter abaixo deixar refs apontando pra fabric.Lines descartadas.
     this.measurementLines = { v: null, h: null };
+    // Fase E2: idem pras linhas de proximidade.
+    this.proximityLines = { top: null, bottom: null, left: null, right: null };
 
     const toRemove = this.canvas.getObjects().filter((o) => !isBaseObject(o));
     toRemove.forEach((o) => this.canvas.remove(o));
@@ -1258,6 +1275,128 @@ export class CanvasEngine {
       this.canvas.remove(this.measurementLines.v);
       this.measurementLines.v = null;
     }
+    this.canvas.requestRenderAll();
+  }
+
+  // ─── Proximity / Measurable objects (Onda 7b, Fase E2) ────────────────────
+
+  /**
+   * Lista os objetos do canvas que podem ser obstáculos pra cálculo de
+   * proximidade — i.e. todos com capi id, em coordenadas mm. Usa getCapiId
+   * (Fix #1 da Fase D) pra resolver slots (capiSlot.id) e demais objetos
+   * (obj.id direto) num critério único. Filtra:
+   *
+   *   - base SVG (__capiBase)
+   *   - objetos sem capi id (slot overlay, placeholder de logo, snap guides,
+   *     measurement lines, proximity lines)
+   *   - objetos invisíveis
+   *
+   * Caller (ProximityOverlay) é responsável por excluir o próprio target
+   * via `id !== targetId`.
+   */
+  getMeasurableObjects(): Array<{ id: string; rect: RectMm }> {
+    const result: Array<{ id: string; rect: RectMm }> = [];
+    for (const obj of this.canvas.getObjects()) {
+      if (isBaseObject(obj)) continue;
+      if (!obj.visible) continue;
+      const id = getCapiId(obj as unknown as Record<string, unknown>);
+      if (!id) continue;
+
+      const w = (obj.width ?? 0) * (obj.scaleX ?? 1);
+      const h = (obj.height ?? 0) * (obj.scaleY ?? 1);
+      result.push({
+        id,
+        rect: {
+          left: pxToMm(obj.left ?? 0),
+          top: pxToMm(obj.top ?? 0),
+          width: pxToMm(w),
+          height: pxToMm(h),
+        },
+      });
+    }
+    return result;
+  }
+
+  /**
+   * Renderiza/atualiza as 4 linhas tracejadas violeta ligando o target às
+   * coisas mais próximas (ou às bordas da placa). Idempotente — chame
+   * sempre que posição mudar (drag, mudança de seleção). Cria as linhas
+   * na primeira chamada e reusa nas próximas via `set({...})` (ADR 011).
+   *
+   * Cada linha sai do meio da borda correspondente do target em direção
+   * perpendicular ao obstáculo:
+   *   - top:    do meio da borda superior do target, sobe `result.top` mm
+   *   - bottom: do meio da borda inferior, desce `result.bottom` mm
+   *   - left:   do meio da borda esquerda, vai à esquerda `result.left` mm
+   *   - right:  do meio da borda direita, vai à direita `result.right` mm
+   */
+  renderProximityLines(target: RectMm, result: ProximityResult): void {
+    const cx = mmToPx(target.left + target.width / 2);
+    const cy = mmToPx(target.top + target.height / 2);
+    const tLeft = mmToPx(target.left);
+    const tRight = mmToPx(target.left + target.width);
+    const tTop = mmToPx(target.top);
+    const tBottom = mmToPx(target.top + target.height);
+
+    // Coordenadas das 4 linhas (do meio da borda do target até o ponto-alvo).
+    const coords = {
+      top: [cx, tTop, cx, tTop - mmToPx(result.top)] as [number, number, number, number],
+      bottom: [cx, tBottom, cx, tBottom + mmToPx(result.bottom)] as [
+        number,
+        number,
+        number,
+        number,
+      ],
+      left: [tLeft, cy, tLeft - mmToPx(result.left), cy] as [number, number, number, number],
+      right: [tRight, cy, tRight + mmToPx(result.right), cy] as [number, number, number, number],
+    };
+
+    // Sem `as const`: strokeDashArray precisa ser `number[]` mutável
+    // pelo tipo do Fabric. Cada `new fabric.Line` recebe seu próprio array
+    // (cópia rasa via spread no objeto literal abaixo) — não há
+    // compartilhamento de mutação entre linhas.
+    const lineOpts = {
+      stroke: '#a78bfa',
+      strokeWidth: 1,
+      strokeDashArray: [6, 3],
+      strokeUniform: true,
+      selectable: false,
+      evented: false,
+      excludeFromExport: true,
+      objectCaching: false,
+    };
+
+    const upsert = (key: keyof typeof coords): void => {
+      const c = coords[key];
+      const existing = this.proximityLines[key];
+      if (!existing) {
+        const line = new fabric.Line(c, lineOpts);
+        this.proximityLines[key] = line;
+        this.canvas.add(line);
+      } else {
+        existing.set({ x1: c[0], y1: c[1], x2: c[2], y2: c[3] });
+        existing.setCoords();
+      }
+      const live = this.proximityLines[key];
+      if (live) this.canvas.bringObjectToFront(live);
+    };
+
+    upsert('top');
+    upsert('bottom');
+    upsert('left');
+    upsert('right');
+    this.canvas.requestRenderAll();
+  }
+
+  /** Remove as 4 linhas de proximidade do canvas, se existirem. Idempotente. */
+  clearProximityLines(): void {
+    (['top', 'bottom', 'left', 'right'] as const).forEach((key) => {
+      const line = this.proximityLines[key];
+      if (line) {
+        this.canvas.remove(line);
+        this.proximityLines[key] = null;
+      }
+    });
     this.canvas.requestRenderAll();
   }
 
