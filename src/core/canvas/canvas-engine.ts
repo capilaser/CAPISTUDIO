@@ -174,6 +174,15 @@ export class CanvasEngine {
     right: fabric.Line | null;
   } = { top: null, bottom: null, left: null, right: null };
 
+  // ─── Grid dots (Onda 7b, Fase F) ───────────────────────────────────────────
+  // 1 fabric.Rect cobrindo a área útil do produto, preenchido com fabric.Pattern
+  // (canvas off-screen 4×4px com 1 dot ink-600). Decisão de design no ADR 015:
+  //   - Pattern fixo no espaço de coordenadas — em zoom alto os pontos engordam
+  //     mas não ficam mais densos (comportamento CAD desejado).
+  //   - 1 objeto Fabric (não 27.000 dots individuais) — performance preservada.
+  /** Rect de pontos da grade. Null quando grade está oculta. */
+  private gridDotsRect: fabric.Rect | null = null;
+
   /** Optional callback — set from outside to receive slot selection changes. */
   onSlotSelectionChange?: (id: string | null) => void;
 
@@ -1052,8 +1061,12 @@ export class CanvasEngine {
     this.measurementLines = { v: null, h: null };
     // Fase E2: idem pras linhas de proximidade.
     this.proximityLines = { top: null, bottom: null, left: null, right: null };
+    // Fase F: pontinhos da grade NÃO são removidos por clearUserObjects — não
+    // são "user objects". Skip explícito no filter abaixo (o Rect deles não
+    // tem __capiBase, então a filtragem padrão removeria por engano).
+    const gridRect = this.gridDotsRect;
 
-    const toRemove = this.canvas.getObjects().filter((o) => !isBaseObject(o));
+    const toRemove = this.canvas.getObjects().filter((o) => !isBaseObject(o) && o !== gridRect);
     toRemove.forEach((o) => this.canvas.remove(o));
     this.canvas.discardActiveObject();
     this.slotManager.clear();
@@ -1397,6 +1410,87 @@ export class CanvasEngine {
         this.proximityLines[key] = null;
       }
     });
+    this.canvas.requestRenderAll();
+  }
+
+  // ─── Grid dots (Onda 7b, Fase F) ──────────────────────────────────────────
+
+  /**
+   * Renderiza pontinhos da grade de 1mm dentro da área útil do produto via
+   * fabric.Pattern. Idempotente — chame quantas vezes quiser, só cria 1 vez.
+   *
+   * Implementação: 1 fabric.Rect cobrindo `(0,0) — (productWidthMm, productHeightMm)`,
+   * preenchido com Pattern de tile 4×4px (= 1mm × 1mm em DPI=4) contendo
+   * 1 dot 1×1px no canto. `repeat: 'repeat'` cobre toda a área via tiling.
+   *
+   * Decisão (ADR 015): mil cliques < 27000 fabric.Circle individuais. Pattern
+   * é GPU-accelerated por padrão e só ocupa 1 slot na lista de objects.
+   *
+   * Cor `ink-600` (#3a3d3f) — distingue da borda do produto (ink-700 #2a2c2e)
+   * sem virar ruído visual.
+   */
+  renderGridDots(): void {
+    if (this.gridDotsRect) {
+      // Já renderizado — só garante visibilidade caso clear → render rápido.
+      this.gridDotsRect.set({ visible: true });
+      this.canvas.requestRenderAll();
+      return;
+    }
+
+    // Tile 4×4px = 1mm × 1mm. Dot 1×1px no canto superior-esquerdo.
+    const tileSizePx = mmToPx(1);
+    const patternCanvas = document.createElement('canvas');
+    patternCanvas.width = tileSizePx;
+    patternCanvas.height = tileSizePx;
+    const patternCtx = patternCanvas.getContext('2d');
+    if (!patternCtx) {
+      // Sem 2D context (caso raro em ambiente headless) — silenciosamente desiste.
+      return;
+    }
+    // imageSmoothingEnabled=false mantém o dot como pixel cru, sem antialias
+    // borrar a borda quando o Pattern repete em zoom > 1.
+    patternCtx.imageSmoothingEnabled = false;
+    patternCtx.fillStyle = '#3a3d3f'; // ink-600
+    patternCtx.fillRect(0, 0, 1, 1);
+
+    const pattern = new fabric.Pattern({
+      source: patternCanvas,
+      repeat: 'repeat',
+    });
+
+    const rect = new fabric.Rect({
+      left: 0,
+      top: 0,
+      width: mmToPx(this.config.productWidthMm),
+      height: mmToPx(this.config.productHeightMm),
+      fill: pattern,
+      stroke: undefined,
+      selectable: false,
+      evented: false,
+      excludeFromExport: true,
+      objectCaching: false,
+      hoverCursor: 'default',
+    });
+    this.gridDotsRect = rect;
+    this.canvas.add(rect);
+    // Pontinhos vão ATRÁS dos user objects mas À FRENTE da base SVG (o
+    // contorno da peça precisa permanecer visível). bringObjectToFront
+    // resolveria errado; sendObjectToBack iria atrás da base. Fabric 6
+    // não tem método "send to position" — usamos reorder via index do array.
+    //
+    // Estratégia simples: pontos viram penúltimo (logo após a base). Como
+    // a base é o object[0], chamamos sendObjectToBack + bringObjectForward
+    // 1 vez pra ir pra index=1.
+    this.canvas.sendObjectToBack(rect);
+    this.canvas.bringObjectForward(rect);
+    this.canvas.requestRenderAll();
+  }
+
+  /** Esconde os pontinhos da grade. Idempotente. */
+  clearGridDots(): void {
+    if (!this.gridDotsRect) return;
+    this.canvas.remove(this.gridDotsRect);
+    this.gridDotsRect = null;
     this.canvas.requestRenderAll();
   }
 

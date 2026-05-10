@@ -25,6 +25,7 @@ import { SaveAsPatternDialog } from './canvas-test/SaveAsPatternDialog';
 import { UnifiedRightPanel } from './canvas-test/UnifiedRightPanel';
 import { SlotCreatorButtons } from './canvas-test/SlotCreatorButtons';
 import { AlignmentToolbar } from '@/ui/canvas/AlignmentToolbar';
+import { GridToggle } from '@/ui/canvas/GridToggle';
 import { MeasurementOverlay } from '@/ui/canvas/MeasurementOverlay';
 import { ProximityOverlay } from '@/ui/canvas/ProximityOverlay';
 import { RulerToggle } from '@/ui/canvas/RulerToggle';
@@ -338,6 +339,9 @@ export default function CanvasTest() {
 
         {/* Onda 7b Fase E — toggle de modo medição. Ligado: laser; desligado: ink-300. */}
         <RulerToggle disabled={!ready} />
+
+        {/* Onda 7b Fase F — toggle de pontinhos da grade. Snap em grade sempre ativo. */}
+        <GridToggle engineRef={engineRef} disabled={!ready} />
 
         <span className="ml-auto font-mono text-[11px] text-ink-500">
           Ctrl+S salvar · Ctrl+= zoom · Ctrl+0 reset · Space+drag pan

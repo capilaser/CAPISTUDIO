@@ -16,12 +16,19 @@ interface CanvasStore {
    * Estado de UI puro, NÃO persiste em canvasJson.
    */
   measurementMode: boolean;
+  /**
+   * Onda 7b Fase F — visibilidade dos pontinhos da grade de 1mm. Snap em
+   * grade continua sempre ativo (invariante do sistema, ADR 014). Default
+   * false ao abrir o app. Estado de UI puro, NÃO persiste em canvasJson.
+   */
+  gridVisible: boolean;
   setMode: (mode: CanvasMode) => void;
   setSelectedSlotId: (id: string | null) => void;
   setSelectedFontFamily: (family: string) => void;
   setSelectedLayerId: (id: string | null) => void;
   setSelectedLayerKind: (kind: 'principal' | 'operation' | 'visual' | null) => void;
   toggleMeasurementMode: () => void;
+  toggleGridVisible: () => void;
 }
 
 export const useCanvasStore = create<CanvasStore>((set) => ({
@@ -31,10 +38,12 @@ export const useCanvasStore = create<CanvasStore>((set) => ({
   selectedLayerId: null,
   selectedLayerKind: null,
   measurementMode: false,
+  gridVisible: false,
   setMode: (mode) => set({ mode }),
   setSelectedSlotId: (id) => set({ selectedSlotId: id }),
   setSelectedFontFamily: (family) => set({ selectedFontFamily: family }),
   setSelectedLayerId: (id) => set({ selectedLayerId: id }),
   setSelectedLayerKind: (kind) => set({ selectedLayerKind: kind }),
   toggleMeasurementMode: () => set((s) => ({ measurementMode: !s.measurementMode })),
+  toggleGridVisible: () => set((s) => ({ gridVisible: !s.gridVisible })),
 }));
