@@ -146,6 +146,19 @@ export class CanvasEngine {
     y: { abort: () => void } | null;
   } = { x: null, y: null };
 
+  // ─── Measurement lines (Onda 7b, Fase E) ───────────────────────────────────
+  // 2 fabric.Line tracejadas formando um "L" entre os centros de 2 objetos
+  // selecionados quando measurementMode está ligado. Cor #7dd3fc (sky-300) —
+  // diferente do snap (#00d4ff) pra não confundir os 2 sistemas visualmente.
+  // Caixinhas de texto vivem no DOM (MeasurementOverlay.tsx) — só as linhas
+  // ficam dentro do Fabric pra acompanhar zoom/pan automaticamente.
+
+  /** Linhas de medição atualmente no canvas, uma por eixo (null quando ausente). */
+  private measurementLines: { v: fabric.Line | null; h: fabric.Line | null } = {
+    v: null,
+    h: null,
+  };
+
   /** Optional callback — set from outside to receive slot selection changes. */
   onSlotSelectionChange?: (id: string | null) => void;
 
@@ -1019,6 +1032,9 @@ export class CanvasEngine {
     this.cancelFadeAnimations();
     this.currentGuides = { x: null, y: null };
     this.lastSnapResult = null;
+    // Fase E: idem para as linhas de medição. Reset das refs aqui evita
+    // o filter abaixo deixar refs apontando pra fabric.Lines descartadas.
+    this.measurementLines = { v: null, h: null };
 
     const toRemove = this.canvas.getObjects().filter((o) => !isBaseObject(o));
     toRemove.forEach((o) => this.canvas.remove(o));
@@ -1151,6 +1167,96 @@ export class CanvasEngine {
       });
       this.canvas.defaultCursor = 'default';
       this.canvas.hoverCursor = 'move';
+    }
+    this.canvas.requestRenderAll();
+  }
+
+  // ─── Measurement (Onda 7b, Fase E) ────────────────────────────────────────
+
+  /**
+   * Renderiza/atualiza as 2 linhas de medição em formato "L" entre os centros
+   * de 2 objetos. Idempotente — chame sempre que a posição mudar (drag,
+   * mudança de seleção). Cria as linhas na primeira chamada e reusa nas
+   * próximas via `set({...})` (ADR 011 — nunca atribuição direta).
+   *
+   *   centerA ──── L horizontal ──── (centerXB, centerYA)
+   *                                          │
+   *                                       L vertical
+   *                                          │
+   *                                       centerB
+   *
+   * Coordenadas em mm; converte pra px com mmToPx no momento de aplicar.
+   */
+  renderMeasurementLines(rectA: RectMm, rectB: RectMm): void {
+    const cxA = mmToPx(rectA.left + rectA.width / 2);
+    const cyA = mmToPx(rectA.top + rectA.height / 2);
+    const cxB = mmToPx(rectB.left + rectB.width / 2);
+    const cyB = mmToPx(rectB.top + rectB.height / 2);
+
+    // Linha H: horizontal, do centerA até a coluna de B no Y de A.
+    const hCoords: [number, number, number, number] = [cxA, cyA, cxB, cyA];
+    // Linha V: vertical, da coluna de B no Y de A até o centerB.
+    const vCoords: [number, number, number, number] = [cxB, cyA, cxB, cyB];
+
+    if (!this.measurementLines.h) {
+      this.measurementLines.h = new fabric.Line(hCoords, {
+        stroke: '#7dd3fc',
+        strokeWidth: 1,
+        strokeDashArray: [6, 3],
+        strokeUniform: true,
+        selectable: false,
+        evented: false,
+        excludeFromExport: true,
+        objectCaching: false,
+      });
+      this.canvas.add(this.measurementLines.h);
+    } else {
+      this.measurementLines.h.set({
+        x1: hCoords[0],
+        y1: hCoords[1],
+        x2: hCoords[2],
+        y2: hCoords[3],
+      });
+      this.measurementLines.h.setCoords();
+    }
+
+    if (!this.measurementLines.v) {
+      this.measurementLines.v = new fabric.Line(vCoords, {
+        stroke: '#7dd3fc',
+        strokeWidth: 1,
+        strokeDashArray: [6, 3],
+        strokeUniform: true,
+        selectable: false,
+        evented: false,
+        excludeFromExport: true,
+        objectCaching: false,
+      });
+      this.canvas.add(this.measurementLines.v);
+    } else {
+      this.measurementLines.v.set({
+        x1: vCoords[0],
+        y1: vCoords[1],
+        x2: vCoords[2],
+        y2: vCoords[3],
+      });
+      this.measurementLines.v.setCoords();
+    }
+
+    // Sobe as linhas pro topo da z-order pra não ficarem atrás de objetos.
+    if (this.measurementLines.h) this.canvas.bringObjectToFront(this.measurementLines.h);
+    if (this.measurementLines.v) this.canvas.bringObjectToFront(this.measurementLines.v);
+    this.canvas.requestRenderAll();
+  }
+
+  /** Remove as linhas de medição do canvas, se existirem. Idempotente. */
+  clearMeasurementLines(): void {
+    if (this.measurementLines.h) {
+      this.canvas.remove(this.measurementLines.h);
+      this.measurementLines.h = null;
+    }
+    if (this.measurementLines.v) {
+      this.canvas.remove(this.measurementLines.v);
+      this.measurementLines.v = null;
     }
     this.canvas.requestRenderAll();
   }

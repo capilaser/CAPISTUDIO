@@ -25,6 +25,8 @@ import { SaveAsPatternDialog } from './canvas-test/SaveAsPatternDialog';
 import { UnifiedRightPanel } from './canvas-test/UnifiedRightPanel';
 import { SlotCreatorButtons } from './canvas-test/SlotCreatorButtons';
 import { AlignmentToolbar } from '@/ui/canvas/AlignmentToolbar';
+import { MeasurementOverlay } from '@/ui/canvas/MeasurementOverlay';
+import { RulerToggle } from '@/ui/canvas/RulerToggle';
 
 const TEST_RECT_MM = { width: 20, height: 10 };
 
@@ -330,6 +332,12 @@ export default function CanvasTest() {
         >
           Abrir padrão
         </Button>
+
+        <div className="h-4 w-px bg-ink-700" />
+
+        {/* Onda 7b Fase E — toggle de modo medição. Ligado: laser; desligado: ink-300. */}
+        <RulerToggle disabled={!ready} />
+
         <span className="ml-auto font-mono text-[11px] text-ink-500">
           Ctrl+S salvar · Ctrl+= zoom · Ctrl+0 reset · Space+drag pan
         </span>
@@ -339,6 +347,10 @@ export default function CanvasTest() {
           Só montamos depois que o engine está pronto — antes disso engineRef.current
           é null e o efeito de listener encerraria sem registrar. */}
       {ready && <AlignmentToolbar engineRef={engineRef} />}
+
+      {/* Onda 7b — Fase E: caixinhas DOM com distância V/H entre 2 selecionados.
+          Mesmo padrão de mount: só após ready (engine vivo). */}
+      {ready && <MeasurementOverlay engineRef={engineRef} />}
 
       {/* 3-column layout: canvas | UnifiedRightPanel | OperatorInputs */}
       <div className="flex flex-1 overflow-hidden">
