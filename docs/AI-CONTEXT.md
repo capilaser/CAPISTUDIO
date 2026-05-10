@@ -175,9 +175,10 @@ Justificativa: [...]
 | **7a**  | **Snap (Fases A+B) — motor matemático + integração Fabric**               | **✅ Fechada (commit 8cb037f)**              |
 | **7b**  | **Snap Fase C — guias visuais cyan + fix Alt+Tab**                        | **✅ Fechada (commit 0ccd989)**              |
 | **7b**  | **Snap Fase D — toolbar de alinhamento (6 botões)**                       | **✅ Fechada (06d7442 + 9713f3b + db84315)** |
-| **7b**  | **Snap Fase E — modo medição (V+H entre objs)**                           | **⏭️ PRÓXIMA**                               |
-| **7b**  | **Snap Fase F — pontinhos da grade (toggle)**                             | ⏳                                           |
-| **7b**  | **Snap Fase G — costura final + ADR 015**                                 | ⏳                                           |
+| **7b**  | **Snap Fase E — modo medição (V+H entre objs)**                           | **✅ Fechada (commit ad65cfe)**              |
+| **7b**  | **Snap Fase E2 — proximidade do entorno (1 obj selecionado)**             | **✅ Fechada (commit 4e8f072)**              |
+| **7b**  | **Snap Fase F — pontinhos da grade (toggle)**                             | **✅ Fechada (commit 0557cc3)**              |
+| **7b**  | **Snap Fase G — costura final + ADR 015 + DEBT.md**                       | **✅ Fechada (cleanup aeae83a)**             |
 | 7       | Painel de Camadas hierárquico (ex-7b original, renomeado)                 | ⏳                                           |
 | 8.5     | Gravações sobre apliques (balança + texto profissão)                      | ⏳                                           |
 | 9       | Exportação SVG por máquina/operação + PNG mockup                          | ⏳                                           |
@@ -315,6 +316,13 @@ Justificativa: [...]
 - `011-fabric6-fill-empty-string.md` — Fabric 6 passa "none" literal pro canvas DOM, que renderiza preto. Workaround: `fill: ''` no obj.set.
 - `013-base-svg-seed-onda8.md` — base_svg vem de fixture via seed (INSERT OR IGNORE + UPDATE WHERE NULL). Limitação: editar fixture exige reseed manual.
 - `014-snap-system.md` — Sistema de snap completo (Onda 7a Fases A+B): motor puro, integração Fabric, race condition resolvida, decisões de tolerância/Alt/grade.
+- `015-onda-7b-decisoes-visuais.md` — Decisões visuais da Onda 7b inteira: hierarquia de cores entre 4 sistemas (snap/medição/proximidade/grade), render híbrido Fabric+DOM, render-on-change para guias, fade-out cancelável, getCapiId canônico, Pattern para grade.
+
+---
+
+## 🧾 Dívidas técnicas
+
+Ver `docs/DEBT.md` — lista durável de dívidas conhecidas com origem, severidade e indicação de quando resolver. Atualizada na costura de cada onda.
 
 ---
 
@@ -511,4 +519,4 @@ Eu leio o contexto, faço perguntas estratégicas se necessário, e começamos c
 
 ---
 
-_Última atualização: Onda 7b Fases C+D fechadas — guias visuais cyan (`guides-diff.ts` puro), toolbar de alinhamento com 6 botões (`alignment-commands.ts` puro, 16 testes, 100% cobertura), Fix #1 (`getCapiId` resolve mismatch obj.id vs capiSlot.id), Fix #2 (slot nasce com parentLayerId correto). Fix Alt+Tab via blur listener. 4 commits: 0ccd989, 06d7442, 9713f3b, db84315. 216 testes verdes. Próxima: Onda 7b Fase E (modo medição V+H entre objetos selecionados)._
+_Última atualização: **Onda 7b INTEIRA fechada** (Fases C+D+E+E2+F+G). 4 sistemas visuais coexistem: snap (cyan vivo `#00d4ff`), medição (sky-300 `#7dd3fc`), proximidade (violet-400 `#a78bfa`), grade (ink-600 `#3a3d3f` via `fabric.Pattern`). 8 commits: 0ccd989 (C), 06d7442 (D), 9713f3b (Fix#1), db84315 (Fix#2), ad65cfe (E), 4e8f072 (E2), 0557cc3 (F), aeae83a (cleanup). 231 testes verdes. ADR 015 escrito. `docs/DEBT.md` criado com 5 dívidas abertas + 1 resolvida (`coverage/` versionado). Próxima: Onda 7 (painel de camadas hierárquico — sequência travada). **Antes da 8.5, considerar onda dedicada de "consertos do slot-manager"** (DEBT #3 e #4 — overlay e content do slot não seguem body)._
