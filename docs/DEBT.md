@@ -1,7 +1,7 @@
 # Dívidas Técnicas Conhecidas
 
-> **Última atualização:** 2026-05-10 (Onda 7b Fase G).
-> **Próxima varredura sugerida:** ao iniciar a próxima onda dedicada de "consertos do slot-manager" (entre 7b e 8.5).
+> **Última atualização:** 2026-05-10 (Onda 7.5 fechada — bugs #3 e #4 do slot-manager resolvidos).
+> **Próxima varredura sugerida:** ao iniciar a próxima onda relevante (Onda 7 painel de camadas, ou Onda 8.5 gravações).
 
 ---
 
@@ -38,20 +38,13 @@
 - **Solução conhecida:** ouvir `blur` da `window` e abortar drag ativo no Fabric (`canvas.fire('mouse:up', { e: ... })` sintético + `canvas.discardActiveObject()`).
 - **Quando resolver:** quando virar problema real (raro hoje — usuário típico não troca de janela durante drag).
 
-### 3. 🔴 Overlay tracejado vermelho do slot não segue body em redimensionamento
+### 3. 🔴 ~~Overlay tracejado vermelho do slot não segue body em redimensionamento~~ — RESOLVIDA
 
-- **Origem:** Onda 4 (slot-manager)
-- **Descrição:** Quando o usuário redimensiona um slot via handles do Fabric, o body cresce/encolhe corretamente mas o **overlay tracejado vermelho** (visual do designer mode) mantém o tamanho original. Reportado por Gabriell durante validação visual da Fase E.
-- **Severidade alta:** afeta entrega ao cliente. Slot visualmente torto (overlay maior que o body) durante criação de padrão.
-- **Solução provável:** `slot-manager.ts` precisa ouvir `object:scaling` e `object:modified` do body e ressincronizar o overlay (`overlay.set(geo)`). Já tem precedente em outras transições (`addLogo`, `clearSlotContent`).
-- **Quando resolver:** **antes** da Onda 8.5. Sugiro **onda dedicada "consertos do slot-manager"** entre 7b e 8.5, agrupando #3 e #4.
+Movida para `## Resolvidas` (Onda 7.5).
 
-### 4. 🔴 `entry.content` (texto/logo) do slot não segue body em drag/scale/alignment
+### 4. 🔴 ~~`entry.content` (texto/logo) do slot não segue body em drag/scale/alignment~~ — RESOLVIDA
 
-- **Origem:** Onda 4 (slot-manager)
-- **Descrição:** Quando o usuário arrasta ou redimensiona um slot, o body se move/escala mas o **conteúdo interno** (`fabric.Text` do slot de texto, ou `fabric.Group` do slot de logo) não acompanha. Bug pré-existente, exposto múltiplas vezes na Onda 7b (Fase D drag, Fase E redimensionamento).
-- **Severidade alta:** mesma família do #3, mesmo escopo de correção.
-- **Quando resolver:** mesma onda do #3.
+Movida para `## Resolvidas` (Onda 7.5).
 
 ### 5. 🟢 Caller do alignment sem teste de integração
 
@@ -73,3 +66,18 @@ Movida para `## Resolvidas` (Fase G).
 - **Origem:** Onda 7a (commit `8cb037f`)
 - **Descrição:** Pasta de output de testes (`coverage/`) foi commitada por engano. Cada `npm test` modificava os arquivos, gerando ruído no `git status` e diffs gigantes nos PRs.
 - **Resolvida em:** Onda 7b Fase G — commit `aeae83a`. Adicionado ao `.gitignore` + `git rm -r --cached coverage/`.
+
+### 3. 🔴 Overlay tracejado vermelho do slot não segue body em redimensionamento
+
+- **Origem:** Onda 4 (slot-manager)
+- **Descrição original:** Quando o usuário redimensiona um slot via handles do Fabric, o body cresce/encolhe corretamente mas o overlay tracejado vermelho mantém o tamanho original. Slot visualmente torto durante criação de padrão.
+- **Causa raiz descoberta:** `objectCaching` padrão do Fabric 6 — overlay com stroke tracejado cacheava a borda e não invalidava durante `object:scaling` rápido. Os listeners já chamavam `overlay.set({...})` corretamente; o cache é que servia frame defasada.
+- **Resolvida em:** Onda 7.5 — commit `bf4610e`. `objectCaching: false` em `buildOverlayRect`. Padrão idêntico ao das measurement/proximity lines (ADR 015 §3) e referenciado no ADR 006 sobre bug de cache.
+
+### 4. 🔴 `entry.content` (texto/logo) do slot não segue body em drag/scale/alignment
+
+- **Origem:** Onda 4 (slot-manager)
+- **Descrição original:** Quando o usuário arrasta ou redimensiona um slot, o body se move/escala mas o conteúdo interno (texto/logo) não acompanha. Exposto na Fase D (alignment) e Fase E (resize).
+- **Causa raiz descoberta:** Os listeners de transformação (`object:moving`, `object:scaling`, `object:modified`) foram escritos antes do conceito de content existir (Onda 4 checkpoint inicial). Quando `addText`/`addLogo` chegaram em checkpoints posteriores, posicionaram content apenas na criação — listeners nunca foram estendidos.
+- **Resolvida em:** Onda 7.5 — commit `bf4610e`. Novo helper privado `syncContentToBody(entry, phase)` chamado em 4 lugares (3 listeners + `updateSlot`). Texto recentraliza durante `transform` (60fps); refaz fitText em `commit`. Logo reescala proporcional + recentraliza (idempotente — usa `group.width` natural, não acumula scale).
+- **Bug latente da Fase D resolvido de quebra:** `AlignmentToolbar` disparava `canvas.fire('object:modified', { target: child })` programaticamente após reposicionar slots — agora o handler chama `syncContentToBody`, então alignment + content ficam sincronizados.

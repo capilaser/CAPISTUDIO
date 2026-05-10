@@ -157,35 +157,36 @@ Justificativa: [...]
 
 ## 🏗️ Estrutura de ondas (ROADMAP)
 
-| Onda    | Tema                                                                      | Status                                       |
-| ------- | ------------------------------------------------------------------------- | -------------------------------------------- |
-| 0       | Bootstrap (Tauri + Vite + React + TS)                                     | ✅ Fechada                                   |
-| 1       | Banco SQLite + Seeds (24 tabelas pós-6a)                                  | ✅ Fechada                                   |
-| 2       | Home + Layout Base                                                        | ✅ Fechada                                   |
-| 3       | Canvas Fabric.js                                                          | ✅ Fechada                                   |
-| 4       | Slots editáveis + fitText                                                 | ✅ Fechada                                   |
-| 4.5     | Banco de Fontes Curado (5 fontes)                                         | ✅ Fechada                                   |
-| 5       | Texturas (PNGs ABS Escovado)                                              | ✅ Fechada                                   |
-| 6a      | Schema de hierarquia (3 bancos novos)                                     | ✅ Fechada                                   |
-| 6b      | Parser Corel + Cleanup + LayerMeta hierárquico                            | ✅ Fechada                                   |
-| 6c      | ❌ **REMOVIDA** — funcionalidade absorvida pela Onda 7                    | ❌ Removida                                  |
-| 6.5     | UI Apliques completa                                                      | ✅ Fechada                                   |
-| **8**   | **Padrões salvos + reabertura (Placa Advogado)**                          | **✅ Fechada (commit 17a23ae)**              |
-| **9.5** | **Mini-onda — Cadastrar 5 materiais novos (Acrílico Espelhado + Sólido)** | **✅ Fechada (commit 94de574)**              |
-| **7a**  | **Snap (Fases A+B) — motor matemático + integração Fabric**               | **✅ Fechada (commit 8cb037f)**              |
-| **7b**  | **Snap Fase C — guias visuais cyan + fix Alt+Tab**                        | **✅ Fechada (commit 0ccd989)**              |
-| **7b**  | **Snap Fase D — toolbar de alinhamento (6 botões)**                       | **✅ Fechada (06d7442 + 9713f3b + db84315)** |
-| **7b**  | **Snap Fase E — modo medição (V+H entre objs)**                           | **✅ Fechada (commit ad65cfe)**              |
-| **7b**  | **Snap Fase E2 — proximidade do entorno (1 obj selecionado)**             | **✅ Fechada (commit 4e8f072)**              |
-| **7b**  | **Snap Fase F — pontinhos da grade (toggle)**                             | **✅ Fechada (commit 0557cc3)**              |
-| **7b**  | **Snap Fase G — costura final + ADR 015 + DEBT.md**                       | **✅ Fechada (cleanup aeae83a)**             |
-| 7       | Painel de Camadas hierárquico (ex-7b original, renomeado)                 | ⏳                                           |
-| 8.5     | Gravações sobre apliques (balança + texto profissão)                      | ⏳                                           |
-| 9       | Exportação SVG por máquina/operação + PNG mockup                          | ⏳                                           |
-| 10      | Telas restantes (Grid Padrões, Histórico, Banco Ativos)                   | ⏳                                           |
-| 11      | Atalhos globais + Undo/Redo (50 níveis)                                   | ⏳                                           |
-| 12      | Polimento final + build MSI Windows                                       | ⏳                                           |
-| 13      | Validação final + smoke test do MVP completo                              | ⏳                                           |
+| Onda    | Tema                                                                         | Status                                       |
+| ------- | ---------------------------------------------------------------------------- | -------------------------------------------- |
+| 0       | Bootstrap (Tauri + Vite + React + TS)                                        | ✅ Fechada                                   |
+| 1       | Banco SQLite + Seeds (24 tabelas pós-6a)                                     | ✅ Fechada                                   |
+| 2       | Home + Layout Base                                                           | ✅ Fechada                                   |
+| 3       | Canvas Fabric.js                                                             | ✅ Fechada                                   |
+| 4       | Slots editáveis + fitText                                                    | ✅ Fechada                                   |
+| 4.5     | Banco de Fontes Curado (5 fontes)                                            | ✅ Fechada                                   |
+| 5       | Texturas (PNGs ABS Escovado)                                                 | ✅ Fechada                                   |
+| 6a      | Schema de hierarquia (3 bancos novos)                                        | ✅ Fechada                                   |
+| 6b      | Parser Corel + Cleanup + LayerMeta hierárquico                               | ✅ Fechada                                   |
+| 6c      | ❌ **REMOVIDA** — funcionalidade absorvida pela Onda 7                       | ❌ Removida                                  |
+| 6.5     | UI Apliques completa                                                         | ✅ Fechada                                   |
+| **8**   | **Padrões salvos + reabertura (Placa Advogado)**                             | **✅ Fechada (commit 17a23ae)**              |
+| **9.5** | **Mini-onda — Cadastrar 5 materiais novos (Acrílico Espelhado + Sólido)**    | **✅ Fechada (commit 94de574)**              |
+| **7a**  | **Snap (Fases A+B) — motor matemático + integração Fabric**                  | **✅ Fechada (commit 8cb037f)**              |
+| **7b**  | **Snap Fase C — guias visuais cyan + fix Alt+Tab**                           | **✅ Fechada (commit 0ccd989)**              |
+| **7b**  | **Snap Fase D — toolbar de alinhamento (6 botões)**                          | **✅ Fechada (06d7442 + 9713f3b + db84315)** |
+| **7b**  | **Snap Fase E — modo medição (V+H entre objs)**                              | **✅ Fechada (commit ad65cfe)**              |
+| **7b**  | **Snap Fase E2 — proximidade do entorno (1 obj selecionado)**                | **✅ Fechada (commit 4e8f072)**              |
+| **7b**  | **Snap Fase F — pontinhos da grade (toggle)**                                | **✅ Fechada (commit 0557cc3)**              |
+| **7b**  | **Snap Fase G — costura final + ADR 015 + DEBT.md**                          | **✅ Fechada (cleanup aeae83a)**             |
+| **7.5** | **Consertos do slot-manager (DEBT #3 e #4 — overlay e content seguem body)** | **✅ Fechada (commit bf4610e)**              |
+| 7       | Painel de Camadas hierárquico (ex-7b original, renomeado)                    | ⏳                                           |
+| 8.5     | Gravações sobre apliques (balança + texto profissão)                         | ⏳                                           |
+| 9       | Exportação SVG por máquina/operação + PNG mockup                             | ⏳                                           |
+| 10      | Telas restantes (Grid Padrões, Histórico, Banco Ativos)                      | ⏳                                           |
+| 11      | Atalhos globais + Undo/Redo (50 níveis)                                      | ⏳                                           |
+| 12      | Polimento final + build MSI Windows                                          | ⏳                                           |
+| 13      | Validação final + smoke test do MVP completo                                 | ⏳                                           |
 
 **Sequência travada (ordem de execução):**
 
@@ -519,4 +520,4 @@ Eu leio o contexto, faço perguntas estratégicas se necessário, e começamos c
 
 ---
 
-_Última atualização: **Onda 7b INTEIRA fechada** (Fases C+D+E+E2+F+G). 4 sistemas visuais coexistem: snap (cyan vivo `#00d4ff`), medição (sky-300 `#7dd3fc`), proximidade (violet-400 `#a78bfa`), grade (ink-600 `#3a3d3f` via `fabric.Pattern`). 8 commits: 0ccd989 (C), 06d7442 (D), 9713f3b (Fix#1), db84315 (Fix#2), ad65cfe (E), 4e8f072 (E2), 0557cc3 (F), aeae83a (cleanup). 231 testes verdes. ADR 015 escrito. `docs/DEBT.md` criado com 5 dívidas abertas + 1 resolvida (`coverage/` versionado). Próxima: Onda 7 (painel de camadas hierárquico — sequência travada). **Antes da 8.5, considerar onda dedicada de "consertos do slot-manager"** (DEBT #3 e #4 — overlay e content do slot não seguem body)._
+_Última atualização: **Onda 7.5 fechada** — DEBT #3 (overlay defasado por cache do Fabric) e #4 (content texto/logo nunca seguia body) resolvidos numa cirurgia única no slot-manager. Helper `syncContentToBody(entry, phase)` em 4 pontos (`object:moving`/`scaling`/`modified` + `updateSlot`). Texto recentraliza durante drag/scale e refaz fitText no commit. Logo reescala proporcional, idempotente. `objectCaching: false` no overlay. **Bug latente da Fase D resolvido de quebra**: alignment programático agora sincroniza content. 9 testes novos em `slot-manager-sync.test.ts`. Commit `bf4610e`. 243 testes verdes (234 + 9). **Próxima: Onda 7 (painel de camadas hierárquico)**. Onda 7b fechou antes: 4 sistemas visuais coexistem (snap/medição/proximidade/grade), ADR 015 documenta as 11 decisões._
