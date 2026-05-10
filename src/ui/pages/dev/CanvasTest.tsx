@@ -24,6 +24,7 @@ import { OperatorInputs } from './canvas-test/OperatorInputs';
 import { SaveAsPatternDialog } from './canvas-test/SaveAsPatternDialog';
 import { UnifiedRightPanel } from './canvas-test/UnifiedRightPanel';
 import { SlotCreatorButtons } from './canvas-test/SlotCreatorButtons';
+import { AlignmentToolbar } from '@/ui/canvas/AlignmentToolbar';
 
 const TEST_RECT_MM = { width: 20, height: 10 };
 
@@ -333,6 +334,11 @@ export default function CanvasTest() {
           Ctrl+S salvar · Ctrl+= zoom · Ctrl+0 reset · Space+drag pan
         </span>
       </div>
+
+      {/* Onda 7b — Fase D: segunda linha condicional, aparece com seleção ativa.
+          Só montamos depois que o engine está pronto — antes disso engineRef.current
+          é null e o efeito de listener encerraria sem registrar. */}
+      {ready && <AlignmentToolbar engineRef={engineRef} />}
 
       {/* 3-column layout: canvas | UnifiedRightPanel | OperatorInputs */}
       <div className="flex flex-1 overflow-hidden">
