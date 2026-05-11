@@ -3,6 +3,7 @@ import type Database from '@tauri-apps/plugin-sql';
 import { getDb } from '../client';
 import { seedAppliques } from './seedAppliques';
 import { seedCategories } from './seedCategories';
+import { seedEngravings } from './seedEngravings';
 import { seedFonts } from './seedFonts';
 import { seedMachines } from './seedMachines';
 import { seedMaterials } from './seedMaterials';
@@ -32,6 +33,9 @@ const SEEDS: Array<[string, SeedFn]> = [
   // Onda 6a — asset banks (run after Rust seed_asset_files copies SVGs to appData)
   ['svg_bases', seedSvgBases],
   ['appliques', seedAppliques],
+  // Onda 8.5 — engravings bank. Depende de seedCategories ter rodado antes
+  // (FK engravings.category_id → categories.id). A ordem do array já garante.
+  ['engravings', seedEngravings],
 ];
 
 export async function seedDatabase(): Promise<SeedResult[]> {

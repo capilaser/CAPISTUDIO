@@ -1,8 +1,13 @@
 import type Database from '@tauri-apps/plugin-sql';
 
-// Source: v1-data/svg-categories.json
+// Source: v1-data/svg-categories.json + Onda 8.5 (engraving categories).
 // All SVG filename assignments map to category "fundo" (scope: svg-pattern).
-const CATEGORIES = [{ id: 'fundo', name: 'Fundo', scope: 'svg-pattern', color: null }] as const;
+// "profissoes" (scope: engraving) é a categoria inicial das gravações
+// (balança-advogado, futuros caduceu-medico, etc.) — ADR 010 §2.
+const CATEGORIES = [
+  { id: 'fundo', name: 'Fundo', scope: 'svg-pattern', color: null },
+  { id: 'profissoes', name: 'Profissões', scope: 'engraving', color: null },
+] as const;
 
 export async function seedCategories(db: Database): Promise<{ inserted: number; skipped: number }> {
   let inserted = 0;
