@@ -51,6 +51,11 @@ import {
   assertValidOperation,
   type Operation,
 } from '@/data/repositories/_export-validation';
+import {
+  type FontBufferLoader,
+  TextConversionError,
+  tryConvertTextToSvgPath,
+} from './svg-text-converter';
 
 /** Cor de stroke por operação (decisão Gabriell #5). */
 export const OPERATION_STROKE: Record<Operation, string> = {
@@ -91,6 +96,25 @@ export interface SvgExportOptions {
   layers: LayerMeta[];
   /** Resolve asset id → operation+machines. Veja AssetLookupFn. */
   assetLookup: AssetLookupFn;
+  /**
+   * Onda 9D-bis — converte fabric.Text em <path> via opentype.js.
+   * Opcional pra retrocompat com chamadas pré-9D-bis: sem loader, textos
+   * caem pro placeholder XML (mesmo comportamento da Fase 9D). Em produção,
+   * a UI compõe com `convertFileSrc + fetch` lendo `fonts.file` do banco.
+   *
+   * Roteamento de texto (decisão de design):
+   *   - operation = 'gravacao' (briefing Gabriell — texto é gravação normalmente).
+   *   - machines = herdadas do PrincipalLayerMeta pai (aplique). Texto solto sem
+   *     parentLayerId não tem rota — vira placeholder + erro estruturado.
+   */
+  fontBufferLoader?: FontBufferLoader;
+  /**
+   * Onda 9D-bis — callback opcional pra UI mostrar toast quando uma fonte
+   * falha (font-not-found, font-unsupported, parse-error). O texto vira
+   * placeholder XML pra não bloquear o resto do export. Sem callback,
+   * erros são apenas logados via console.warn.
+   */
+  onTextConversionError?: (err: TextConversionError, text: string) => void;
 }
 
 /**
@@ -104,7 +128,14 @@ export async function exportSvgByMachine(
   canvas: fabric.Canvas,
   options: SvgExportOptions
 ): Promise<Map<string, string>> {
-  const { productWidthMm, productHeightMm, layers, assetLookup } = options;
+  const {
+    productWidthMm,
+    productHeightMm,
+    layers,
+    assetLookup,
+    fontBufferLoader,
+    onTextConversionError,
+  } = options;
 
   // Index LayerMeta por id pra lookup O(1) ao iterar objetos do canvas.
   const layerById = new Map<string, LayerMeta>();
@@ -118,9 +149,16 @@ export async function exportSvgByMachine(
   interface ResolvedObject {
     fabricObj: fabric.FabricObject;
     layerMeta: LayerMeta;
-    asset: AssetExportInfo | null; // null = texto pendente (Fase 9D-bis)
+    /** Quando objeto é texto: o conteúdo string. */
+    text?: string;
+    /** Para shapes (não-texto): info de routing do banco. */
+    asset?: AssetExportInfo;
+    /** Para texto convertido: fragmento <g><path/></g> pré-gerado. */
+    convertedTextSvg?: string;
+    /** Operation+machines herdadas (texto) ou do asset (shapes). */
+    routing: AssetExportInfo;
+    /** True quando texto não conseguiu ser convertido — vira placeholder XML. */
     isTextPlaceholder: boolean;
-    placeholderText?: string;
   }
 
   const resolved: ResolvedObject[] = [];
@@ -142,19 +180,79 @@ export async function exportSvgByMachine(
 
     if (!layerMeta.visible) continue;
 
-    // Texto: placeholder até Fase 9D-bis (opentype.js).
+    // Texto: convertido via opentype (9D-bis) ou placeholder XML (fallback).
     if (obj.type === 'text' || obj.type === 'i-text' || obj.type === 'textbox') {
       const text = (obj as unknown as { text?: string }).text ?? '';
-      console.warn(
-        `[svg-exporter] texto "${text}" não convertido em path — Fase 9D-bis (opentype.js).`
+      // Texto herda machines do PrincipalLayerMeta pai (aplique). Operation
+      // fixa em 'gravacao' (briefing Gabriell — texto é gravação normalmente).
+      const parentRouting = await resolveTextRouting(layerMeta, layerById, assetLookup);
+
+      if (!fontBufferLoader) {
+        // Sem loader injetado — comportamento da Fase 9D (placeholder).
+        console.warn(
+          `[svg-exporter] texto "${text}" não convertido em path — ` +
+            `fontBufferLoader não foi injetado (Fase 9D legacy mode).`
+        );
+        resolved.push({
+          fabricObj: obj,
+          layerMeta,
+          text,
+          routing: parentRouting,
+          isTextPlaceholder: true,
+        });
+        continue;
+      }
+
+      // Tenta converter via opentype.js. Em falha estruturada, log + callback
+      // pra UI mostrar toast, e vira placeholder XML.
+      const fabricText = obj as unknown as {
+        text?: string;
+        fontFamily?: string;
+        fontSize?: number;
+        left?: number;
+        top?: number;
+        angle?: number;
+        scaleX?: number;
+        scaleY?: number;
+      };
+      const conversion = await tryConvertTextToSvgPath(
+        {
+          text,
+          fontFamily: fabricText.fontFamily ?? 'Montserrat',
+          fontSize: fabricText.fontSize ?? 16,
+          left: fabricText.left ?? 0,
+          top: fabricText.top ?? 0,
+          angle: fabricText.angle ?? 0,
+          scaleX: fabricText.scaleX ?? 1,
+          scaleY: fabricText.scaleY ?? 1,
+          fill: OPERATION_STROKE[parentRouting.operation],
+        },
+        fontBufferLoader
       );
-      resolved.push({
-        fabricObj: obj,
-        layerMeta,
-        asset: null,
-        isTextPlaceholder: true,
-        placeholderText: text,
-      });
+
+      if (conversion.ok) {
+        resolved.push({
+          fabricObj: obj,
+          layerMeta,
+          text,
+          routing: parentRouting,
+          convertedTextSvg: conversion.svg,
+          isTextPlaceholder: false,
+        });
+      } else {
+        console.warn(
+          `[svg-exporter] falha ao converter texto "${text}" via opentype.js ` +
+            `(${conversion.error.kind}): ${conversion.error.message}`
+        );
+        onTextConversionError?.(conversion.error, text);
+        resolved.push({
+          fabricObj: obj,
+          layerMeta,
+          text,
+          routing: parentRouting,
+          isTextPlaceholder: true,
+        });
+      }
       continue;
     }
 
@@ -198,15 +296,15 @@ export async function exportSvgByMachine(
       fabricObj: obj,
       layerMeta,
       asset,
+      routing: asset,
       isTextPlaceholder: false,
     });
   }
 
-  // ── Coleta máquinas únicas envolvidas ─────────────────────────────────────
+  // ── Coleta máquinas únicas envolvidas (inclui texto) ──────────────────────
   const machinesInvolved = new Set<string>();
   for (const r of resolved) {
-    if (r.isTextPlaceholder) continue;
-    for (const m of r.asset!.machines) machinesInvolved.add(m);
+    for (const m of r.routing.machines) machinesInvolved.add(m);
   }
 
   if (machinesInvolved.size === 0) {
@@ -219,17 +317,24 @@ export async function exportSvgByMachine(
     const elements: string[] = [];
 
     for (const r of resolved) {
-      if (r.isTextPlaceholder) {
-        // Placeholder XML pra Fase 9D-bis — não conta como erro.
-        elements.push(
-          `  <!-- Texto pendente: ${escapeXmlComment(r.placeholderText ?? '')} (Onda 9D-bis: opentype.js) -->`
-        );
+      if (!r.routing.machines.includes(machineId)) continue;
+
+      if (r.text !== undefined) {
+        // Caminho de texto: convertido ou placeholder.
+        if (r.isTextPlaceholder) {
+          elements.push(
+            `  <!-- Texto pendente: ${escapeXmlComment(r.text)} (Onda 9D-bis: opentype.js) -->`
+          );
+        } else {
+          // Texto convertido já vem com a cor da operação aplicada no fill
+          // (escolhida em tryConvertTextToSvgPath via OPERATION_STROKE[op]).
+          elements.push(r.convertedTextSvg!);
+        }
         continue;
       }
-      const asset = r.asset!;
-      if (!asset.machines.includes(machineId)) continue;
 
-      const fragment = renderObjectSvg(r.fabricObj, asset.operation);
+      // Shape normal (Path/Rect/Circle/etc).
+      const fragment = renderObjectSvg(r.fabricObj, r.routing.operation);
       elements.push(fragment);
     }
 
@@ -241,6 +346,59 @@ export async function exportSvgByMachine(
   }
 
   return output;
+}
+
+/**
+ * Resolve operation/machines pra um TEXTO (VisualLayerMeta de fabric.Text).
+ *
+ * Regras:
+ *   - operation = 'gravacao' fixa (briefing Gabriell — texto é gravação).
+ *   - machines = do PrincipalLayerMeta pai (aplique) via layerMeta.parentLayerId
+ *     → resolve appliqueId → assetLookup.
+ *   - Sem parentLayerId ou pai sem appliqueId → lança (texto sem rota).
+ *
+ * Pode parecer estranho que texto seja sempre gravação mesmo num aplique
+ * de corte — mas é o que faz sentido produção. Aplique passa pela máquina,
+ * texto vai ser gravado nessa mesma máquina antes/depois do corte.
+ */
+async function resolveTextRouting(
+  textLayer: LayerMeta,
+  layerById: Map<string, LayerMeta>,
+  assetLookup: AssetLookupFn
+): Promise<AssetExportInfo> {
+  if (textLayer.kind !== 'visual') {
+    throw new Error(
+      `[svg-exporter] texto com LayerMeta.kind="${textLayer.kind}" — esperado 'visual'.`
+    );
+  }
+  if (!textLayer.parentLayerId) {
+    throw new Error(
+      `[svg-exporter] texto id="${textLayer.id}" name="${textLayer.name}" sem parentLayerId — ` +
+        `texto solto não tem rota de export. Coloque-o como filho de um aplique.`
+    );
+  }
+  const parent = layerById.get(textLayer.parentLayerId);
+  if (!parent) {
+    throw new Error(
+      `[svg-exporter] texto id="${textLayer.id}" aponta pra parentLayerId="${textLayer.parentLayerId}" ` +
+        `que não existe — estado quebrado.`
+    );
+  }
+  if (parent.kind !== 'principal' || !parent.appliqueId) {
+    throw new Error(
+      `[svg-exporter] texto id="${textLayer.id}" tem pai não-principal ou sem appliqueId — ` +
+        `texto só herda routing de aplique do banco.`
+    );
+  }
+  const parentAsset = await assetLookup(parent.appliqueId);
+  if (!parentAsset) {
+    throw new Error(
+      `[svg-exporter] aplique pai (id="${parent.appliqueId}") do texto não está no banco.`
+    );
+  }
+  // Texto = gravacao. Machines vêm do aplique pai (a peça vai pra essa máquina,
+  // o texto também vai).
+  return { operation: 'gravacao', machines: parentAsset.machines };
 }
 
 // ── Helpers privados ─────────────────────────────────────────────────────────

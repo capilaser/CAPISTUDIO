@@ -335,6 +335,150 @@ describe('svg-exporter (Onda 9 Fase 9D)', () => {
     });
   });
 
+  // ── Integração com text-converter (Fase 9D-bis) ──────────────────────────
+  describe('integração com opentype text-converter', () => {
+    const FONTS_DIR = join(
+      dirname(fileURLToPath(import.meta.url)),
+      '../../../src-tauri/resources/fonts'
+    );
+    function diskFontLoader() {
+      const map: Record<string, string> = {
+        Montserrat: 'Montserrat-Variable.ttf',
+        'Bebas Neue': 'BebasNeue-Regular.ttf',
+        'Roboto Slab': 'RobotoSlab-Variable.ttf',
+      };
+      return async (family: string) => {
+        const file = map[family];
+        if (!file) return null;
+        const buf = readFileSync(join(FONTS_DIR, file));
+        return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+      };
+    }
+
+    it('com fontBufferLoader: texto vira <path> real (não placeholder), cor=vermelho gravação', async () => {
+      const ap = parseCorelSvg(await loadFixture('apliques/aplique-1-formato-d.svg'));
+      const apliqueId = await engine.addAppliqueSvg(ap, 'Ap1', 'aplique-1-formato-d');
+
+      const text = new fabric.IText('Capi', {
+        left: 100,
+        top: 50,
+        fontFamily: 'Montserrat',
+        fontSize: 16,
+      });
+      (text as unknown as { id: string }).id = 'txt-1';
+      engine.canvas.add(text);
+
+      // LayerMeta visual filho do aplique (vai herdar machines).
+      const layers = layersSnapshot();
+      layers.push({
+        id: 'txt-1',
+        parentLayerId: apliqueId,
+        name: 'Nome',
+        zIndex: 99,
+        visible: true,
+        locked: false,
+        kind: 'visual',
+        materialId: null,
+      });
+
+      const out = await exportSvgByMachine(engine.canvas, {
+        productWidthMm: 300,
+        productHeightMm: 90,
+        layers,
+        assetLookup: makeLookup({
+          'aplique-1-formato-d': { operation: 'corte', machines: ['fiber-laser'] },
+        }),
+        fontBufferLoader: diskFontLoader(),
+      });
+
+      const fiberSvg = out.get('fiber-laser')!;
+      // Path real, não placeholder.
+      expect(fiberSvg).not.toContain('<!-- Texto pendente');
+      expect(fiberSvg).toMatch(/<path d="M[^"]+"\s+fill="#FF0000"/);
+    });
+
+    it('com fonte unsupported (Roboto Slab): cai pro placeholder + onTextConversionError é chamado', async () => {
+      const ap = parseCorelSvg(await loadFixture('apliques/aplique-1-formato-d.svg'));
+      const apliqueId = await engine.addAppliqueSvg(ap, 'Ap1', 'aplique-1-formato-d');
+
+      const text = new fabric.IText('Teste', {
+        left: 100,
+        top: 50,
+        fontFamily: 'Roboto Slab',
+        fontSize: 16,
+      });
+      (text as unknown as { id: string }).id = 'txt-bad';
+      engine.canvas.add(text);
+
+      const layers = layersSnapshot();
+      layers.push({
+        id: 'txt-bad',
+        parentLayerId: apliqueId,
+        name: 'Nome',
+        zIndex: 99,
+        visible: true,
+        locked: false,
+        kind: 'visual',
+        materialId: null,
+      });
+
+      const errors: Array<{ kind: string; family: string; text: string }> = [];
+      const out = await exportSvgByMachine(engine.canvas, {
+        productWidthMm: 300,
+        productHeightMm: 90,
+        layers,
+        assetLookup: makeLookup({
+          'aplique-1-formato-d': { operation: 'corte', machines: ['fiber-laser'] },
+        }),
+        fontBufferLoader: diskFontLoader(),
+        onTextConversionError: (err, text) =>
+          errors.push({ kind: err.kind, family: err.fontFamily, text }),
+      });
+
+      const fiberSvg = out.get('fiber-laser')!;
+      expect(fiberSvg).toContain('<!-- Texto pendente: Teste');
+      expect(errors).toHaveLength(1);
+      expect(errors[0]).toMatchObject({
+        kind: 'font-unsupported',
+        family: 'Roboto Slab',
+        text: 'Teste',
+      });
+    });
+
+    it('texto sem parentLayerId lança erro de routing claro', async () => {
+      const text = new fabric.IText('Solto', {
+        left: 100,
+        top: 50,
+        fontFamily: 'Montserrat',
+        fontSize: 16,
+      });
+      (text as unknown as { id: string }).id = 'txt-orphan';
+      engine.canvas.add(text);
+
+      const layers = layersSnapshot();
+      layers.push({
+        id: 'txt-orphan',
+        parentLayerId: null,
+        name: 'Solto',
+        zIndex: 0,
+        visible: true,
+        locked: false,
+        kind: 'visual',
+        materialId: null,
+      });
+
+      await expect(
+        exportSvgByMachine(engine.canvas, {
+          productWidthMm: 300,
+          productHeightMm: 90,
+          layers,
+          assetLookup: makeLookup({}),
+          fontBufferLoader: diskFontLoader(),
+        })
+      ).rejects.toThrow(/sem parentLayerId/);
+    });
+  });
+
   // ── Texto: placeholder + escape de '--' em comentário XML ───────────────
   describe('texto pendente (Fase 9D-bis)', () => {
     it('emite comentário placeholder para fabric.Text e escapa "--" no conteúdo', async () => {
