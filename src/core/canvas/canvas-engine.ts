@@ -1319,6 +1319,86 @@ export class CanvasEngine {
   }
 
   /**
+   * Adiciona uma gravação do banco como camada visual no canvas (Onda 8.5).
+   *
+   * Diferenças vs `addAppliqueSvg`:
+   *   - Cria `VisualLayerMeta` (kind: 'visual'), não principal — gravação é
+   *     filha de aplique, não peça física.
+   *   - Aceita `parentLayerId` opcional do caller (resolvido via
+   *     `resolveParentAppliqueId` no painel). Quando há aplique pai válido,
+   *     posiciona no centro do APLIQUE (não do canvas); senão, centro do canvas.
+   *   - Persiste `engravingId` em `VisualLayerMeta.engravingId` — Onda 9 lê
+   *     isso pra rotear pra máquina/operação correta via `engraving.metadata`.
+   *     Padrão idêntico ao `appliqueId` em `PrincipalLayerMeta`.
+   *   - Seleciona o grupo recém-criado (setActiveObject + selection:created).
+   *
+   * Retorna o capi id do grupo (novo VisualLayer).
+   */
+  async addEngravingSvg(
+    meta: CorelSvgMeta,
+    name: string,
+    engravingId: string,
+    parentLayerId: string | null
+  ): Promise<string> {
+    const { objects } = await fabric.loadSVGFromString(meta.svgStripped);
+    const validObjects = objects.filter((o): o is fabric.FabricObject => o !== null);
+    if (validObjects.length === 0) {
+      throw new Error(
+        `[canvas-engine] addEngravingSvg: no drawable shapes in SVG for engraving "${engravingId}".`
+      );
+    }
+
+    // ADR 011: fill: '' = transparent. Stroke padrão da peça.
+    for (const obj of validObjects) {
+      obj.set({ fill: '', stroke: SVG_BASE_STROKE, strokeWidth: 1, strokeUniform: true });
+    }
+
+    const group = fabric.util.groupSVGElements(validObjects);
+
+    const scaleX = meta.scaleFactor;
+    const scaleY = mmToPx(meta.heightMm) / meta.viewBoxH;
+
+    // Posição inicial: centro do aplique pai quando há parentLayerId válido,
+    // senão centro do canvas. parentBounds vem em mm, convertemos pra px.
+    const parentBounds = parentLayerId ? this.getParentBoundsForObject(parentLayerId) : null;
+    const cxMm = parentBounds
+      ? parentBounds.left + parentBounds.width / 2
+      : this.config.productWidthMm / 2;
+    const cyMm = parentBounds
+      ? parentBounds.top + parentBounds.height / 2
+      : this.config.productHeightMm / 2;
+    const left = mmToPx(cxMm - meta.widthMm / 2);
+    const top = mmToPx(cyMm - meta.heightMm / 2);
+
+    group.set({ left, top, originX: 'left', originY: 'top', scaleX, scaleY });
+
+    const id = generateObjectId();
+    (group as unknown as Record<string, unknown>).id = id;
+
+    this.canvas.add(group);
+
+    const visualMeta: VisualLayerMeta = {
+      id,
+      parentLayerId,
+      name,
+      zIndex: this.canvas.getObjects().length - 1,
+      visible: true,
+      locked: false,
+      kind: 'visual',
+      materialId: null,
+      engravingId,
+    };
+    this.layerMeta.set(id, visualMeta);
+
+    // Seleciona o grupo recém-criado — feedback imediato + atalho pra
+    // alignment/proximity overlay reagir na sequência.
+    this.canvas.setActiveObject(group);
+    this.canvas.requestRenderAll();
+
+    return id;
+  }
+
+  /**
    * Adds a user-editable rectangle in product mm coordinates.
    * Top-left positioning, dimensions in mm.
    * Automatically registers a LayerMeta entry (kind='visual').

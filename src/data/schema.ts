@@ -202,6 +202,13 @@ export type VisualLayerMeta = {
   kind: 'visual';
   /** Material (texture) applied to this layer. Null when no texture is applied. */
   materialId: string | null;
+  /**
+   * FK → engravings.id quando a camada veio do Banco de Gravações (Onda 8.5).
+   * Null/undefined = camada visual genérica (rect, slot, etc).
+   * A Onda 9 (export) vai ler esse campo pra rotear gravação pra máquina
+   * correta via engraving.metadata — ver IDEAS/onda-9-export-respeita-layer-visible.md.
+   */
+  engravingId?: string;
 };
 
 /** Union of all LayerMeta variants. Narrow with `kind` discriminant or type guards. */
