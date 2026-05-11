@@ -1634,6 +1634,14 @@ export class CanvasEngine {
   }
 
   /**
+   * Lê texto atual de um slot. Delegação pro SlotManager.getSlotText.
+   * Onda 9.F (auto-fill dialog export PNG) + reuso futuro pela Onda 11.
+   */
+  getSlotText(slotId: string): string | null {
+    return this.slotManager.getSlotText(slotId);
+  }
+
+  /**
    * Applies fitText and renders the text inside the first slot of the given type.
    * No-op if no slot of that type exists.
    */

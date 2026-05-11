@@ -260,6 +260,31 @@ export class SlotManager {
       .map((e) => ({ ...e.meta }));
   }
 
+  /**
+   * Lê o texto atual de um slot de texto (nome/profissao/custom).
+   * Retorna null se:
+   *   - Slot não existir
+   *   - Slot for de tipo logo (não tem texto)
+   *   - Content do slot não for fabric.Text (ainda não foi populado)
+   *
+   * Adicionado na Onda 9.F com autorização explícita do Gabriell pra
+   * auto-preencher dialog de export PNG (cliente/profissão). Será
+   * reutilizado na Onda 11 (histórico de pedidos). Pure read — não muta
+   * entry, não dispara eventos, não chama outros métodos.
+   */
+  getSlotText(slotId: string): string | null {
+    const entry = this.slots.get(slotId);
+    if (!entry) return null;
+
+    const content = entry.content;
+    if (!content) return null;
+
+    if ('text' in content && typeof (content as { text?: unknown }).text === 'string') {
+      return (content as { text: string }).text;
+    }
+    return null;
+  }
+
   // ─── Mode ─────────────────────────────────────────────────────────────────
 
   /**
