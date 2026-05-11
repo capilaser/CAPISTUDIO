@@ -1,10 +1,14 @@
 /**
- * UnifiedRightPanel.tsx — Onda 6.5 Fase B + Onda 7
+ * UnifiedRightPanel.tsx — Onda 6.5 Fase B + Onda 7 + Onda 8.5
  *
- * Always-visible right panel (w-[280px] shrink-0) with 3 tabs:
+ * Always-visible right panel (w-[280px] shrink-0) with 4 tabs:
  *   - Apliques  : ApliquePanel (Onda 6.5 Fase C)
+ *   - Gravações : EngravingPanel (Onda 8.5)
  *   - Materiais : MaterialPanel (migrated from RightPanel)
- *   - Camadas   : LayerPanel (Onda 7 — preenche o slot antes desabilitado)
+ *   - Camadas   : LayerPanel (Onda 7)
+ *
+ * Ordem semântica: o que adicionar (SVG → Apliques, Gravações) vem antes
+ * do como pintar (PNG → Materiais) e do que tá no canvas (Camadas).
  *
  * DEV-only component rendered from CanvasTest.
  */
@@ -14,6 +18,7 @@ import type { CanvasEngine } from '@/core/canvas/canvas-engine';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/ui/components/tabs';
 import { LayerPanel } from '@/ui/canvas/LayerPanel';
 import { ApliquePanel } from './ApliquePanel';
+import { EngravingPanel } from './EngravingPanel';
 import { MaterialPanel } from './MaterialPanel';
 
 interface UnifiedRightPanelProps {
@@ -28,6 +33,9 @@ export function UnifiedRightPanel({ engineRef }: UnifiedRightPanelProps) {
           <TabsTrigger value="apliques" className="font-mono text-[11px]">
             Apliques
           </TabsTrigger>
+          <TabsTrigger value="gravacoes" className="font-mono text-[11px]">
+            Gravações
+          </TabsTrigger>
           <TabsTrigger value="materiais" className="font-mono text-[11px]">
             Materiais
           </TabsTrigger>
@@ -39,6 +47,11 @@ export function UnifiedRightPanel({ engineRef }: UnifiedRightPanelProps) {
         {/* Apliques — ApliquePanel (Fase C) */}
         <TabsContent value="apliques" className="min-h-0 flex-1 overflow-y-auto">
           <ApliquePanel engineRef={engineRef} />
+        </TabsContent>
+
+        {/* Gravações — Onda 8.5 */}
+        <TabsContent value="gravacoes" className="min-h-0 flex-1 overflow-y-auto">
+          <EngravingPanel engineRef={engineRef} />
         </TabsContent>
 
         {/* Materiais — conteúdo migrado do RightPanel */}
