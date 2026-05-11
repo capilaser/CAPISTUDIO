@@ -93,6 +93,13 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        // Onda 9.F — plugins necessários pro fluxo de export PNG:
+        //   dialog: usuário escolhe pasta de destino (Tauri file picker)
+        //   fs:     gravar o PNG no disco escolhido
+        //   shell:  abrir Windows Explorer na pasta após exportar
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_shell::init())
         .plugin(
             SqlBuilder::default()
                 .add_migrations("sqlite:capi-studio.db", migrations)
