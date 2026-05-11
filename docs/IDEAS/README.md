@@ -32,3 +32,4 @@ Gabriell fala "registra essa ideia: [descrição]" e o Claude (chat consultor) m
 - `onda-9-export-respeita-layer-visible.md` — Onda 9 deve ler `LayerMeta.visible`, `appliqueId` e `engravingId` (contrato técnico crítico)
 - `onda-10-ui-cadastro-bancos.md` — UI completa de cadastro dos 3 bancos (Apliques, Gravações, Marcações) — runtime copy + normalize
 - `onda-13-cleanup-geometry-type.md` — Mover `RectMm` pra `src/lib/geometry.ts` neutro (cleanup arquitetural pós Mini-Onda 8.6)
+- `precisao-pos-drag-aplique.md` — Restaurar precisão exata em `originalBounds` após drag/scale do aplique (limite conhecido pós Mini-Onda 8.6)
