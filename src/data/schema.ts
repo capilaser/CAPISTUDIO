@@ -233,6 +233,12 @@ export type VisualLayerMeta = {
    * correta via engraving.metadata — ver IDEAS/onda-9-export-respeita-layer-visible.md.
    */
   engravingId?: string;
+  /**
+   * FK → markings.id quando a camada veio do Banco de Marcações (Onda 9).
+   * Null/undefined = camada visual genérica. Espelha engravingId — mesma
+   * função no export (rotear pra máquina via marking.operation/machines).
+   */
+  markingId?: string;
 };
 
 /** Union of all LayerMeta variants. Narrow with `kind` discriminant or type guards. */
@@ -438,6 +444,12 @@ export const appliques = sqliteTable('appliques', {
   heightMm: real('height_mm'),
   tags: text('tags').notNull().default('[]'), // JSON: string[]
   metadata: text('metadata'), // JSON: arbitrary extra data
+  // Onda 9: operação e máquinas — usadas pelo motor de exportação SVG pra
+  // rotear cada asset pra arquivo de máquina correto + aplicar cor semântica.
+  // operation: 'corte' | 'marcacao' | 'gravacao'. machines: JSON array de
+  // ids (1-3 entries). Validação runtime no repository.
+  operation: text('operation').notNull().default('corte'),
+  machines: text('machines').notNull().default('[]'), // JSON: string[] de machine ids
   createdAt: integer('created_at', { mode: 'timestamp' })
     .notNull()
     .default(sql`(unixepoch())`),
@@ -458,6 +470,9 @@ export const engravings = sqliteTable('engravings', {
   tags: text('tags').notNull().default('[]'), // JSON: string[]
   metadata: text('metadata'), // JSON: arbitrary extra data
   categoryId: text('category_id').references(() => categories.id),
+  // Onda 9: rota pra exportação SVG. Ver appliques acima pra contrato.
+  operation: text('operation').notNull().default('gravacao'),
+  machines: text('machines').notNull().default('[]'),
   createdAt: integer('created_at', { mode: 'timestamp' })
     .notNull()
     .default(sql`(unixepoch())`),
@@ -475,6 +490,15 @@ export const markings = sqliteTable('markings', {
   heightMm: real('height_mm'),
   tags: text('tags').notNull().default('[]'), // JSON: string[]
   metadata: text('metadata'), // JSON: arbitrary extra data
+  // Onda 9: categoryId (nullable FK) — espelha engravings. Marcações sem
+  // categoria têm NULL.
+  categoryId: text('category_id').references(() => categories.id),
+  // Onda 9: rota pra exportação SVG. Ver appliques pra contrato. Note que
+  // "Marcação banco" (asset reutilizável) é DIFERENTE de "operação Marcação"
+  // (cor azul, máquina específica) — operation aqui é a operação de produção
+  // que ESTE asset dispara, geralmente 'marcacao' mas pode ser outra.
+  operation: text('operation').notNull().default('marcacao'),
+  machines: text('machines').notNull().default('[]'),
   createdAt: integer('created_at', { mode: 'timestamp' })
     .notNull()
     .default(sql`(unixepoch())`),
