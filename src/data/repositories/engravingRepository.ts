@@ -1,4 +1,5 @@
 import { getDb } from '../client';
+import { assertValidMachines, assertValidOperation, type Operation } from './_export-validation';
 
 export interface Engraving {
   id: string;
@@ -11,6 +12,10 @@ export interface Engraving {
   metadata: Record<string, unknown> | null;
   /** Onda 8.5: FK lógica → categories.id. Null = gravação sem categoria. */
   categoryId: string | null;
+  /** Onda 9: operação de produção. Default 'gravacao'. */
+  operation: Operation;
+  /** Onda 9: machine ids (1-3). Validado em runtime. */
+  machines: string[];
   createdAt: number;
   deletedAt: number | null;
 }
@@ -25,15 +30,24 @@ interface EngravingRow {
   tags: string; // JSON string
   metadata: string | null; // JSON string
   categoryId: string | null;
+  operation: string;
+  machines: string; // JSON string
   createdAt: number;
   deletedAt: number | null;
 }
 
 function toEngraving(row: EngravingRow): Engraving {
+  const machines = JSON.parse(row.machines) as unknown;
+  // Validação defensiva — banco pode ter valor default '[]' de migration.
+  // Não throw aqui (lista pode ter entries inválidas legitimamente pré-backfill);
+  // garante apenas que é array.
+  const machinesArr: string[] = Array.isArray(machines) ? (machines as string[]) : [];
   return {
     ...row,
     tags: JSON.parse(row.tags) as string[],
     metadata: row.metadata ? (JSON.parse(row.metadata) as Record<string, unknown>) : null,
+    operation: row.operation as Operation,
+    machines: machinesArr,
   };
 }
 
@@ -44,6 +58,7 @@ export async function list(): Promise<Engraving[]> {
     `SELECT id, name, file_path as filePath, thumbnail_path as thumbnailPath,
             width_mm as widthMm, height_mm as heightMm,
             tags, metadata, category_id as categoryId,
+            operation, machines,
             created_at as createdAt, deleted_at as deletedAt
      FROM engravings
      WHERE deleted_at IS NULL
@@ -59,6 +74,7 @@ export async function getById(id: string): Promise<Engraving | null> {
     `SELECT id, name, file_path as filePath, thumbnail_path as thumbnailPath,
             width_mm as widthMm, height_mm as heightMm,
             tags, metadata, category_id as categoryId,
+            operation, machines,
             created_at as createdAt, deleted_at as deletedAt
      FROM engravings
      WHERE id = ? AND deleted_at IS NULL`,
@@ -78,15 +94,24 @@ export interface CreateEngravingInput {
   metadata?: Record<string, unknown>;
   /** Onda 8.5: FK → categories.id. Omit ou null = sem categoria. */
   categoryId?: string | null;
+  /** Onda 9: 'corte' | 'marcacao' | 'gravacao'. Default 'gravacao'. */
+  operation?: Operation;
+  /** Onda 9: machine ids (1-3). Obrigatório (validado em runtime). */
+  machines: string[];
 }
 
-/** Insert a new engraving. Throws on duplicate id. */
+/** Insert a new engraving. Throws on duplicate id ou em violação de operation/machines. */
 export async function create(input: CreateEngravingInput): Promise<void> {
+  // Validação runtime — TypeScript não pega valores vindos de JSON externo.
+  const operation = input.operation ?? 'gravacao';
+  assertValidOperation(operation, `engravingRepository.create(${input.id})`);
+  assertValidMachines(input.machines, `engravingRepository.create(${input.id})`);
+
   const db = await getDb();
   await db.execute(
     `INSERT INTO engravings
-       (id, name, file_path, thumbnail_path, width_mm, height_mm, tags, metadata, category_id, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch())`,
+       (id, name, file_path, thumbnail_path, width_mm, height_mm, tags, metadata, category_id, operation, machines, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch())`,
     [
       input.id,
       input.name,
@@ -97,6 +122,8 @@ export async function create(input: CreateEngravingInput): Promise<void> {
       JSON.stringify(input.tags ?? []),
       input.metadata ? JSON.stringify(input.metadata) : null,
       input.categoryId ?? null,
+      operation,
+      JSON.stringify(input.machines),
     ]
   );
 }
@@ -118,6 +145,7 @@ export async function listByCategory(categoryId: string | null | undefined): Pro
       `SELECT id, name, file_path as filePath, thumbnail_path as thumbnailPath,
               width_mm as widthMm, height_mm as heightMm,
               tags, metadata, category_id as categoryId,
+              operation, machines,
               created_at as createdAt, deleted_at as deletedAt
        FROM engravings
        WHERE deleted_at IS NULL AND category_id IS NULL
@@ -129,6 +157,7 @@ export async function listByCategory(categoryId: string | null | undefined): Pro
     `SELECT id, name, file_path as filePath, thumbnail_path as thumbnailPath,
             width_mm as widthMm, height_mm as heightMm,
             tags, metadata, category_id as categoryId,
+            operation, machines,
             created_at as createdAt, deleted_at as deletedAt
      FROM engravings
      WHERE deleted_at IS NULL AND category_id = ?

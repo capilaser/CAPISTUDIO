@@ -73,12 +73,18 @@ export function UploadApliqueDialog({ open, onClose, onSaved }: Props) {
     try {
       const id = crypto.randomUUID();
       const absolutePath = await saveAppliqueFile(id, rawSvg);
+      // Onda 9: operation/machines obrigatórios no contrato do repository.
+      // UI de escolha será adicionada na Onda 10 (cadastro com formulário
+      // completo). Por ora aplicamos o default consistente com o backfill
+      // (corte + fiber-laser) — o usuário poderá editar depois.
       await createApplique({
         id,
         name: name.trim(),
         filePath: absolutePath,
         widthMm: meta.widthMm,
         heightMm: meta.heightMm,
+        operation: 'corte',
+        machines: ['fiber-laser'],
       });
       reset();
       onSaved();

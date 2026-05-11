@@ -1,4 +1,5 @@
 import { getDb } from '../client';
+import { assertValidMachines, assertValidOperation, type Operation } from './_export-validation';
 
 export interface Applique {
   id: string;
@@ -9,6 +10,10 @@ export interface Applique {
   heightMm: number | null;
   tags: string[];
   metadata: Record<string, unknown> | null;
+  /** Onda 9: 'corte' | 'marcacao' | 'gravacao'. */
+  operation: Operation;
+  /** Onda 9: machine ids (1-3). */
+  machines: string[];
   createdAt: number;
   deletedAt: number | null;
 }
@@ -22,15 +27,21 @@ interface AppliqueRow {
   heightMm: number | null;
   tags: string; // JSON string
   metadata: string | null; // JSON string
+  operation: string;
+  machines: string; // JSON string
   createdAt: number;
   deletedAt: number | null;
 }
 
 function toApplique(row: AppliqueRow): Applique {
+  const machines = JSON.parse(row.machines) as unknown;
+  const machinesArr: string[] = Array.isArray(machines) ? (machines as string[]) : [];
   return {
     ...row,
     tags: JSON.parse(row.tags) as string[],
     metadata: row.metadata ? (JSON.parse(row.metadata) as Record<string, unknown>) : null,
+    operation: row.operation as Operation,
+    machines: machinesArr,
   };
 }
 
@@ -40,7 +51,8 @@ export async function list(): Promise<Applique[]> {
   const rows = await db.select<AppliqueRow[]>(
     `SELECT id, name, file_path as filePath, thumbnail_path as thumbnailPath,
             width_mm as widthMm, height_mm as heightMm,
-            tags, metadata, created_at as createdAt, deleted_at as deletedAt
+            tags, metadata, operation, machines,
+            created_at as createdAt, deleted_at as deletedAt
      FROM appliques
      WHERE deleted_at IS NULL
      ORDER BY name`
@@ -54,7 +66,8 @@ export async function getById(id: string): Promise<Applique | null> {
   const rows = await db.select<AppliqueRow[]>(
     `SELECT id, name, file_path as filePath, thumbnail_path as thumbnailPath,
             width_mm as widthMm, height_mm as heightMm,
-            tags, metadata, created_at as createdAt, deleted_at as deletedAt
+            tags, metadata, operation, machines,
+            created_at as createdAt, deleted_at as deletedAt
      FROM appliques
      WHERE id = ? AND deleted_at IS NULL`,
     [id]
@@ -71,15 +84,23 @@ export interface CreateAppliqueInput {
   heightMm?: number;
   tags?: string[];
   metadata?: Record<string, unknown>;
+  /** Onda 9: default 'corte'. */
+  operation?: Operation;
+  /** Onda 9: obrigatório, validado em runtime. */
+  machines: string[];
 }
 
-/** Insert a new applique. Throws on duplicate id. */
+/** Insert a new applique. Throws on duplicate id ou violação de operation/machines. */
 export async function create(input: CreateAppliqueInput): Promise<void> {
+  const operation = input.operation ?? 'corte';
+  assertValidOperation(operation, `appliqueRepository.create(${input.id})`);
+  assertValidMachines(input.machines, `appliqueRepository.create(${input.id})`);
+
   const db = await getDb();
   await db.execute(
     `INSERT INTO appliques
-       (id, name, file_path, thumbnail_path, width_mm, height_mm, tags, metadata, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, unixepoch())`,
+       (id, name, file_path, thumbnail_path, width_mm, height_mm, tags, metadata, operation, machines, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch())`,
     [
       input.id,
       input.name,
@@ -89,6 +110,8 @@ export async function create(input: CreateAppliqueInput): Promise<void> {
       input.heightMm ?? null,
       JSON.stringify(input.tags ?? []),
       input.metadata ? JSON.stringify(input.metadata) : null,
+      operation,
+      JSON.stringify(input.machines),
     ]
   );
 }
