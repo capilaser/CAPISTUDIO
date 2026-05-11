@@ -115,6 +115,18 @@ export interface SvgExportOptions {
    * erros são apenas logados via console.warn.
    */
   onTextConversionError?: (err: TextConversionError, text: string) => void;
+  /**
+   * Onda 9D-bis-fix — overrides de roteamento por texto, vindos do dialog de
+   * confirmação da Fase 9F. Chave = id capi do texto (LayerMeta.id).
+   *
+   *   - operation: substitui o default 'gravacao'.
+   *   - machines (opcional): substitui o default herdado do PrincipalLayerMeta
+   *     pai. Quando omitido, machines continuam vindo do aplique pai.
+   *
+   * Override é por pedido, NÃO persiste no padrão mestre (CLAUDE.md regra).
+   * Texto que não tem entrada no Map mantém defaults da decisão da 9D-bis.
+   */
+  textRouting?: Map<string, { operation: Operation; machines?: string[] }>;
 }
 
 /**
@@ -135,6 +147,7 @@ export async function exportSvgByMachine(
     assetLookup,
     fontBufferLoader,
     onTextConversionError,
+    textRouting,
   } = options;
 
   // Index LayerMeta por id pra lookup O(1) ao iterar objetos do canvas.
@@ -185,7 +198,13 @@ export async function exportSvgByMachine(
       const text = (obj as unknown as { text?: string }).text ?? '';
       // Texto herda machines do PrincipalLayerMeta pai (aplique). Operation
       // fixa em 'gravacao' (briefing Gabriell — texto é gravação normalmente).
-      const parentRouting = await resolveTextRouting(layerMeta, layerById, assetLookup);
+      // Override via textRouting (Fase 9F dialog) tem prioridade.
+      const parentRouting = await resolveTextRouting(
+        layerMeta,
+        layerById,
+        assetLookup,
+        textRouting?.get(id)
+      );
 
       if (!fontBufferLoader) {
         // Sem loader injetado — comportamento da Fase 9D (placeholder).
@@ -351,11 +370,19 @@ export async function exportSvgByMachine(
 /**
  * Resolve operation/machines pra um TEXTO (VisualLayerMeta de fabric.Text).
  *
- * Regras:
+ * Regras (default):
  *   - operation = 'gravacao' fixa (briefing Gabriell — texto é gravação).
  *   - machines = do PrincipalLayerMeta pai (aplique) via layerMeta.parentLayerId
  *     → resolve appliqueId → assetLookup.
  *   - Sem parentLayerId ou pai sem appliqueId → lança (texto sem rota).
+ *
+ * Override (Fase 9F dialog):
+ *   - Se `override.operation` informado, substitui o default 'gravacao'.
+ *   - Se `override.machines` informado, substitui as machines do pai —
+ *     útil quando o usuário quer enviar o texto pra máquina diferente do
+ *     aplique. Quando há machines no override, NÃO precisamos do pai
+ *     (texto pode até ser solto — ainda preciso de parentLayerId só pra
+ *     manter o invariante hierárquico).
  *
  * Pode parecer estranho que texto seja sempre gravação mesmo num aplique
  * de corte — mas é o que faz sentido produção. Aplique passa pela máquina,
@@ -364,17 +391,29 @@ export async function exportSvgByMachine(
 async function resolveTextRouting(
   textLayer: LayerMeta,
   layerById: Map<string, LayerMeta>,
-  assetLookup: AssetLookupFn
+  assetLookup: AssetLookupFn,
+  override?: { operation: Operation; machines?: string[] }
 ): Promise<AssetExportInfo> {
   if (textLayer.kind !== 'visual') {
     throw new Error(
       `[svg-exporter] texto com LayerMeta.kind="${textLayer.kind}" — esperado 'visual'.`
     );
   }
+
+  // Caminho rápido: override fornece operation + machines. Pula resolução
+  // do pai inteiramente (dialog da Fase 9F é autoritativo).
+  if (override?.machines) {
+    assertValidOperation(override.operation, `svg-exporter:textOverride(${textLayer.id})`);
+    assertValidMachines(override.machines, `svg-exporter:textOverride(${textLayer.id})`);
+    return { operation: override.operation, machines: override.machines };
+  }
+
+  // Caminho normal: precisa do PrincipalLayerMeta pai pra herdar machines.
   if (!textLayer.parentLayerId) {
     throw new Error(
       `[svg-exporter] texto id="${textLayer.id}" name="${textLayer.name}" sem parentLayerId — ` +
-        `texto solto não tem rota de export. Coloque-o como filho de um aplique.`
+        `texto solto não tem rota de export. Coloque-o como filho de um aplique ou ` +
+        `passe textRouting com machines explícitas pra esse texto.`
     );
   }
   const parent = layerById.get(textLayer.parentLayerId);
@@ -396,9 +435,12 @@ async function resolveTextRouting(
       `[svg-exporter] aplique pai (id="${parent.appliqueId}") do texto não está no banco.`
     );
   }
-  // Texto = gravacao. Machines vêm do aplique pai (a peça vai pra essa máquina,
-  // o texto também vai).
-  return { operation: 'gravacao', machines: parentAsset.machines };
+
+  // Operation: override > default 'gravacao'. Machines: do pai.
+  return {
+    operation: override?.operation ?? 'gravacao',
+    machines: parentAsset.machines,
+  };
 }
 
 // ── Helpers privados ─────────────────────────────────────────────────────────

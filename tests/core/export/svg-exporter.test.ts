@@ -445,6 +445,105 @@ describe('svg-exporter (Onda 9 Fase 9D)', () => {
       });
     });
 
+    it('textRouting override: muda operation do texto (gravação→marcação) reflete na cor', async () => {
+      const ap = parseCorelSvg(await loadFixture('apliques/aplique-1-formato-d.svg'));
+      const apliqueId = await engine.addAppliqueSvg(ap, 'Ap1', 'aplique-1-formato-d');
+
+      const text = new fabric.IText('Nome', {
+        left: 100,
+        top: 50,
+        fontFamily: 'Montserrat',
+        fontSize: 16,
+      });
+      (text as unknown as { id: string }).id = 'txt-override-op';
+      engine.canvas.add(text);
+
+      const layers = layersSnapshot();
+      layers.push({
+        id: 'txt-override-op',
+        parentLayerId: apliqueId,
+        name: 'Nome',
+        zIndex: 99,
+        visible: true,
+        locked: false,
+        kind: 'visual',
+        materialId: null,
+      });
+
+      const overrides = new Map<string, { operation: 'corte' | 'marcacao' | 'gravacao' }>();
+      overrides.set('txt-override-op', { operation: 'marcacao' });
+
+      const out = await exportSvgByMachine(engine.canvas, {
+        productWidthMm: 300,
+        productHeightMm: 90,
+        layers,
+        assetLookup: makeLookup({
+          'aplique-1-formato-d': { operation: 'corte', machines: ['fiber-laser'] },
+        }),
+        fontBufferLoader: diskFontLoader(),
+        textRouting: overrides,
+      });
+
+      const fiberSvg = out.get('fiber-laser')!;
+      // Texto agora vai como marcacao (azul), não gravação (vermelho).
+      expect(fiberSvg).toMatch(/<path d="M[^"]+"\s+fill="#0000FF"/);
+      expect(fiberSvg).not.toMatch(/<path d="M[^"]+"\s+fill="#FF0000"/);
+    });
+
+    it('textRouting override: muda machines do texto manda texto pra máquina diferente do aplique', async () => {
+      const ap = parseCorelSvg(await loadFixture('apliques/aplique-1-formato-d.svg'));
+      const apliqueId = await engine.addAppliqueSvg(ap, 'Ap1', 'aplique-1-formato-d');
+
+      const text = new fabric.IText('X', {
+        left: 100,
+        top: 50,
+        fontFamily: 'Bebas Neue',
+        fontSize: 16,
+      });
+      (text as unknown as { id: string }).id = 'txt-override-mach';
+      engine.canvas.add(text);
+
+      const layers = layersSnapshot();
+      layers.push({
+        id: 'txt-override-mach',
+        parentLayerId: apliqueId,
+        name: 'Nome',
+        zIndex: 99,
+        visible: true,
+        locked: false,
+        kind: 'visual',
+        materialId: null,
+      });
+
+      const overrides = new Map<
+        string,
+        { operation: 'corte' | 'marcacao' | 'gravacao'; machines?: string[] }
+      >();
+      // Aplique vai pra fiber-laser, texto vai pra master-biro.
+      overrides.set('txt-override-mach', {
+        operation: 'gravacao',
+        machines: ['master-biro'],
+      });
+
+      const out = await exportSvgByMachine(engine.canvas, {
+        productWidthMm: 300,
+        productHeightMm: 90,
+        layers,
+        assetLookup: makeLookup({
+          'aplique-1-formato-d': { operation: 'corte', machines: ['fiber-laser'] },
+        }),
+        fontBufferLoader: diskFontLoader(),
+        textRouting: overrides,
+      });
+
+      // Aplique no SVG do fiber-laser (sem o texto).
+      const fiberSvg = out.get('fiber-laser')!;
+      expect(fiberSvg).not.toMatch(/<path d="M[^"]+"\s+fill="#FF0000"/);
+      // Texto no SVG do master-biro (sem o aplique).
+      const masterSvg = out.get('master-biro')!;
+      expect(masterSvg).toMatch(/<path d="M[^"]+"\s+fill="#FF0000"/);
+    });
+
     it('texto sem parentLayerId lança erro de routing claro', async () => {
       const text = new fabric.IText('Solto', {
         left: 100,
