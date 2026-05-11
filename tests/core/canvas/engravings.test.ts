@@ -94,9 +94,12 @@ describe('CanvasEngine.addEngravingSvg (Onda 8.5)', () => {
       .find((o) => (o as unknown as { id?: string }).id === engId)!;
     const engCenterXmm = (obj.left ?? 0) / 4 + ((obj.width ?? 0) * (obj.scaleX ?? 1)) / 4 / 2;
     const expectedCenterXmm = parentBounds!.left + parentBounds!.width / 2;
-    // Tolerância 0.5mm — diferença vem de arredondamento de scaleFactor
-    // (parseCorelSvg quantiza dimensões em px com 4 casas), não de bug lógico.
-    expect(Math.abs(engCenterXmm - expectedCenterXmm)).toBeLessThan(0.5);
+    // Mini-Onda 8.6: tolerância 0.05mm restaurada (toBeCloseTo precision 1).
+    // Antes desta mini-onda, parentBounds vinha do fabric.util.groupSVGElements
+    // (bbox dos shapes) e tinha erro de margem de ~0.1mm. Agora
+    // getParentBoundsForObject lê de PrincipalLayerMeta.originalBounds (viewBox
+    // autoritativo, ADR 005), sem erro de margem.
+    expect(engCenterXmm).toBeCloseTo(expectedCenterXmm, 1);
   });
 
   // ── 3. LayerMeta kind === 'visual' + dimensões parseadas em mm ──────────────
