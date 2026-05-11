@@ -29,4 +29,5 @@ Gabriell fala "registra essa ideia: [descrição]" e o Claude (chat consultor) m
 ## Ideias registradas
 
 - `drag-and-drop-painel-camadas.md` — Drag and drop no painel de camadas (Onda 7 entregou via botões)
-- `onda-9-export-respeita-layer-visible.md` — Onda 9 deve ler `LayerMeta.visible` e pular camadas invisíveis no export final (contrato técnico crítico)
+- `onda-9-export-respeita-layer-visible.md` — Onda 9 deve ler `LayerMeta.visible`, `appliqueId` e `engravingId` (contrato técnico crítico)
+- `onda-10-ui-cadastro-bancos.md` — UI completa de cadastro dos 3 bancos (Apliques, Gravações, Marcações) — runtime copy + normalize

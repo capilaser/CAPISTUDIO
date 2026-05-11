@@ -1,6 +1,6 @@
-# NOTA TÉCNICA — Onda 9 deve ler `LayerMeta.visible` no export
+# NOTA TÉCNICA — Onda 9 deve ler `LayerMeta.visible`, `appliqueId` e `engravingId` no export
 
-**Origem:** 2026-05-10, calibração da Onda 7 (decisão da Pergunta 1)
+**Origem:** 2026-05-10, calibração da Onda 7 (Pergunta 1) + Onda 8.5 (Pergunta 4)
 **Status:** Contrato técnico crítico — implementação obrigatória na Onda 9
 
 ## Resumo
@@ -44,10 +44,27 @@ const exportable = canvas.getObjects().filter((obj) => {
 
 Esse filtro deve ser aplicado **tanto pro PNG mockup quanto pro SVG por máquina**.
 
+## Roteamento por máquina/operação (adicionado Onda 8.5)
+
+Além de filtrar por `visible`, a Onda 9 vai precisar **rotear cada camada pra máquina/operação correta** ao montar o SVG por máquina. Os campos relevantes:
+
+- **`PrincipalLayerMeta.appliqueId`** (Onda 6.5) — link pra `appliques.metadata` (se houver), pode determinar tipo de corte/aplique pra essa peça física.
+- **`VisualLayerMeta.engravingId`** (Onda 8.5) — link pra `engravings.metadata`, determina a operação real da gravação (ex: "gravação rasa", "marca-piloto") e provavelmente a máquina específica (laser de gravação vs. laser de corte).
+
+A Onda 8.5 ainda **não popula `engraving.metadata`** (campo nullable, vazio no seed da balança-advogado). A Onda 9 vai precisar:
+
+1. Definir schema do `metadata` (sugestão: `{ operation: string, machines: string[] }` — mesmo formato de `OperationLayerMeta`).
+2. Backfill do seed `seedEngravings.ts` com `metadata` apropriado.
+3. Ler `engraving.metadata` no roteamento de cada VisualLayer com `engravingId !== null`.
+
+Sem isso, gravações cairiam num bucket genérico no export.
+
 ## Onde está o sinal
 
 - `setLayerVisibility` no `canvas-engine.ts` tem JSDoc que aponta pra este arquivo.
-- `docs/AI-CONTEXT.md` (rodapé da Onda 7) referencia este arquivo.
+- `addEngravingSvg` no `canvas-engine.ts` tem JSDoc apontando pra este arquivo (Onda 8.5).
+- `VisualLayerMeta.engravingId` no `schema.ts` tem JSDoc apontando pra este arquivo (Onda 8.5).
+- `docs/AI-CONTEXT.md` (rodapé das Ondas 7 e 8.5) referencia este arquivo.
 
 ## Quando implementar
 
