@@ -172,6 +172,30 @@ export type PrincipalLayerMeta = {
   materialId: string | null;
   /** FK → appliques.id. null when the principal layer is the product base (not an applique). */
   appliqueId: string | null;
+  /**
+   * Mini-Onda 8.6 — Bounds originais em mm, fonte autoritativa (ADR 005).
+   *
+   * Por que: fabric.util.groupSVGElements usa bounding box dos shapes
+   * (geometria real dos paths) em vez do viewBox declarado do SVG. Quando
+   * o Corel exporta com margem interna (espaço pro stroke), group.width
+   * fica menor que viewBox.width. Sem este campo, getParentBoundsForObject
+   * propagaria erro de ~0.1-0.4mm pra todo o sistema (snap, alignment,
+   * medição, proximity, export).
+   *
+   * Setado em addAppliqueSvg a partir de CorelSvgMeta.widthMm/heightMm
+   * (que vem direto do viewBox). Atualizado em object:modified após
+   * drag/scale do usuário — após interação, a fonte de verdade vira o
+   * estado Fabric (que tem erro de margem mas é o que está visível).
+   *
+   * Tipo redeclarado inline pra evitar dependência cruzada data/ → core/canvas/.
+   * Eventual cleanup numa onda futura: ver docs/IDEAS/onda-13-cleanup-geometry-type.md.
+   *
+   * Migração lazy: padrões salvos antes da Mini-Onda 8.6 não têm este
+   * campo. getParentBoundsForObject faz fallback pro cálculo antigo
+   * nesse caso. Próxima vez que o usuário arrastar o aplique, o handler
+   * object:modified popula originalBounds e a partir daí fica preciso.
+   */
+  originalBounds?: { left: number; top: number; width: number; height: number };
 };
 
 /** Sub-camada de operação — operação de máquina sobre a peça física pai. */

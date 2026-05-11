@@ -240,6 +240,7 @@ export class CanvasEngine {
     this.centerProductInViewport();
     this.attachPanHandlers();
     this.attachSelectionHandlers();
+    this.attachPrincipalBoundsUpdater();
   }
 
   /**
@@ -320,6 +321,41 @@ export class CanvasEngine {
     });
   }
 
+  /**
+   * Mini-Onda 8.6 — atualiza PrincipalLayerMeta.originalBounds após o usuário
+   * mover/redimensionar um aplique. Sem isso, originalBounds (setado em
+   * addAppliqueSvg com os bounds do viewBox SVG) fica defasado e
+   * getParentBoundsForObject volta a retornar valores incorretos pós-drag.
+   *
+   * Detalhe: aqui usamos `obj.width × scaleX` (que tem o erro de margem do
+   * fabric.util.groupSVGElements). É intencional — após interação do usuário,
+   * a fonte de verdade é o estado Fabric atual (o que está visualmente no
+   * canvas). O erro de margem fica congelado mas não cresce.
+   *
+   * NÃO ENTRA EM CONFLITO com o handler do slot-manager (que também escuta
+   * object:modified) — slot-manager filtra por findEntryByBody (slots), aqui
+   * filtramos por meta.kind === 'principal' (apliques). Universos disjuntos.
+   */
+  private attachPrincipalBoundsUpdater(): void {
+    this.canvas.on('object:modified', (e) => {
+      const obj = e.target;
+      if (!obj || isBaseObject(obj)) return;
+      const id = getCapiId(obj as unknown as Record<string, unknown>);
+      if (!id) return;
+      const meta = this.layerMeta.get(id);
+      if (!meta || meta.kind !== 'principal') return;
+
+      const widthPx = (obj.width ?? 0) * (obj.scaleX ?? 1);
+      const heightPx = (obj.height ?? 0) * (obj.scaleY ?? 1);
+      meta.originalBounds = {
+        left: pxToMm(obj.left ?? 0),
+        top: pxToMm(obj.top ?? 0),
+        width: pxToMm(widthPx),
+        height: pxToMm(heightPx),
+      };
+    });
+  }
+
   // ─── Snap ─────────────────────────────────────────────────────────────────
 
   /**
@@ -348,6 +384,19 @@ export class CanvasEngine {
     const meta = this.layerMeta.get(objectId);
     if (!meta || !meta.parentLayerId) return null;
 
+    // Mini-Onda 8.6: caminho autoritativo via PrincipalLayerMeta.originalBounds.
+    // Evita o erro de margem do fabric.util.groupSVGElements (que usa bbox dos
+    // shapes em vez do viewBox declarado). Detalhes: schema.ts JSDoc.
+    const parentMeta = this.layerMeta.get(meta.parentLayerId);
+    if (parentMeta?.kind === 'principal' && parentMeta.originalBounds) {
+      return { ...parentMeta.originalBounds };
+    }
+
+    // Fallback (migração lazy): padrões salvos antes da Mini-Onda 8.6 não têm
+    // originalBounds populado. Mantém o cálculo antigo (com erro de margem
+    // de ~0.1-0.4mm dependendo do SVG). Próxima vez que o usuário arrastar
+    // o aplique, object:modified popula originalBounds e a partir daí fica
+    // preciso. Sem regressão pra cenários existentes.
     const parentObj = findById(this.canvas, meta.parentLayerId);
     if (!parentObj) return null;
 
@@ -1312,6 +1361,16 @@ export class CanvasEngine {
       kind: 'principal',
       materialId: null,
       appliqueId,
+      // Mini-Onda 8.6: bounds autoritativos do viewBox SVG (ADR 005).
+      // left/top vêm do cálculo de centragem (em mm, sem passar pelo Fabric).
+      // width/height vêm direto de meta.widthMm/heightMm do parseCorelSvg
+      // (que lê do header width="Xmm" do SVG). Sem erro de margem.
+      originalBounds: {
+        left: (this.config.productWidthMm - meta.widthMm) / 2,
+        top: (this.config.productHeightMm - meta.heightMm) / 2,
+        width: meta.widthMm,
+        height: meta.heightMm,
+      },
     };
     this.layerMeta.set(id, principalMeta);
 
