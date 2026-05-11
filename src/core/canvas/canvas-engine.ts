@@ -1458,6 +1458,75 @@ export class CanvasEngine {
   }
 
   /**
+   * Adiciona uma marcação do banco como camada visual no canvas (Onda 9).
+   *
+   * Espelha `addEngravingSvg`: cria `VisualLayerMeta` filha do aplique
+   * selecionado (ou solta), com `markingId` persistido pra Onda 9 rotear
+   * pra máquina/operação correta no export. A única diferença frente à
+   * gravação é o campo de FK em si — engravingId vs markingId.
+   *
+   * Retorna o capi id do grupo (novo VisualLayer).
+   */
+  async addMarkingSvg(
+    meta: CorelSvgMeta,
+    name: string,
+    markingId: string,
+    parentLayerId: string | null
+  ): Promise<string> {
+    const { objects } = await fabric.loadSVGFromString(meta.svgStripped);
+    const validObjects = objects.filter((o): o is fabric.FabricObject => o !== null);
+    if (validObjects.length === 0) {
+      throw new Error(
+        `[canvas-engine] addMarkingSvg: no drawable shapes in SVG for marking "${markingId}".`
+      );
+    }
+
+    for (const obj of validObjects) {
+      obj.set({ fill: '', stroke: SVG_BASE_STROKE, strokeWidth: 1, strokeUniform: true });
+    }
+
+    const group = fabric.util.groupSVGElements(validObjects);
+
+    const scaleX = meta.scaleFactor;
+    const scaleY = mmToPx(meta.heightMm) / meta.viewBoxH;
+
+    const parentBounds = parentLayerId ? this.getParentBoundsForObject(parentLayerId) : null;
+    const cxMm = parentBounds
+      ? parentBounds.left + parentBounds.width / 2
+      : this.config.productWidthMm / 2;
+    const cyMm = parentBounds
+      ? parentBounds.top + parentBounds.height / 2
+      : this.config.productHeightMm / 2;
+    const left = mmToPx(cxMm - meta.widthMm / 2);
+    const top = mmToPx(cyMm - meta.heightMm / 2);
+
+    group.set({ left, top, originX: 'left', originY: 'top', scaleX, scaleY });
+
+    const id = generateObjectId();
+    (group as unknown as Record<string, unknown>).id = id;
+
+    this.canvas.add(group);
+
+    const visualMeta: VisualLayerMeta = {
+      id,
+      parentLayerId,
+      name,
+      zIndex: this.canvas.getObjects().length - 1,
+      visible: true,
+      locked: false,
+      kind: 'visual',
+      materialId: null,
+      markingId,
+    };
+    this.layerMeta.set(id, visualMeta);
+
+    this.canvas.setActiveObject(group);
+    this.canvas.requestRenderAll();
+
+    return id;
+  }
+
+  /**
    * Adds a user-editable rectangle in product mm coordinates.
    * Top-left positioning, dimensions in mm.
    * Automatically registers a LayerMeta entry (kind='visual').

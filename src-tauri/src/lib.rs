@@ -37,6 +37,13 @@ async fn read_engraving_file(path: String) -> Result<String, String> {
     std::fs::read_to_string(&path).map_err(|e| format!("Erro ao ler arquivo: {}", e))
 }
 
+#[tauri::command]
+async fn read_marking_file(path: String) -> Result<String, String> {
+    // Onda 9: helper read-only para SVGs de marcações. Espelha read_engraving_file.
+    // Save/delete ficam para Onda 10.
+    std::fs::read_to_string(&path).map_err(|e| format!("Erro ao ler arquivo: {}", e))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let migrations = vec![
@@ -91,7 +98,7 @@ pub fn run() {
                 .add_migrations("sqlite:capi-studio.db", migrations)
                 .build(),
         )
-        .invoke_handler(tauri::generate_handler![save_applique_file, delete_applique_file, read_applique_file, read_engraving_file])
+        .invoke_handler(tauri::generate_handler![save_applique_file, delete_applique_file, read_applique_file, read_engraving_file, read_marking_file])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
