@@ -66,6 +66,12 @@ Sem isso, gravações cairiam num bucket genérico no export.
 - `VisualLayerMeta.engravingId` no `schema.ts` tem JSDoc apontando pra este arquivo (Onda 8.5).
 - `docs/AI-CONTEXT.md` (rodapé das Ondas 7 e 8.5) referencia este arquivo.
 
+## Precisão garantida pela Mini-Onda 8.6
+
+`getParentBoundsForObject` agora é **autoritativo** — lê de `PrincipalLayerMeta.originalBounds` (viewBox SVG, ADR 005), não mais do bounding box do Fabric (que tinha erro de margem ~0.1-0.4mm). A Onda 9 pode confiar nessa função pra rotear corretamente cada camada pra sua máquina/operação sem somar erro próprio.
+
+Cenário concreto: gravação `balança-advogado` filha de aplique `aplique-2-quadrado`. Antes da 8.6, exportar pra máquina laser teria erro de ~0.1mm no posicionamento da gravação relativo ao aplique. Após 8.6, exato.
+
 ## Quando implementar
 
 **Obrigatório na Onda 9.** Se a Onda 9 começar e ignorar esta nota, o feature de "esconder camada" estará quebrado pro usuário final.
