@@ -10,6 +10,9 @@ import type Database from '@tauri-apps/plugin-sql';
 //
 // categoryId === id de uma row em `categories` (criada por seedCategories).
 // Onda 8.5 seeda apenas "profissoes"; futuras categorias seguem o padrão.
+//
+// Onda 9 — operation/machines pro motor de exportação SVG. Ver seedAppliques
+// para contrato (preto=corte, azul=marcação, vermelho=gravação; 1 SVG/máquina).
 const ENGRAVINGS = [
   {
     id: 'balanca-advogado',
@@ -19,6 +22,8 @@ const ENGRAVINGS = [
     heightMm: 64.0889,
     categoryId: 'profissoes',
     tags: ['profissao', 'advogado', 'direito'],
+    operation: 'gravacao',
+    machines: ['fiber-laser'],
   },
 ] as const;
 
@@ -31,8 +36,8 @@ export async function seedEngravings(db: Database): Promise<{ inserted: number; 
     // Mesma decisão do seedAppliques (evita REPLACE pra não cascatear FKs).
     const result = await db.execute(
       `INSERT OR IGNORE INTO engravings
-         (id, name, file_path, width_mm, height_mm, tags, category_id, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, unixepoch())`,
+         (id, name, file_path, width_mm, height_mm, tags, category_id, operation, machines, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch())`,
       [
         eng.id,
         eng.name,
@@ -41,6 +46,8 @@ export async function seedEngravings(db: Database): Promise<{ inserted: number; 
         eng.heightMm,
         JSON.stringify(eng.tags),
         eng.categoryId,
+        eng.operation,
+        JSON.stringify(eng.machines),
       ]
     );
 
@@ -50,6 +57,15 @@ export async function seedEngravings(db: Database): Promise<{ inserted: number; 
     } else {
       skipped++;
       if (import.meta.env.DEV) console.info(`[seedEngravings] skipped (already exists): ${eng.id}`);
+
+      // Onda 9 backfill — rows pré-existentes têm machines='[]' após migration 0006.
+      // Atualiza só quando vazio pra preservar edições futuras.
+      await db.execute(
+        `UPDATE engravings
+           SET operation = ?, machines = ?
+         WHERE id = ? AND machines = '[]'`,
+        [eng.operation, JSON.stringify(eng.machines), eng.id]
+      );
     }
   }
 
