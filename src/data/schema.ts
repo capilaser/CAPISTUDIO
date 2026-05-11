@@ -415,6 +415,8 @@ export const appliques = sqliteTable('appliques', {
 
 // ── 20. ENGRAVINGS ────────────────────────────────────────────────────────────
 // Bank of reusable engraving SVGs (logos, icons, ornaments to engrave).
+// categoryId: nullable FK to categories — Onda 8.5 added. Engravings sem
+// categoria (legados ou auto-importados pela Onda 10) ficam com NULL.
 export const engravings = sqliteTable('engravings', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
@@ -424,6 +426,7 @@ export const engravings = sqliteTable('engravings', {
   heightMm: real('height_mm'),
   tags: text('tags').notNull().default('[]'), // JSON: string[]
   metadata: text('metadata'), // JSON: arbitrary extra data
+  categoryId: text('category_id').references(() => categories.id),
   createdAt: integer('created_at', { mode: 'timestamp' })
     .notNull()
     .default(sql`(unixepoch())`),

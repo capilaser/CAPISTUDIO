@@ -1,0 +1,1 @@
+ALTER TABLE `engravings` ADD `category_id` text REFERENCES categories(id);

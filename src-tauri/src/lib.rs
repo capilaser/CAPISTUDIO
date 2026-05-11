@@ -62,6 +62,12 @@ pub fn run() {
             sql: include_str!("../migrations/0004_wave6a_schema.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 6,
+            description: "engraving_category_id",
+            sql: include_str!("../migrations/0005_engraving_category_id.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()
