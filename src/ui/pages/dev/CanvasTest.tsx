@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Download } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { CanvasEngine } from '@/core/canvas/canvas-engine';
@@ -18,6 +19,7 @@ import { getProductById, type Product } from '@/data/repositories/productReposit
 import { useCanvasStore } from '@/stores/canvas-store';
 import { useAltKey } from '@/hooks/useAltKey';
 import { Button } from '@/ui/components/button';
+import { ExportPngDialog } from '@/ui/canvas/ExportPngDialog';
 import { LoadPatternDialog } from './canvas-test/LoadPatternDialog';
 import { ModeToggle } from './canvas-test/ModeToggle';
 import { OperatorInputs } from './canvas-test/OperatorInputs';
@@ -43,6 +45,7 @@ export default function CanvasTest() {
   const savingRef = useRef(false);
   const [saveAsOpen, setSaveAsOpen] = useState(false);
   const [loadOpen, setLoadOpen] = useState(false);
+  const [exportPngOpen, setExportPngOpen] = useState(false);
 
   const { mode, setSelectedSlotId, setSelectedLayerId, setSelectedLayerKind } = useCanvasStore();
 
@@ -337,6 +340,21 @@ export default function CanvasTest() {
 
         <div className="h-4 w-px bg-ink-700" />
 
+        {/* Onda 9.F — exporta canvas como PNG mockup pro cliente. */}
+        <Button
+          variant="default"
+          size="sm"
+          onClick={() => setExportPngOpen(true)}
+          disabled={!ready}
+          className="font-mono text-[11px]"
+          title="Exportar PNG mockup pro cliente"
+        >
+          <Download className="mr-1.5 h-3 w-3" />
+          Exportar PNG
+        </Button>
+
+        <div className="h-4 w-px bg-ink-700" />
+
         {/* Onda 7b Fase E — toggle de modo medição. Ligado: laser; desligado: ink-300. */}
         <RulerToggle disabled={!ready} />
 
@@ -404,6 +422,11 @@ export default function CanvasTest() {
         productId={product?.id ?? DEV_TEST_PRODUCT_ID}
         onClose={() => setLoadOpen(false)}
         onLoad={handleLoadPattern}
+      />
+      <ExportPngDialog
+        open={exportPngOpen}
+        getEngine={() => engineRef.current}
+        onClose={() => setExportPngOpen(false)}
       />
 
       <footer className="border-t border-ink-800 bg-ink-900/60 px-4 py-2 font-mono text-[11px] text-ink-400">
