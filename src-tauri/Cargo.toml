@@ -26,4 +26,15 @@ tauri-plugin-fs = "2"
 tauri-plugin-shell = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# Onda 11.A — necessário para `db_tx_execute`, comando custom que executa
+# múltiplas queries atomicamente reusando o pool do tauri-plugin-sql via
+# DbInstances público (PR #1381). Já é dep transitiva do plugin-sql; declarar
+# direto permite nomear `SqlitePool` e `Transaction` no nosso código.
+# Ver ADR 017.
+sqlx = { version = "0.8", default-features = false, features = ["sqlite", "runtime-tokio"] }
+tokio = { version = "1", features = ["sync"] }
+
+[dev-dependencies]
+# Onda 11.A — `#[tokio::test]` em src-tauri/src/db_tx.rs precisa de macros + rt.
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }
 

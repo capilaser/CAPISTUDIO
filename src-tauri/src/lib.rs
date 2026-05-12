@@ -1,6 +1,8 @@
 use tauri::Manager;
 use tauri_plugin_sql::{Builder as SqlBuilder, Migration, MigrationKind};
 
+mod db_tx;
+
 #[tauri::command]
 async fn save_applique_file(
     id: String,
@@ -111,7 +113,14 @@ pub fn run() {
                 .add_migrations("sqlite:capi-studio.db", migrations)
                 .build(),
         )
-        .invoke_handler(tauri::generate_handler![save_applique_file, delete_applique_file, read_applique_file, read_engraving_file, read_marking_file])
+        .invoke_handler(tauri::generate_handler![
+            save_applique_file,
+            delete_applique_file,
+            read_applique_file,
+            read_engraving_file,
+            read_marking_file,
+            db_tx::db_tx_execute
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
