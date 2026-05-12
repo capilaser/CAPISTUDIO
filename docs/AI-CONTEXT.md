@@ -122,6 +122,7 @@ Justificativa: [...]
 - ✅ **Causa raiz > sintoma**, sempre, sem exceção
 - ✅ **Validação manual com print do Gabriell substitui infra de teste de banco real** (decidido na Onda 8 — viável com dono de operação validada)
 - ✅ **jsdom não testa CORS — validação visual real é obrigatória pra features que envolvem asset protocol, toDataURL, ou cross-origin** (descoberto na Onda 9.G: PNG export passou nos 8 testes do png-exporter mas falhou em runtime com SecurityError tainted-canvas; jsdom nunca tainta canvas independente de origem). Toda feature nessa zona precisa checkpoint visual antes de ser considerada fechada.
+- ⚠️ **`npm run tauri dev` long-running NÃO deve ser gerido via background tools do Claude Code.** Task timeout interno (~15min) mata o npm parent → Vite filho morre junto → WebView mostra `ERR_CONNECTION_REFUSED` sem mensagem clara da causa. Solução: usuário roda `npm run tauri dev` **manualmente em terminal próprio** e mantém aberto durante toda a sessão de validação. Claude Code valida via `npm test`/`typecheck`/`lint` (não interativos) e pede prints ao usuário pra confirmar runtime.
 
 ---
 
@@ -158,37 +159,38 @@ Justificativa: [...]
 
 ## 🏗️ Estrutura de ondas (ROADMAP)
 
-| Onda    | Tema                                                                            | Status                                                      |
-| ------- | ------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| 0       | Bootstrap (Tauri + Vite + React + TS)                                           | ✅ Fechada                                                  |
-| 1       | Banco SQLite + Seeds (24 tabelas pós-6a)                                        | ✅ Fechada                                                  |
-| 2       | Home + Layout Base                                                              | ✅ Fechada                                                  |
-| 3       | Canvas Fabric.js                                                                | ✅ Fechada                                                  |
-| 4       | Slots editáveis + fitText                                                       | ✅ Fechada                                                  |
-| 4.5     | Banco de Fontes Curado (5 fontes)                                               | ✅ Fechada                                                  |
-| 5       | Texturas (PNGs ABS Escovado)                                                    | ✅ Fechada                                                  |
-| 6a      | Schema de hierarquia (3 bancos novos)                                           | ✅ Fechada                                                  |
-| 6b      | Parser Corel + Cleanup + LayerMeta hierárquico                                  | ✅ Fechada                                                  |
-| 6c      | ❌ **REMOVIDA** — funcionalidade absorvida pela Onda 7                          | ❌ Removida                                                 |
-| 6.5     | UI Apliques completa                                                            | ✅ Fechada                                                  |
-| **8**   | **Padrões salvos + reabertura (Placa Advogado)**                                | **✅ Fechada (commit 17a23ae)**                             |
-| **9.5** | **Mini-onda — Cadastrar 5 materiais novos (Acrílico Espelhado + Sólido)**       | **✅ Fechada (commit 94de574)**                             |
-| **7a**  | **Snap (Fases A+B) — motor matemático + integração Fabric**                     | **✅ Fechada (commit 8cb037f)**                             |
-| **7b**  | **Snap Fase C — guias visuais cyan + fix Alt+Tab**                              | **✅ Fechada (commit 0ccd989)**                             |
-| **7b**  | **Snap Fase D — toolbar de alinhamento (6 botões)**                             | **✅ Fechada (06d7442 + 9713f3b + db84315)**                |
-| **7b**  | **Snap Fase E — modo medição (V+H entre objs)**                                 | **✅ Fechada (commit ad65cfe)**                             |
-| **7b**  | **Snap Fase E2 — proximidade do entorno (1 obj selecionado)**                   | **✅ Fechada (commit 4e8f072)**                             |
-| **7b**  | **Snap Fase F — pontinhos da grade (toggle)**                                   | **✅ Fechada (commit 0557cc3)**                             |
-| **7b**  | **Snap Fase G — costura final + ADR 015 + DEBT.md**                             | **✅ Fechada (cleanup aeae83a)**                            |
-| **7.5** | **Consertos do slot-manager (DEBT #3 e #4 — overlay e content seguem body)**    | **✅ Fechada (commit bf4610e)**                             |
-| **7**   | **Painel de Camadas hierárquico (visibility/lock/rename/delete/move/reparent)** | **✅ Fechada (commits dfb23c8, 0657f1a, 062307e)**          |
-| **8.5** | **Banco de Gravações operacional (4ª aba + addEngravingSvg + categoryId)**      | **✅ Fechada (commits 9fc8e24, f9dc9d8, 33b1969, 28a66f7)** |
-| **8.6** | **Mini-onda: fix de precisão viewBox vs Fabric (originalBounds autoritativo)**  | **✅ Fechada (commits 48008c2, f0f39d3)**                   |
-| **9**   | **Banco Marcações + Motor SVG/PNG + Dialog Export PNG (escopo final reduzido)** | **✅ Fechada (14 commits f0f5dd9 → docs)**                  |
-| 10      | UI cadastro de bancos (apliques + gravações + marcações + fontes)               | ⏳                                                          |
-| 11      | Histórico pedidos + status aprovação + UI export SVG production                 | ⏳ (motor SVG já pronto, espera UI)                         |
-| 12      | Polimento final + build MSI Windows                                             | ⏳                                                          |
-| 13      | Validação final + smoke test do MVP completo                                    | ⏳                                                          |
+| Onda     | Tema                                                                            | Status                                                      |
+| -------- | ------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| 0        | Bootstrap (Tauri + Vite + React + TS)                                           | ✅ Fechada                                                  |
+| 1        | Banco SQLite + Seeds (24 tabelas pós-6a)                                        | ✅ Fechada                                                  |
+| 2        | Home + Layout Base                                                              | ✅ Fechada                                                  |
+| 3        | Canvas Fabric.js                                                                | ✅ Fechada                                                  |
+| 4        | Slots editáveis + fitText                                                       | ✅ Fechada                                                  |
+| 4.5      | Banco de Fontes Curado (5 fontes)                                               | ✅ Fechada                                                  |
+| 5        | Texturas (PNGs ABS Escovado)                                                    | ✅ Fechada                                                  |
+| 6a       | Schema de hierarquia (3 bancos novos)                                           | ✅ Fechada                                                  |
+| 6b       | Parser Corel + Cleanup + LayerMeta hierárquico                                  | ✅ Fechada                                                  |
+| 6c       | ❌ **REMOVIDA** — funcionalidade absorvida pela Onda 7                          | ❌ Removida                                                 |
+| 6.5      | UI Apliques completa                                                            | ✅ Fechada                                                  |
+| **8**    | **Padrões salvos + reabertura (Placa Advogado)**                                | **✅ Fechada (commit 17a23ae)**                             |
+| **9.5**  | **Mini-onda — Cadastrar 5 materiais novos (Acrílico Espelhado + Sólido)**       | **✅ Fechada (commit 94de574)**                             |
+| **7a**   | **Snap (Fases A+B) — motor matemático + integração Fabric**                     | **✅ Fechada (commit 8cb037f)**                             |
+| **7b**   | **Snap Fase C — guias visuais cyan + fix Alt+Tab**                              | **✅ Fechada (commit 0ccd989)**                             |
+| **7b**   | **Snap Fase D — toolbar de alinhamento (6 botões)**                             | **✅ Fechada (06d7442 + 9713f3b + db84315)**                |
+| **7b**   | **Snap Fase E — modo medição (V+H entre objs)**                                 | **✅ Fechada (commit ad65cfe)**                             |
+| **7b**   | **Snap Fase E2 — proximidade do entorno (1 obj selecionado)**                   | **✅ Fechada (commit 4e8f072)**                             |
+| **7b**   | **Snap Fase F — pontinhos da grade (toggle)**                                   | **✅ Fechada (commit 0557cc3)**                             |
+| **7b**   | **Snap Fase G — costura final + ADR 015 + DEBT.md**                             | **✅ Fechada (cleanup aeae83a)**                            |
+| **7.5**  | **Consertos do slot-manager (DEBT #3 e #4 — overlay e content seguem body)**    | **✅ Fechada (commit bf4610e)**                             |
+| **7**    | **Painel de Camadas hierárquico (visibility/lock/rename/delete/move/reparent)** | **✅ Fechada (commits dfb23c8, 0657f1a, 062307e)**          |
+| **8.5**  | **Banco de Gravações operacional (4ª aba + addEngravingSvg + categoryId)**      | **✅ Fechada (commits 9fc8e24, f9dc9d8, 33b1969, 28a66f7)** |
+| **8.6**  | **Mini-onda: fix de precisão viewBox vs Fabric (originalBounds autoritativo)**  | **✅ Fechada (commits 48008c2, f0f39d3)**                   |
+| **9**    | **Banco Marcações + Motor SVG/PNG + Dialog Export PNG (escopo final reduzido)** | **✅ Fechada (14 commits f0f5dd9 → docs)**                  |
+| 10       | UI cadastro de bancos (apliques + gravações + marcações + fontes)               | ⏳                                                          |
+| **11.A** | **Infra atômica: db_tx_execute + order_revisions + ADR 017 (DbInstances)**      | **✅ Fechada (5 commits a9c3d86 → 0b9f3fb)**                |
+| 11       | Histórico pedidos + status aprovação + UI export SVG production                 | ⏳ (motor SVG + infra atômica prontos, espera UI Fases B+)  |
+| 12       | Polimento final + build MSI Windows                                             | ⏳                                                          |
+| 13       | Validação final + smoke test do MVP completo                                    | ⏳                                                          |
 
 **Sequência travada (ordem de execução):**
 
@@ -314,13 +316,13 @@ Justificativa: [...]
 - `006-onda-4-slots-fittext.md` — Slots editáveis, fitText, body/overlay, placeholder, bug cache Fabric 6
 - `007-onda-4.5-banco-fontes.md` — 5 fontes curadas, FontFace API ativa, asset protocol Tauri 2.x OPT-IN, cargo clean obrigatório ao adicionar resources
 - `008-camadas-hierarquicas-bancos-componentes.md` — Camadas em 2 níveis (principal → operação) + 3 bancos novos (apliques/gravações/marcações)
-- `009-exportacao-maquina-operacao.md` — Spec completa da Onda 9: 1 SVG por (máquina, operação). Regra "marcação herda contorno". Feature "tirar miolo".
 - `010-camadas-hierarquicas.md` — Estrutura hierárquica de camadas + bancos de componentes
 - `011-fabric6-fill-empty-string.md` — Fabric 6 passa "none" literal pro canvas DOM, que renderiza preto. Workaround: `fill: ''` no obj.set.
 - `013-base-svg-seed-onda8.md` — base_svg vem de fixture via seed (INSERT OR IGNORE + UPDATE WHERE NULL). Limitação: editar fixture exige reseed manual.
 - `014-snap-system.md` — Sistema de snap completo (Onda 7a Fases A+B): motor puro, integração Fabric, race condition resolvida, decisões de tolerância/Alt/grade.
 - `015-onda-7b-decisoes-visuais.md` — Decisões visuais da Onda 7b inteira: hierarquia de cores entre 4 sistemas (snap/medição/proximidade/grade), render híbrido Fabric+DOM, render-on-change para guias, fade-out cancelável, getCapiId canônico, Pattern para grade.
 - `016-onda-9-exportacao-maquina-operacao.md` — Spec completa da Onda 9: cores semânticas (preto/azul/vermelho), mm puros no SVG, z-order preservado, texto vetorizado via opentype.js (Roboto Slab fallback documentado), PNG 300 DPI com texturas Fabric Pattern nativo, AssetLookupFn + TauriIO injetados (motores puros), textRouting opcional pro dialog Onda 11, persistência settings.export.lastFolder, mudança de escopo: SVG production fica pra Onda 11 quando houver status de pedido aprovado.
+- `017-onda-11-transacao-via-dbinstances.md` — Atomicidade real de writes multi-tabela (orders + order_revisions). Decisão "Opção 5": pool compartilhado via `DbInstances` (`Arc<Mutex<HashMap>>`) reusa a mesma conexão SQLite que `tauri-plugin-sql` já abriu pra UI, eliminando race entre tx Rust e queries TS. Comando `db_tx_execute` + helper TS `executeTransaction` + 4 testes Cargo (Rust) + testes Vitest dos repositories validam: erro em qualquer statement aborta a transação inteira (revisão órfã NÃO é criada se INSERT order falhar).
 
 ---
 
@@ -531,4 +533,4 @@ Eu leio o contexto, faço perguntas estratégicas se necessário, e começamos c
 
 ---
 
-_Última atualização: **Mini-Onda 8.6 fechada** — fix de precisão de causa raiz. `fabric.util.groupSVGElements` usa bbox dos shapes em vez do viewBox declarado do SVG, propagava erro de ~0.1-0.4mm em snap, alignment, medição, proximity e (futuramente) export. Fix: `PrincipalLayerMeta.originalBounds` (mm, viewBox autoritativo ADR 005) populado por `addAppliqueSvg` e atualizado por novo handler `attachPrincipalBoundsUpdater()` em `object:modified`. `getParentBoundsForObject` lê de `originalBounds` quando presente, fallback ao cálculo antigo (migração lazy — sem regressão pra padrões salvos antes desta mini-onda). Tolerância de 0.5mm em `engravings.test.ts` restaurada pra 0.05mm. 8 testes novos: 6 em `origin-bounds.test.ts` + 2 em `precision-after-fix.test.ts` (integração de alignment). IDEA `onda-13-cleanup-geometry-type.md` registrada (mover `RectMm` pra `src/lib/geometry.ts` neutro num cleanup futuro). 3 commits: `48008c2` (engine+testes), `f0f39d3` (tolerância+integração), `__docs__`. **274 testes verdes** (266 + 8). Bugs latentes resolvidos de quebra em snap (Onda 7a), alignment toolbar (Fase D), medição V/H (Fase E), proximity (Fase E2). **Próxima: Onda 9 (exportação)** — `getParentBoundsForObject` é confiável agora. Antes: **Onda 8.5 fechada anteriormente** — Banco de Gravações operacional. Migração v6 adicionou `categoryId` em `engravings` (FK → categories). Categoria "Profissões" (scope='engraving') seedada + primeira gravação "Balança Advogado" (69.99×64.09mm) bundled em `src-tauri/resources/fixtures/engravings/`. Engine ganhou `addEngravingSvg(meta, name, engId, parentLayerId)` — cria VisualLayer filha do aplique selecionado (ou solta), persiste `engravingId` no `VisualLayerMeta` pra Onda 9 rotear por máquina. 4ª aba "Gravações" no UnifiedRightPanel (ícone Stamp) entre Apliques e Materiais, com filtro de categoria. `resolveParentAppliqueId` extraído pra `src/core/canvas/resolve-parent-applique.ts` (compartilhado entre SlotCreatorButtons e EngravingPanel). Helper `normalize-asset-name.ts` criado e testado mas reservado pra Onda 10 (UI de cadastro). 11 testes novos (6 engravings + 5 normalize). 5 commits: `9fc8e24` (migration), `f9dc9d8` (storage+seed+repo), `33b1969` (engine+testes), `28a66f7` (painel+aba), `__docs__` (IDEAS+AI-CONTEXT). **266 testes verdes** (255 + 11). **Próxima: Onda 9 (exportação SVG por máquina + PNG mockup)** — vai consumir `engravingId`/`appliqueId`/`visible` conforme NOTA TÉCNICA em `IDEAS/onda-9-export-respeita-layer-visible.md`. Antes da 9 considerar: definir `engraving.metadata` (operação + máquinas) e dar backfill no seed da balança-advogado. Onda 7 fechou antes: painel de camadas hierárquico estilo Photoshop com sync canvas↔painel via evento custom `layer-meta-changed`._
+_Última atualização: **Onda 11 Fase A fechada** — infra atômica de writes multi-tabela. Migration v8 cria `order_revisions` (9 colunas, `is_approved` boolean, sem `status_after` — histórico imutável vinculado a `orders.id` por FK). Comando Rust `db_tx_execute` consome pool `DbInstances` (`Arc<Mutex<HashMap>>`) — reusa a conexão que `tauri-plugin-sql` já abriu pra UI, eliminando race entre tx Rust e queries TS. Helper TS `executeTransaction` espelha o contrato Tauri. `orderRepository.createWithFirstRevision` valida atomicidade real em checkpoint visual do Gabriell: tentativa de duplicar PK abortou a transação inteira e a revisão órfã **não** foi criada. ADR 017 documenta a decisão ("Opção 5" — pool compartilhado vs alternativas avaliadas). 5 commits: `a9c3d86` (migration+schema), `8842dce` (cmd Rust), `e2d4c5c` (helper TS+testes), `8443982` (repos atômicos), `0b9f3fb` (ADR 017). **362 testes Vitest verdes + 4 testes Cargo Rust** (db_tx). Próximo na Onda 11: **Fase B — refactor de `src/ui/pages/dev/CanvasTest.tsx`** (444 linhas, 43 toques no engine), mapeando dev-only vs compartilhado vs contexto-dependente em sub-fases B1/B2/B3, cada uma com checkpoint visual em `/dev/canvas-test` (invariante: regressão zero). Antes da 11.A: Onda 9 (Mini-onda 8.6 → 9 inteira) já tinha fechado export PNG mockup operacional + motor SVG production pronto aguardando UI da Fase B+ desta onda. ADR 016 spec completa do export. Lição aprendida nova: `tauri dev` long-running NÃO via background tool do Claude Code — task timeout mata Vite filho, WebView fica `ERR_CONNECTION_REFUSED`. Usuário roda `tauri dev` manual em terminal próprio durante validação._
