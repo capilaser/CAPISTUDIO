@@ -89,6 +89,12 @@ pub fn run() {
             sql: include_str!("../migrations/0006_export_operation_machines.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 8,
+            description: "order_revisions",
+            sql: include_str!("../migrations/0007_order_revisions.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

@@ -378,6 +378,37 @@ export const orders = sqliteTable('orders', {
   deletedAt: integer('deleted_at', { mode: 'timestamp' }),
 });
 
+// ── 14.5. ORDER_REVISIONS ─────────────────────────────────────────────────────
+// Onda 11: histórico imutável de revisões de cada pedido.
+// Spec arquitetural (decisão Fase A): cada revisão duplica fields + materialId +
+// canvasJson + exportedPngPath do snapshot daquele momento. `orders` mantém os
+// MESMOS 4 campos como "última revisão" (denormalizado). Invariante crítica:
+// toda escrita em `orders.{fields,materialId,canvasJson,exportedPngPath}`
+// acontece DENTRO da mesma transação SQL que cria a revisão correspondente.
+// Nunca um sem o outro.
+//
+// UNIQUE INDEX em (orderId, number) protege contra race condition: INSERT
+// concorrente com mesmo `number` aborta limpo.
+//
+// isApproved é declarado AGORA mesmo sem uso na Onda 11 — Onda 12 (aprovação
+// de pedido) vai marcar TRUE na revisão que o cliente aprovou. Declarado em
+// v8 pra evitar migration v9 só pra adicionar coluna.
+export const orderRevisions = sqliteTable('order_revisions', {
+  id: text('id').primaryKey(),
+  orderId: text('order_id')
+    .notNull()
+    .references(() => orders.id),
+  number: integer('number').notNull(), // 1, 2, 3... humano-visível
+  fields: text('fields').notNull(), // JSON: OrderFields (snapshot)
+  materialId: text('material_id').references(() => materials.id), // snapshot
+  canvasJson: text('canvas_json').notNull(), // JSON: FabricCanvasJson (snapshot)
+  exportedPngPath: text('exported_png_path'), // path do PNG dessa revisão
+  isApproved: integer('is_approved', { mode: 'boolean' }).notNull().default(false), // Onda 12
+  createdAt: integer('created_at', { mode: 'timestamp' })
+    .notNull()
+    .default(sql`(unixepoch())`),
+});
+
 // ── 15. ORDER_OVERRIDES ───────────────────────────────────────────────────────
 // Fine-tuning adjustments over a pattern — reversible independently of fields.
 export const orderOverrides = sqliteTable('order_overrides', {
