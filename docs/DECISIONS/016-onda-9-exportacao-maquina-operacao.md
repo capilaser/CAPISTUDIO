@@ -218,3 +218,47 @@ porque o Gabriell pode escolher pasta arbitrária no dialog.
 - **`settings.export.lastFolder`:** Onda 11 reusa a mesma pasta default;
   pode adicionar `settings.export.lastFolderProduction` se SVG separar
   semanticamente.
+
+---
+
+## Bugs descobertos em validação visual real
+
+### Tainted canvas em PNG export (Fase 9.G fix — commit `9b917f7`)
+
+**Sintoma:** click em "Exportar PNG" no app rodando em Tauri WebView
+real lançava `SecurityError: Failed to execute 'toDataURL' on
+'HTMLCanvasElement': Tainted canvases may not be exported.` PNG não
+era salvo.
+
+**Causa raiz:** Tauri 2 envia `Access-Control-Allow-Origin:
+<window_origin>` no asset protocol automaticamente (confirmado em
+`crates/tauri/src/protocol/asset.rs`). Mas o `<img>` em
+`material-applier.ts:25` era criado SEM `crossOrigin`, então o
+browser carregava no-cors e ignorava o header — a textura entrava
+como tainted no canvas e qualquer `toDataURL()` falhava.
+
+**Fix cirúrgico:** 1 linha em `loadImage()`:
+
+```ts
+img.crossOrigin = 'anonymous'; // ANTES de img.src = url
+```
+
+**Atenção crítica:** `crossOrigin` PRECISA ser setado ANTES de
+`img.src = url`. Setado depois, o request já saiu sem CORS e o
+atributo é ignorado.
+
+**Por que escapou dos testes:** os 8 testes do `material-applier` +
+8 do `png-exporter` rodam em jsdom, que **não implementa CORS**.
+O canvas em jsdom nunca tainta independente de origem, então o bug
+era invisível em CI. Reproduzido apenas em WebView Tauri real.
+
+**Lição registrada:** testes em jsdom não substituem validação visual
+no WebView real quando o código toca em CORS, asset protocol,
+toDataURL, ou APIs específicas do browser. Decisões/features futuras
+nessa zona DEVEM passar por checkpoint visual com Gabriell antes de
+serem consideradas fechadas.
+
+**Teste de regressão adicionado:** `material-applier.test.ts` — Proxy
+em `document.createElement('img')` captura ordem dos sets, asserta
+`crossOrigin === 'anonymous'` E setado antes de `src`. Protege contra
+alguém remover o atributo no futuro (intent check, não behavior).

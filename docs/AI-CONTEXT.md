@@ -121,6 +121,7 @@ Justificativa: [...]
 - ✅ **Teste verde ≠ código no caminho de execução** — validar via runtime que função modificada está sendo chamada
 - ✅ **Causa raiz > sintoma**, sempre, sem exceção
 - ✅ **Validação manual com print do Gabriell substitui infra de teste de banco real** (decidido na Onda 8 — viável com dono de operação validada)
+- ✅ **jsdom não testa CORS — validação visual real é obrigatória pra features que envolvem asset protocol, toDataURL, ou cross-origin** (descoberto na Onda 9.G: PNG export passou nos 8 testes do png-exporter mas falhou em runtime com SecurityError tainted-canvas; jsdom nunca tainta canvas independente de origem). Toda feature nessa zona precisa checkpoint visual antes de ser considerada fechada.
 
 ---
 
