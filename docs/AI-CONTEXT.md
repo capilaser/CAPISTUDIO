@@ -183,11 +183,9 @@ Justificativa: [...]
 | **7**   | **Painel de Camadas hierárquico (visibility/lock/rename/delete/move/reparent)** | **✅ Fechada (commits dfb23c8, 0657f1a, 062307e)**          |
 | **8.5** | **Banco de Gravações operacional (4ª aba + addEngravingSvg + categoryId)**      | **✅ Fechada (commits 9fc8e24, f9dc9d8, 33b1969, 28a66f7)** |
 | **8.6** | **Mini-onda: fix de precisão viewBox vs Fabric (originalBounds autoritativo)**  | **✅ Fechada (commits 48008c2, f0f39d3)**                   |
-| 7       | Painel de Camadas hierárquico (ex-7b original, renomeado)                       | ⏳                                                          |
-| 8.5     | Gravações sobre apliques (balança + texto profissão)                            | ⏳                                                          |
-| 9       | Exportação SVG por máquina/operação + PNG mockup                                | ⏳                                                          |
-| 10      | Telas restantes (Grid Padrões, Histórico, Banco Ativos)                         | ⏳                                                          |
-| 11      | Atalhos globais + Undo/Redo (50 níveis)                                         | ⏳                                                          |
+| **9**   | **Banco Marcações + Motor SVG/PNG + Dialog Export PNG (escopo final reduzido)** | **✅ Fechada (14 commits f0f5dd9 → docs)**                  |
+| 10      | UI cadastro de bancos (apliques + gravações + marcações + fontes)               | ⏳                                                          |
+| 11      | Histórico pedidos + status aprovação + UI export SVG production                 | ⏳ (motor SVG já pronto, espera UI)                         |
 | 12      | Polimento final + build MSI Windows                                             | ⏳                                                          |
 | 13      | Validação final + smoke test do MVP completo                                    | ⏳                                                          |
 
@@ -321,6 +319,7 @@ Justificativa: [...]
 - `013-base-svg-seed-onda8.md` — base_svg vem de fixture via seed (INSERT OR IGNORE + UPDATE WHERE NULL). Limitação: editar fixture exige reseed manual.
 - `014-snap-system.md` — Sistema de snap completo (Onda 7a Fases A+B): motor puro, integração Fabric, race condition resolvida, decisões de tolerância/Alt/grade.
 - `015-onda-7b-decisoes-visuais.md` — Decisões visuais da Onda 7b inteira: hierarquia de cores entre 4 sistemas (snap/medição/proximidade/grade), render híbrido Fabric+DOM, render-on-change para guias, fade-out cancelável, getCapiId canônico, Pattern para grade.
+- `016-onda-9-exportacao-maquina-operacao.md` — Spec completa da Onda 9: cores semânticas (preto/azul/vermelho), mm puros no SVG, z-order preservado, texto vetorizado via opentype.js (Roboto Slab fallback documentado), PNG 300 DPI com texturas Fabric Pattern nativo, AssetLookupFn + TauriIO injetados (motores puros), textRouting opcional pro dialog Onda 11, persistência settings.export.lastFolder, mudança de escopo: SVG production fica pra Onda 11 quando houver status de pedido aprovado.
 
 ---
 
@@ -330,7 +329,11 @@ Ver `docs/DEBT.md` — lista durável de dívidas conhecidas com origem, severid
 
 ## 💡 Ideias futuras
 
-Ver `docs/IDEAS/` — pasta com features propostas durante a construção (separadas das dívidas do DEBT.md). Inclui nota técnica crítica para a Onda 9: `onda-9-export-respeita-layer-visible.md` (export deve ler `LayerMeta.visible` e pular camadas invisíveis).
+Ver `docs/IDEAS/` — pasta com features propostas durante a construção (separadas das dívidas do DEBT.md). Notas técnicas relevantes:
+
+- `onda-9-export-respeita-layer-visible.md` — Onda 9 implementou: motor SVG e PNG ambos pulam camadas com `LayerMeta.visible=false`.
+- `fontes-variable-suportadas-opentype.md` — Roboto Slab Variable não funciona com opentype.js (GSUB substFormat 2). Fallback: placeholder XML + toast pra vetorização manual. 4/5 fontes bundled funcionam.
+- `onda-11-svg-production-com-aprovacao.md` — Motor SVG pronto da Onda 9, esperando UI de status do pedido + dialog de confirmação com `textRouting` override por slot.
 
 ---
 
