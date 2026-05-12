@@ -21,10 +21,26 @@ import * as fabric from 'fabric';
 /**
  * Loads an HTMLImageElement from a URL.
  * Extracted as a named export so Vitest can vi.mock() it without touching the rest.
+ *
+ * Onda 9.G fix — crossOrigin='anonymous' é obrigatório:
+ *   Tauri 2 envia `Access-Control-Allow-Origin: <window_origin>` no asset
+ *   protocol automaticamente (ver crates/tauri/src/protocol/asset.rs no
+ *   source). Sem `crossOrigin='anonymous'` no <img>, o browser carrega
+ *   no-cors e ignora o header — a textura entra como tainted no canvas e
+ *   `canvas.toDataURL()` (Fase 9E) lança SecurityError em runtime.
+ *   Setar `crossOrigin` faz o browser HONRAR o header CORS e marcar a
+ *   imagem como CORS-clean.
+ *
+ *   ATENÇÃO: `crossOrigin` PRECISA ser setado ANTES de `img.src = url`.
+ *   Se setado depois, o request já saiu sem CORS e o atributo é ignorado.
+ *
+ *   Descoberto em validação visual real do Gabriell (Fase 9.F) — jsdom
+ *   não reproduz comportamento de CORS, então testes verdes não capturaram.
  */
 export function loadImage(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = document.createElement('img');
+    img.crossOrigin = 'anonymous';
     img.onload = () => resolve(img);
     img.onerror = () => reject(new Error(`[material-applier] Failed to load image: ${url}`));
     img.src = url;
