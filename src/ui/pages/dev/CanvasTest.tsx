@@ -1,22 +1,15 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 
-import { CanvasEngine } from '@/core/canvas/canvas-engine';
-import { parseCorelSvg } from '@/core/canvas/corel-svg-parser';
 import {
   DEV_TEST_PATTERN_ID,
   DEV_TEST_PRODUCT_ID,
   DEV_VIEWPORT,
 } from '@/core/canvas/dev-constants';
-import { attachCanvasKeybindings } from '@/core/canvas/keybindings';
 import { MM_TO_PX } from '@/core/canvas/units';
-import { getById as getMaterialById } from '@/data/repositories/materialRepository';
-import { resolveAssetUrl } from '@/data/repositories/materialRepository';
-import { getPatternById, upsertPatternCanvas } from '@/data/repositories/patternRepository';
-import { getProductById, type Product } from '@/data/repositories/productRepository';
+import { useCanvasEngine } from '@/hooks/useCanvasEngine';
 import { useCanvasStore } from '@/stores/canvas-store';
-import { useAltKey } from '@/hooks/useAltKey';
 import { ExportPngDialog } from '@/ui/canvas/ExportPngDialog';
 import { CanvasToolbar } from './canvas-test/CanvasToolbar';
 import { CanvasWorkspace } from './canvas-test/CanvasWorkspace';
@@ -26,194 +19,36 @@ import { SaveAsPatternDialog } from './canvas-test/SaveAsPatternDialog';
 const TEST_RECT_MM = { width: 20, height: 10 };
 
 export default function CanvasTest() {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const engineRef = useRef<CanvasEngine | null>(null);
-  const productRef = useRef<Product | null>(null);
-  const [product, setProduct] = useState<Product | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [ready, setReady] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const savingRef = useRef(false);
   const [saveAsOpen, setSaveAsOpen] = useState(false);
   const [loadOpen, setLoadOpen] = useState(false);
   const [exportPngOpen, setExportPngOpen] = useState(false);
 
-  const { mode, setSelectedSlotId, setSelectedLayerId, setSelectedLayerKind } = useCanvasStore();
+  const { mode } = useCanvasStore();
 
-  const altKeyRef = useAltKey();
+  const { canvasRef, engineRef, product, ready, error, saving, save, clear, loadPattern } =
+    useCanvasEngine({
+      productId: DEV_TEST_PRODUCT_ID,
+      patternId: DEV_TEST_PATTERN_ID,
+      viewport: DEV_VIEWPORT,
+      patternLabel: 'Dev Test Pattern',
+      mode,
+    });
 
   async function handleSave() {
-    const engine = engineRef.current;
-    const p = productRef.current;
-    if (!engine || !p || savingRef.current) return;
-    savingRef.current = true;
-    setSaving(true);
     try {
-      const data = engine.serialize(p.id);
-      await upsertPatternCanvas(
-        DEV_TEST_PATTERN_ID,
-        p.id,
-        JSON.stringify(data),
-        'Dev Test Pattern'
-      );
+      await save();
       toast.success('Salvo');
     } catch (e) {
       console.error('[canvas-test] save failed:', e);
       toast.error('Erro ao salvar');
-    } finally {
-      savingRef.current = false;
-      setSaving(false);
     }
   }
 
-  useEffect(() => {
-    let cancelled = false;
-    let detachKeys: (() => void) | null = null;
-
-    async function boot() {
-      try {
-        const p = await getProductById(DEV_TEST_PRODUCT_ID);
-        if (!p) {
-          setError(`Product '${DEV_TEST_PRODUCT_ID}' not found in database.`);
-          return;
-        }
-        if (cancelled || !canvasRef.current) return;
-        productRef.current = p;
-        setProduct(p);
-
-        const engine = new CanvasEngine(canvasRef.current, {
-          productWidthMm: p.canvasMm.width,
-          productHeightMm: p.canvasMm.height,
-          viewportWidthPx: DEV_VIEWPORT.widthPx,
-          viewportHeightPx: DEV_VIEWPORT.heightPx,
-        });
-
-        // ADR 013: base_svg comes from the DB (seeded from fixture), not a static fetch.
-        // p.baseSvg is already returned by productRepository.getProductById().
-        if (!p.baseSvg) {
-          throw new Error(
-            `Product '${DEV_TEST_PRODUCT_ID}' has no base_svg in the database. Re-seed the DB.`
-          );
-        }
-        if (cancelled) {
-          engine.dispose();
-          return;
-        }
-        // Parse + validate through all 6 gates before touching the canvas.
-        // parseCorelSvg throws user-readable errors for any quality issue —
-        // the catch block below surfaces them via toast so the user knows exactly
-        // what to fix in Corel before re-exporting.
-        const meta = parseCorelSvg(p.baseSvg);
-        await engine.loadProductSvgFromMeta(meta);
-        if (cancelled) {
-          engine.dispose();
-          return;
-        }
-
-        // Restore prior state if present.
-        const existing = await getPatternById(DEV_TEST_PATTERN_ID);
-        if (cancelled) {
-          engine.dispose();
-          return;
-        }
-        if (existing?.canvasJson) {
-          if ((existing.canvasJson.objects?.length ?? 0) > 0) {
-            try {
-              // Collect materialIds present in layers for pre-loading.
-              const layers = existing.canvasJson.capi?.layers ?? [];
-              const matEntries: Array<{ id: string; url: string }> = [];
-
-              await engine.deserialize(
-                {
-                  version: existing.canvasJson.version,
-                  objects: existing.canvasJson.objects as Array<Record<string, unknown>>,
-                  capi: {
-                    productId: p.id,
-                    units: 'mm',
-                    schemaVersion: existing.canvasJson.capi?.schemaVersion ?? 1,
-                    layers,
-                  },
-                },
-                // Re-apply material Patterns from saved materialIds.
-                async (materialId) => {
-                  const mat = await getMaterialById(materialId);
-                  if (!mat) throw new Error(`Material not found: ${materialId}`);
-                  const url = await resolveAssetUrl(mat);
-                  matEntries.push({ id: materialId, url });
-                  return url;
-                }
-              );
-
-              // Pre-warm the image cache with the materials we already resolved
-              // during deserialize — zero additional IPC calls.
-              if (matEntries.length > 0) {
-                await engine.preloadMaterials(matEntries);
-              }
-            } catch (e) {
-              if (import.meta.env.DEV) {
-                console.warn('[canvas-test] deserialize failed, opening empty:', e);
-              }
-            }
-          }
-        } else if (existing === null && import.meta.env.DEV) {
-          console.info(
-            `[canvas-test] no pattern '${DEV_TEST_PATTERN_ID}' yet — will be created on first save.`
-          );
-        }
-
-        engine.loadSlotsFromCanvas();
-        engine.onSlotSelectionChange = setSelectedSlotId;
-        engine.onLayerSelectionChange = (id, meta) => {
-          setSelectedLayerId(id);
-          setSelectedLayerKind(meta?.kind ?? null);
-        };
-        // Connect snap — must run after engine is fully initialised so that
-        // snapOptions is set before the first object:moving fires.
-        // altKeyRef is a stable ref — the closure always reads the current value.
-        engine.setSnapOptions({ isAltDown: () => altKeyRef.current });
-        engineRef.current = engine;
-        detachKeys = attachCanvasKeybindings({
-          onZoomIn: () => engine.zoomBy(1.1),
-          onZoomOut: () => engine.zoomBy(1 / 1.1),
-          onZoomReset: () => engine.resetView(),
-          onPanStart: () => engine.setPanMode(true),
-          onPanEnd: () => engine.setPanMode(false),
-          onSave: () => void handleSave(),
-        });
-        setReady(true);
-      } catch (e) {
-        if (!cancelled) setError(String(e));
-      }
-    }
-
-    void boot();
-
-    return () => {
-      cancelled = true;
-      detachKeys?.();
-      engineRef.current?.setSnapOptions(null);
-      engineRef.current?.dispose();
-      engineRef.current = null;
-      productRef.current = null;
-    };
-    // Zustand setters are stable references — listing them satisfies exhaustive-deps
-    // without causing re-runs. altKeyRef is a stable ref object — its identity never
-    // changes, so it doesn't need to be in deps (same pattern as engineRef, canvasRef).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [setSelectedSlotId, setSelectedLayerId, setSelectedLayerKind]);
-
-  // Sync Zustand mode → canvas engine whenever mode changes.
-  useEffect(() => {
-    if (!ready || !engineRef.current) return;
-    engineRef.current.setMode(mode);
-  }, [mode, ready]);
-
   function handleAddRectangle() {
     const engine = engineRef.current;
-    const p = productRef.current;
-    if (!engine || !p) return;
-    const baseX = (p.canvasMm.width - TEST_RECT_MM.width) / 2;
-    const baseY = (p.canvasMm.height - TEST_RECT_MM.height) / 2;
+    if (!engine || !product) return;
+    const baseX = (product.canvasMm.width - TEST_RECT_MM.width) / 2;
+    const baseY = (product.canvasMm.height - TEST_RECT_MM.height) / 2;
     const jitterX = (Math.random() - 0.5) * 6;
     const jitterY = (Math.random() - 0.5) * 4;
     engine.addRectangle(
@@ -222,46 +57,6 @@ export default function CanvasTest() {
       TEST_RECT_MM.width,
       TEST_RECT_MM.height
     );
-  }
-
-  function handleClear() {
-    engineRef.current?.clearUserObjects();
-    setSelectedLayerId(null);
-    setSelectedLayerKind(null);
-  }
-
-  async function handleLoadPattern(patternId: string): Promise<void> {
-    const engine = engineRef.current;
-    const p = productRef.current;
-    if (!engine || !p) return;
-
-    const { getPatternById: loadPattern } = await import('@/data/repositories/patternRepository');
-    const pattern = await loadPattern(patternId);
-    if (!pattern?.canvasJson) return;
-
-    const layers = pattern.canvasJson.capi?.layers ?? [];
-    await engine.deserialize(
-      {
-        version: pattern.canvasJson.version,
-        objects: pattern.canvasJson.objects as Array<Record<string, unknown>>,
-        capi: {
-          productId: p.id,
-          units: 'mm',
-          schemaVersion: pattern.canvasJson.capi?.schemaVersion ?? 2,
-          layers,
-        },
-      },
-      async (materialId) => {
-        const { getById: getMat, resolveAssetUrl: resolveUrl } =
-          await import('@/data/repositories/materialRepository');
-        const mat = await getMat(materialId);
-        if (!mat) throw new Error(`Material not found: ${materialId}`);
-        return resolveUrl(mat);
-      }
-    );
-    engine.loadSlotsFromCanvas();
-    setSelectedLayerId(null);
-    setSelectedLayerKind(null);
   }
 
   return (
@@ -278,7 +73,7 @@ export default function CanvasTest() {
         ready={ready}
         saving={saving}
         onSave={() => void handleSave()}
-        onClear={handleClear}
+        onClear={clear}
         onSaveAs={() => setSaveAsOpen(true)}
         onLoad={() => setLoadOpen(true)}
         onExportPng={() => setExportPngOpen(true)}
@@ -304,9 +99,8 @@ export default function CanvasTest() {
         productId={product?.id ?? ''}
         getCanvasJson={() => {
           const engine = engineRef.current;
-          const p = productRef.current;
-          if (!engine || !p) return '';
-          return JSON.stringify(engine.serialize(p.id));
+          if (!engine || !product) return '';
+          return JSON.stringify(engine.serialize(product.id));
         }}
         onClose={() => setSaveAsOpen(false)}
         onSaved={() => setSaveAsOpen(false)}
@@ -315,7 +109,7 @@ export default function CanvasTest() {
         open={loadOpen}
         productId={product?.id ?? DEV_TEST_PRODUCT_ID}
         onClose={() => setLoadOpen(false)}
-        onLoad={handleLoadPattern}
+        onLoad={loadPattern}
       />
       <ExportPngDialog
         open={exportPngOpen}
