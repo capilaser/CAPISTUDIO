@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Download } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { CanvasEngine } from '@/core/canvas/canvas-engine';
@@ -18,19 +17,15 @@ import { getPatternById, upsertPatternCanvas } from '@/data/repositories/pattern
 import { getProductById, type Product } from '@/data/repositories/productRepository';
 import { useCanvasStore } from '@/stores/canvas-store';
 import { useAltKey } from '@/hooks/useAltKey';
-import { Button } from '@/ui/components/button';
 import { ExportPngDialog } from '@/ui/canvas/ExportPngDialog';
+import { CanvasToolbar } from './canvas-test/CanvasToolbar';
 import { LoadPatternDialog } from './canvas-test/LoadPatternDialog';
-import { ModeToggle } from './canvas-test/ModeToggle';
 import { OperatorInputs } from './canvas-test/OperatorInputs';
 import { SaveAsPatternDialog } from './canvas-test/SaveAsPatternDialog';
 import { UnifiedRightPanel } from './canvas-test/UnifiedRightPanel';
-import { SlotCreatorButtons } from './canvas-test/SlotCreatorButtons';
 import { AlignmentToolbar } from '@/ui/canvas/AlignmentToolbar';
-import { GridToggle } from '@/ui/canvas/GridToggle';
 import { MeasurementOverlay } from '@/ui/canvas/MeasurementOverlay';
 import { ProximityOverlay } from '@/ui/canvas/ProximityOverlay';
-import { RulerToggle } from '@/ui/canvas/RulerToggle';
 
 const TEST_RECT_MM = { width: 20, height: 10 };
 
@@ -282,89 +277,17 @@ export default function CanvasTest() {
         </Link>
       </header>
 
-      <div className="flex items-center gap-2 border-b border-ink-800 bg-ink-900/50 px-4 py-2">
-        <ModeToggle />
-
-        <SlotCreatorButtons engineRef={engineRef} disabled={!ready} />
-
-        <div className="h-4 w-px bg-ink-700" />
-
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={handleAddRectangle}
-          disabled={!ready}
-          className="font-mono text-[11px]"
-        >
-          Adicionar retângulo
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleClear}
-          disabled={!ready}
-          className="font-mono text-[11px]"
-        >
-          Limpar canvas
-        </Button>
-        <Button
-          variant="default"
-          size="sm"
-          onClick={() => void handleSave()}
-          disabled={!ready || saving}
-          className="font-mono text-[11px]"
-        >
-          {saving ? 'Salvando…' : 'Salvar'}
-        </Button>
-
-        <div className="h-4 w-px bg-ink-700" />
-
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setSaveAsOpen(true)}
-          disabled={!ready}
-          className="font-mono text-[11px]"
-        >
-          Salvar como padrão
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setLoadOpen(true)}
-          disabled={!ready}
-          className="font-mono text-[11px]"
-        >
-          Abrir padrão
-        </Button>
-
-        <div className="h-4 w-px bg-ink-700" />
-
-        {/* Onda 9.F — exporta canvas como PNG mockup pro cliente. */}
-        <Button
-          variant="default"
-          size="sm"
-          onClick={() => setExportPngOpen(true)}
-          disabled={!ready}
-          className="font-mono text-[11px]"
-          title="Exportar PNG mockup pro cliente"
-        >
-          <Download className="mr-1.5 h-3 w-3" />
-          Exportar PNG
-        </Button>
-
-        <div className="h-4 w-px bg-ink-700" />
-
-        {/* Onda 7b Fase E — toggle de modo medição. Ligado: laser; desligado: ink-300. */}
-        <RulerToggle disabled={!ready} />
-
-        {/* Onda 7b Fase F — toggle de pontinhos da grade. Snap em grade sempre ativo. */}
-        <GridToggle engineRef={engineRef} disabled={!ready} />
-
-        <span className="ml-auto font-mono text-[11px] text-ink-500">
-          Ctrl+S salvar · Ctrl+= zoom · Ctrl+0 reset · Space+drag pan
-        </span>
-      </div>
+      <CanvasToolbar
+        engineRef={engineRef}
+        ready={ready}
+        saving={saving}
+        onSave={() => void handleSave()}
+        onClear={handleClear}
+        onSaveAs={() => setSaveAsOpen(true)}
+        onLoad={() => setLoadOpen(true)}
+        onExportPng={() => setExportPngOpen(true)}
+        onAddRectangle={handleAddRectangle}
+      />
 
       {/* Onda 7b — Fase D: segunda linha condicional, aparece com seleção ativa.
           Só montamos depois que o engine está pronto — antes disso engineRef.current
