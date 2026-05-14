@@ -27,6 +27,12 @@ drizzle/
 *.sqlite-journal
 exports/
 
+# v1 reference data — JSONs e PNGs dumpados do sistema v1 antigo (broches-studio
+# monolítico). Material de consulta local, NÃO usado pelo código v2 — duplica
+# fixtures que já estão em src-tauri/resources/. Mantido fora do git pra não
+# inflar clones; consultar localmente se precisar.
+v1-data/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
