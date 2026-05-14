@@ -32,9 +32,9 @@ serde_json = "1"
 # direto permite nomear `SqlitePool` e `Transaction` no nosso código.
 # Ver ADR 017.
 sqlx = { version = "0.8", default-features = false, features = ["sqlite", "runtime-tokio"] }
-tokio = { version = "1", features = ["sync"] }
-
-[dev-dependencies]
-# Onda 11.A — `#[tokio::test]` em src-tauri/src/db_tx.rs precisa de macros + rt.
-tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }
+# Onda 11.security — consolidação: features de prod + features de teste numa
+# linha só, ativadas para `#[tokio::test]` em db_tx.rs sem precisar de uma
+# segunda declaração em [dev-dependencies]. Custo zero em runtime (cargo só
+# inclui o que é usado pelo grafo de dependências final).
+tokio = { version = "1", features = ["sync", "macros", "rt", "rt-multi-thread"] }
 
