@@ -31,20 +31,40 @@ export function UnifiedRightPanel({ engineRef }: UnifiedRightPanelProps) {
   return (
     <aside className="flex w-[280px] shrink-0 flex-col overflow-hidden border-l border-ink-700 bg-ink-900">
       <Tabs defaultValue="materiais" className="flex min-h-0 flex-1 flex-col">
-        <TabsList className="shrink-0 rounded-none border-b border-ink-700 bg-ink-900 px-2 pt-2">
-          <TabsTrigger value="apliques" className="font-mono text-[11px]">
+        {/* G1.2 fix: 5 abas em 280px estourava (texto + px-3 padrão = ~460px).
+         * Solução: grid de 5 colunas iguais + texto compacto. Cada aba 56px
+         * de largura útil — cabe "Apliq.", "Gravaç.", etc. sem cortar bordas.
+         * px-0 derruba padding herdado, text-[10px] uppercase mantém DAW look.
+         */}
+        <TabsList className="grid h-auto shrink-0 grid-cols-5 gap-0.5 rounded-none border-b border-ink-700 bg-ink-900 p-1">
+          <TabsTrigger
+            value="apliques"
+            className="rounded-sm px-0 py-1.5 font-mono text-[10px] uppercase tracking-tight"
+          >
             Apliques
           </TabsTrigger>
-          <TabsTrigger value="gravacoes" className="font-mono text-[11px]">
-            Gravações
+          <TabsTrigger
+            value="gravacoes"
+            className="rounded-sm px-0 py-1.5 font-mono text-[10px] uppercase tracking-tight"
+          >
+            Gravaç.
           </TabsTrigger>
-          <TabsTrigger value="marcacoes" className="font-mono text-[11px]">
-            Marcações
+          <TabsTrigger
+            value="marcacoes"
+            className="rounded-sm px-0 py-1.5 font-mono text-[10px] uppercase tracking-tight"
+          >
+            Marcaç.
           </TabsTrigger>
-          <TabsTrigger value="materiais" className="font-mono text-[11px]">
-            Materiais
+          <TabsTrigger
+            value="materiais"
+            className="rounded-sm px-0 py-1.5 font-mono text-[10px] uppercase tracking-tight"
+          >
+            Material
           </TabsTrigger>
-          <TabsTrigger value="camadas" className="font-mono text-[11px]">
+          <TabsTrigger
+            value="camadas"
+            className="rounded-sm px-0 py-1.5 font-mono text-[10px] uppercase tracking-tight"
+          >
             Camadas
           </TabsTrigger>
         </TabsList>
