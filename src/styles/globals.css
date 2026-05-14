@@ -40,35 +40,43 @@
     --radius: 0.5rem;
   }
 
-  /* Dark theme — primary mode of the app (industrial tool). */
+  /* Dark theme — primary mode of the app (industrial tool).
+   *
+   * Fase G1 (Onda 12 — front rework): paleta refeita com base no esboço Stitch.
+   * Tema dark profissional industrial. Fundos quase-pretos #09090B/#111113,
+   * texto branco-puro #FAFAFA, primária violeta #7C3AED.
+   *
+   * laser (#dc2626) mantido como token separado em tailwind.config.ts pra
+   * operações de canvas (gravação = vermelho), não como cor de UI.
+   */
   .dark {
-    --background: 220 7% 5%; /* ink-950 */
-    --foreground: 220 13% 93%; /* ink-100 */
+    --background: 240 6% 5%; /* #09090B */
+    --foreground: 0 0% 98%; /* #FAFAFA */
 
-    --card: 220 7% 10%; /* ink-800 */
-    --card-foreground: 220 13% 93%;
+    --card: 240 4% 7%; /* #111113 */
+    --card-foreground: 0 0% 98%;
 
-    --popover: 220 7% 10%;
-    --popover-foreground: 220 13% 93%;
+    --popover: 240 4% 7%;
+    --popover-foreground: 0 0% 98%;
 
-    --primary: 0 72% 51%;
+    --primary: 263 84% 58%; /* #7C3AED violeta */
     --primary-foreground: 0 0% 98%;
 
-    --secondary: 220 5% 16%; /* ink-700 */
-    --secondary-foreground: 220 13% 93%;
+    --secondary: 240 4% 13%; /* #1F1F23 */
+    --secondary-foreground: 0 0% 98%;
 
-    --muted: 220 5% 16%;
-    --muted-foreground: 220 5% 60%;
+    --muted: 240 4% 13%;
+    --muted-foreground: 240 4% 46%; /* #71717A */
 
-    --accent: 220 5% 16%;
-    --accent-foreground: 220 13% 93%;
+    --accent: 240 4% 13%;
+    --accent-foreground: 0 0% 98%;
 
-    --destructive: 0 72% 51%;
+    --destructive: 0 84% 60%; /* #EF4444 */
     --destructive-foreground: 0 0% 98%;
 
-    --border: 220 5% 16%;
-    --input: 220 5% 16%;
-    --ring: 0 72% 70%;
+    --border: 240 4% 16%; /* #27272A */
+    --input: 240 4% 16%;
+    --ring: 263 84% 70%; /* primary lighter */
   }
 
   * {

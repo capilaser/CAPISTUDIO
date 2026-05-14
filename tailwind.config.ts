@@ -75,6 +75,25 @@ const config: Config = {
         ok: '#15803d',
         warn: '#d4aa3a',
         danger: '#dc2626',
+
+        // Fase G1 (Onda 12) — tokens semânticos do design system Stitch.
+        // Convivem com os legados (laser, ink-*, op-*). Páginas novas usam
+        // esses; páginas antigas migram conforme as fases B/C/D forem feitas.
+        success: '#16A34A', // verde Aprovar
+        warning: '#D97706', // âmbar Aguardando Info
+        // Badges de operação por camada (LayerPanel painel direito):
+        'op-cut-bg': '#1C1C1E',
+        'op-cut-text': '#A1A1AA',
+        'op-grav-bg': '#2D1515',
+        'op-grav-text': '#EF4444',
+        'op-marc-bg': '#0F1929',
+        'op-marc-text': '#3B82F6',
+        // Marketplaces (cards do Kanban futuro):
+        'mkt-shopee': '#EE4D2D',
+        'mkt-ml': '#FFE600',
+        'mkt-whatsapp': '#25D366',
+        // Cor de máquina ativa (badge M1/M2/M3) — derivada do violeta primary:
+        'machine-active': '#4C1D95',
       },
       fontFamily: {
         display: ['"JetBrains Mono Variable"', '"JetBrains Mono"', 'ui-monospace', 'monospace'],
