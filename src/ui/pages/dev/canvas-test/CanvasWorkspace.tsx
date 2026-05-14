@@ -45,7 +45,16 @@ export function CanvasWorkspace({
           quando há exatamente 1 objeto selecionado, independente do Ruler. */}
       {ready && <ProximityOverlay engineRef={engineRef} />}
 
-      {/* 3-column layout: canvas | UnifiedRightPanel | OperatorInputs */}
+      {/* 2-column layout: canvas + 1 painel direito.
+       *
+       * G1.1 fix (Onda 12) — antes era 3 colunas (canvas + UnifiedRightPanel +
+       * OperatorInputs empilhados), o que em janela 1440px deixava OperatorInputs
+       * cortado pela borda direita. Agora o painel direito alterna conforme o modo:
+       *   - Designer: UnifiedRightPanel (Apliques / Gravações / Marcações / Materiais / Camadas)
+       *   - Operator: OperatorInputs (Nome / Profissão / Logo / Fonte do cliente)
+       * Modos têm contextos de uso diferentes — Designer monta padrão, Operador
+       * preenche pedido. Não há razão pros 2 painéis aparecerem juntos.
+       */}
       <div className="flex flex-1 overflow-hidden">
         <div className="flex flex-1 items-center justify-center p-6">
           {error ? (
@@ -59,10 +68,11 @@ export function CanvasWorkspace({
             />
           )}
         </div>
-        {/* UnifiedRightPanel: always visible, 3 tabs (Apliques | Materiais | Camadas) */}
-        <UnifiedRightPanel engineRef={engineRef} />
-        {/* OperatorInputs: visible only in operator mode */}
-        {showOperatorInputs && <OperatorInputs engineRef={engineRef} />}
+        {showOperatorInputs ? (
+          <OperatorInputs engineRef={engineRef} />
+        ) : (
+          <UnifiedRightPanel engineRef={engineRef} />
+        )}
       </div>
     </>
   );
