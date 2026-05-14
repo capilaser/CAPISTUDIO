@@ -354,21 +354,28 @@ export type OrderFields = {
   [key: string]: unknown;
 };
 
+// Onda 11 Fase C — Kanban Dashboard.
+// pattern_id/product_id passaram a NULLABLE (migration v9): pedido nasce sem
+// padrão/produto escolhidos. Editor da Fase D preenche quando o operador seleciona.
+// 5 colunas novas (customer_name, olist_order_id, marketplace, folder_path, archived).
 export const orders = sqliteTable('orders', {
   id: text('id').primaryKey(),
-  patternId: text('pattern_id')
-    .notNull()
-    .references(() => patterns.id),
-  productId: text('product_id')
-    .notNull()
-    .references(() => products.id),
+  patternId: text('pattern_id').references(() => patterns.id), // nullable — pre-editor
+  productId: text('product_id').references(() => products.id), // nullable — pre-editor
   label: text('label').notNull(),
   fields: text('fields').notNull(), // JSON: OrderFields
   materialId: text('material_id').references(() => materials.id),
-  status: text('status').notNull().default('pendente'), // "pendente" | "aprovado"
+  status: text('status').notNull().default('novo'),
+  // 6 valores Kanban: 'novo' | 'aguardando_info' | 'arte_enviada' | 'aprovado'
+  // | 'em_producao' | 'enviado'. Migração v9 traduziu 'pendente'/'enviado_cliente' → 'novo'.
   canvasJson: text('canvas_json').notNull(), // JSON: FabricCanvasJson (snapshot at save)
   exportedPngPath: text('exported_png_path'),
   exportedSvgPaths: text('exported_svg_paths'), // JSON: string[]
+  customerName: text('customer_name'), // preenchido no modal "Novo Pedido"
+  olistOrderId: text('olist_order_id'), // integração marketplace (Fase 2)
+  marketplace: text('marketplace'), // 'shopee' | 'mercado_livre' | 'whatsapp' | NULL
+  folderPath: text('folder_path'), // pasta do pedido (editor Fase D)
+  archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
   createdAt: integer('created_at', { mode: 'timestamp' })
     .notNull()
     .default(sql`(unixepoch())`),

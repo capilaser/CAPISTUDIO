@@ -1,9 +1,15 @@
 /**
- * Onda 11.A — Testes orderRepository + revisionRepository.
+ * Onda 11.A → Onda 11.C — Testes orderRepository + revisionRepository.
  *
  * Mocka getDb (reads diretas) e invoke (transactions). Não exercita SQLite
  * real — a atomicidade real do db_tx_execute já é coberta pelos unit tests
  * Rust (cargo test --lib db_tx).
+ *
+ * Onda 11.C estendeu os testes:
+ *  - Default de status passou de 'pendente' → 'novo'
+ *  - Cobertura nova: listAll, listByStatus, updateStatus, archiveAll,
+ *    setExportedPngPath, create (modal "Novo Pedido")
+ *  - Garantia de que parseStatus aceita os 6 valores Kanban
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -37,7 +43,7 @@ describe('orderRepository.getById', () => {
     expect(result).toBeNull();
   });
 
-  it('parsea fields JSON + materializa Order', async () => {
+  it('parsea fields JSON + materializa Order com campos Kanban', async () => {
     mockDb.select.mockResolvedValueOnce([
       {
         id: 'o1',
@@ -46,10 +52,15 @@ describe('orderRepository.getById', () => {
         label: 'João Silva — Advogado',
         fields: JSON.stringify({ nome: 'João Silva', profissao: 'Advogado' }),
         materialId: 'mat1',
-        status: 'pendente',
+        status: 'novo',
         canvasJson: '{}',
         exportedPngPath: null,
         exportedSvgPaths: null,
+        customerName: 'João Silva',
+        olistOrderId: null,
+        marketplace: 'shopee',
+        folderPath: null,
+        archived: 0,
         createdAt: 1700000000,
         updatedAt: 1700000001,
         deletedAt: null,
@@ -60,23 +71,31 @@ describe('orderRepository.getById', () => {
     const order = await getById('o1');
     expect(order).not.toBeNull();
     expect(order!.fields).toEqual({ nome: 'João Silva', profissao: 'Advogado' });
-    expect(order!.status).toBe('pendente');
+    expect(order!.status).toBe('novo');
     expect(order!.label).toBe('João Silva — Advogado');
+    expect(order!.customerName).toBe('João Silva');
+    expect(order!.marketplace).toBe('shopee');
+    expect(order!.archived).toBe(false);
   });
 
-  it('parsea status enviado_cliente corretamente', async () => {
+  it('aceita patternId/productId null (pedido pré-editor)', async () => {
     mockDb.select.mockResolvedValueOnce([
       {
-        id: 'o-sent',
-        patternId: 'p',
-        productId: 'pr',
-        label: 'L',
+        id: 'o-empty',
+        patternId: null,
+        productId: null,
+        label: 'Maria Santos',
         fields: '{}',
         materialId: null,
-        status: 'enviado_cliente',
+        status: 'novo',
         canvasJson: '{}',
-        exportedPngPath: '/some/path.png',
+        exportedPngPath: null,
         exportedSvgPaths: null,
+        customerName: 'Maria Santos',
+        olistOrderId: null,
+        marketplace: null,
+        folderPath: null,
+        archived: 0,
         createdAt: 0,
         updatedAt: 0,
         deletedAt: null,
@@ -84,13 +103,81 @@ describe('orderRepository.getById', () => {
     ]);
     const { getById } = await import('@/data/repositories/orderRepository');
 
-    const order = await getById('o-sent');
-    expect(order!.status).toBe('enviado_cliente');
+    const order = await getById('o-empty');
+    expect(order!.patternId).toBeNull();
+    expect(order!.productId).toBeNull();
+  });
+
+  it('parsea os 6 status Kanban corretamente', async () => {
+    const statuses = [
+      'novo',
+      'aguardando_info',
+      'arte_enviada',
+      'aprovado',
+      'em_producao',
+      'enviado',
+    ];
+    for (const status of statuses) {
+      mockDb.select.mockResolvedValueOnce([
+        {
+          id: `o-${status}`,
+          patternId: null,
+          productId: null,
+          label: 'L',
+          fields: '{}',
+          materialId: null,
+          status,
+          canvasJson: '{}',
+          exportedPngPath: null,
+          exportedSvgPaths: null,
+          customerName: null,
+          olistOrderId: null,
+          marketplace: null,
+          folderPath: null,
+          archived: 0,
+          createdAt: 0,
+          updatedAt: 0,
+          deletedAt: null,
+        },
+      ]);
+      const { getById } = await import('@/data/repositories/orderRepository');
+      const order = await getById(`o-${status}`);
+      expect(order!.status).toBe(status);
+    }
+  });
+
+  it('faz fallback para "novo" se status do banco for desconhecido', async () => {
+    mockDb.select.mockResolvedValueOnce([
+      {
+        id: 'o-legacy',
+        patternId: null,
+        productId: null,
+        label: 'Legado',
+        fields: '{}',
+        materialId: null,
+        status: 'pendente', // valor legado (Onda 11.A) — migration deveria ter convertido
+        canvasJson: '{}',
+        exportedPngPath: null,
+        exportedSvgPaths: null,
+        customerName: null,
+        olistOrderId: null,
+        marketplace: null,
+        folderPath: null,
+        archived: 0,
+        createdAt: 0,
+        updatedAt: 0,
+        deletedAt: null,
+      },
+    ]);
+    const { getById } = await import('@/data/repositories/orderRepository');
+
+    const order = await getById('o-legacy');
+    expect(order!.status).toBe('novo');
   });
 });
 
 describe('orderRepository.listPage', () => {
-  it('passa limit e offset ao SQL', async () => {
+  it('passa limit e offset ao SQL e filtra archived=0', async () => {
     mockDb.select.mockResolvedValueOnce([]);
     const { listPage } = await import('@/data/repositories/orderRepository');
 
@@ -98,18 +185,60 @@ describe('orderRepository.listPage', () => {
 
     const [sql, params] = mockDb.select.mock.calls[0] as [string, unknown[]];
     expect(sql).toContain('LIMIT ? OFFSET ?');
+    expect(sql).toContain('archived = 0');
     expect(params).toEqual([50, 100]);
   });
 
   it('parsea status de cada row no resultado', async () => {
     mockDb.select.mockResolvedValueOnce([
-      { id: 'a', label: 'A', status: 'pendente', updatedAt: 1 },
-      { id: 'b', label: 'B', status: 'enviado_cliente', updatedAt: 2 },
+      { id: 'a', label: 'A', status: 'novo', updatedAt: 1 },
+      { id: 'b', label: 'B', status: 'aprovado', updatedAt: 2 },
     ]);
     const { listPage } = await import('@/data/repositories/orderRepository');
 
     const rows = await listPage({ limit: 50, offset: 0 });
-    expect(rows.map((r) => r.status)).toEqual(['pendente', 'enviado_cliente']);
+    expect(rows.map((r) => r.status)).toEqual(['novo', 'aprovado']);
+  });
+});
+
+describe('orderRepository.listAll', () => {
+  it('retorna pedidos ativos ordenados por updated_at desc', async () => {
+    mockDb.select.mockResolvedValueOnce([
+      makeOrderRow('o2', 'novo', 200),
+      makeOrderRow('o1', 'aprovado', 100),
+    ]);
+    const { listAll } = await import('@/data/repositories/orderRepository');
+
+    const rows = await listAll();
+    expect(rows.map((r) => r.id)).toEqual(['o2', 'o1']);
+
+    const [sql] = mockDb.select.mock.calls[0] as [string, unknown[]];
+    expect(sql).toContain('archived = 0');
+    expect(sql).toContain('ORDER BY updated_at DESC');
+  });
+});
+
+describe('orderRepository.listByStatus', () => {
+  it('filtra por status e exclui archived por default', async () => {
+    mockDb.select.mockResolvedValueOnce([]);
+    const { listByStatus } = await import('@/data/repositories/orderRepository');
+
+    await listByStatus('enviado');
+
+    const [sql, params] = mockDb.select.mock.calls[0] as [string, unknown[]];
+    expect(sql).toContain('status = ?');
+    expect(sql).toContain('archived = 0');
+    expect(params).toEqual(['enviado']);
+  });
+
+  it('inclui arquivados quando includeArchived=true', async () => {
+    mockDb.select.mockResolvedValueOnce([]);
+    const { listByStatus } = await import('@/data/repositories/orderRepository');
+
+    await listByStatus('enviado', { includeArchived: true });
+
+    const [sql] = mockDb.select.mock.calls[0] as [string, unknown[]];
+    expect(sql).not.toContain('archived = 0');
   });
 });
 
@@ -137,7 +266,7 @@ describe('orderRepository.createWithFirstRevision', () => {
     expect(payload.queries[1].sql).toContain('INSERT INTO order_revisions');
   });
 
-  it('grava status pendente em orders + is_approved=0 em order_revisions', async () => {
+  it("grava status 'novo' em orders + is_approved=0 em order_revisions", async () => {
     invoke.mockResolvedValueOnce({ rows_affected: [1, 1] });
     const { createWithFirstRevision } = await import('@/data/repositories/orderRepository');
 
@@ -151,7 +280,7 @@ describe('orderRepository.createWithFirstRevision', () => {
     });
 
     const [, payload] = invoke.mock.calls[0] as [string, { queries: Array<{ sql: string }> }];
-    expect(payload.queries[0].sql).toContain("'pendente'");
+    expect(payload.queries[0].sql).toContain("'novo'");
     // is_approved=0 (false) — Onda 12 vai marcar 1 em comando dedicado
     expect(payload.queries[1].sql).toContain('is_approved');
     expect(payload.queries[1].sql).toMatch(/,\s*0,\s*unixepoch\(\)/);
@@ -215,6 +344,102 @@ describe('orderRepository.createWithFirstRevision', () => {
     const revisionsFields = payload.queries[1].params[2] as string;
     expect(JSON.parse(ordersFields)).toEqual(fields);
     expect(revisionsFields).toBe(ordersFields);
+  });
+});
+
+describe('orderRepository.create (modal Novo Pedido — Fase C)', () => {
+  it('cria pedido com pattern_id/product_id NULL e status novo', async () => {
+    invoke.mockResolvedValueOnce({ rows_affected: [1, 1] });
+    const { create } = await import('@/data/repositories/orderRepository');
+
+    const id = await create('João Silva');
+
+    expect(id).toBeTruthy();
+    expect(invoke).toHaveBeenCalledOnce();
+
+    const [, payload] = invoke.mock.calls[0] as [
+      string,
+      { queries: Array<{ sql: string; params: unknown[] }> },
+    ];
+    expect(payload.queries).toHaveLength(2);
+    expect(payload.queries[0].sql).toContain('INSERT INTO orders');
+    expect(payload.queries[0].sql).toContain('NULL, NULL'); // pattern_id, product_id
+    expect(payload.queries[0].sql).toContain("'novo'");
+    // customer_name preenchido (params[4] = trimmed customerName)
+    expect(payload.queries[0].params).toContain('João Silva');
+  });
+
+  it('rejeita customerName com menos de 2 caracteres', async () => {
+    const { create } = await import('@/data/repositories/orderRepository');
+
+    await expect(create('A')).rejects.toThrow(/at least 2 characters/);
+    await expect(create('  ')).rejects.toThrow(/at least 2 characters/);
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it('faz trim do customerName antes de gravar', async () => {
+    invoke.mockResolvedValueOnce({ rows_affected: [1, 1] });
+    const { create } = await import('@/data/repositories/orderRepository');
+
+    await create('  Maria Santos  ');
+
+    const [, payload] = invoke.mock.calls[0] as [string, { queries: Array<{ params: unknown[] }> }];
+    expect(payload.queries[0].params).toContain('Maria Santos');
+  });
+
+  it('retorna o orderId gerado (uuid) para a UI redirecionar', async () => {
+    invoke.mockResolvedValueOnce({ rows_affected: [1, 1] });
+    const { create } = await import('@/data/repositories/orderRepository');
+
+    const id = await create('Cliente Teste');
+    // uuid v4: 36 chars, formato 8-4-4-4-12
+    expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+  });
+});
+
+describe('orderRepository.updateStatus', () => {
+  it('roda UPDATE com status novo + updated_at', async () => {
+    const { updateStatus } = await import('@/data/repositories/orderRepository');
+
+    await updateStatus('o1', 'aprovado');
+
+    const [sql, params] = mockDb.execute.mock.calls[0] as [string, unknown[]];
+    expect(sql).toContain('UPDATE orders');
+    expect(sql).toContain('status = ?');
+    expect(sql).toContain('updated_at = unixepoch()');
+    expect(params).toEqual(['aprovado', 'o1']);
+  });
+});
+
+describe('orderRepository.archiveAll', () => {
+  it('marca múltiplos pedidos como archived=1 num único UPDATE', async () => {
+    const { archiveAll } = await import('@/data/repositories/orderRepository');
+
+    await archiveAll(['o1', 'o2', 'o3']);
+
+    const [sql, params] = mockDb.execute.mock.calls[0] as [string, unknown[]];
+    expect(sql).toContain('archived = 1');
+    expect(sql).toContain('IN (?, ?, ?)');
+    expect(params).toEqual(['o1', 'o2', 'o3']);
+  });
+
+  it('no-op se array vazio (não chama db.execute)', async () => {
+    const { archiveAll } = await import('@/data/repositories/orderRepository');
+
+    await archiveAll([]);
+    expect(mockDb.execute).not.toHaveBeenCalled();
+  });
+});
+
+describe('orderRepository.setExportedPngPath', () => {
+  it('atualiza apenas o exported_png_path do pedido', async () => {
+    const { setExportedPngPath } = await import('@/data/repositories/orderRepository');
+
+    await setExportedPngPath('o1', '/path/to/mockup.png');
+
+    const [sql, params] = mockDb.execute.mock.calls[0] as [string, unknown[]];
+    expect(sql).toContain('exported_png_path = ?');
+    expect(params).toEqual(['/path/to/mockup.png', 'o1']);
   });
 });
 
@@ -326,6 +551,50 @@ describe('revisionRepository.getLatest', () => {
 });
 
 // ── Helpers de fixture ───────────────────────────────────────────────────────
+
+interface OrderRowMock {
+  id: string;
+  patternId: string | null;
+  productId: string | null;
+  label: string;
+  fields: string;
+  materialId: string | null;
+  status: string;
+  canvasJson: string;
+  exportedPngPath: string | null;
+  exportedSvgPaths: string | null;
+  customerName: string | null;
+  olistOrderId: string | null;
+  marketplace: string | null;
+  folderPath: string | null;
+  archived: number;
+  createdAt: number;
+  updatedAt: number;
+  deletedAt: number | null;
+}
+
+function makeOrderRow(id: string, status: string, updatedAt: number): OrderRowMock {
+  return {
+    id,
+    patternId: null,
+    productId: null,
+    label: `Order ${id}`,
+    fields: '{}',
+    materialId: null,
+    status,
+    canvasJson: '{}',
+    exportedPngPath: null,
+    exportedSvgPaths: null,
+    customerName: null,
+    olistOrderId: null,
+    marketplace: null,
+    folderPath: null,
+    archived: 0,
+    createdAt: 0,
+    updatedAt,
+    deletedAt: null,
+  };
+}
 
 interface RevisionRowMock {
   id: string;

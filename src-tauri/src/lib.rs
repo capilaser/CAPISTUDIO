@@ -97,6 +97,12 @@ pub fn run() {
             sql: include_str!("../migrations/0007_order_revisions.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 9,
+            description: "orders_marketplace_kanban",
+            sql: include_str!("../migrations/0008_orders_marketplace_kanban.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()
