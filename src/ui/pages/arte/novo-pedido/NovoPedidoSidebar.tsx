@@ -13,9 +13,10 @@
  *   Nível 2: Variação = material_families compatíveis com produto da categoria
  *   Nível 3: Cor = materials da família escolhida, mostrada como bolinhas
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type RefObject } from 'react';
 import { Plus, FileUp, Type, Database, ChevronRight } from 'lucide-react';
 
+import type { CanvasEngine } from '@/core/canvas/canvas-engine';
 import { getAllProducts, type Product } from '@/data/repositories/productRepository';
 import { getAllMaterials, type Material } from '@/data/repositories/materialRepository';
 import { listFamilies, type MaterialFamily } from '@/data/repositories/materialFamilyRepository';
@@ -28,6 +29,8 @@ import {
 } from '@/ui/components/dropdown-menu';
 import { cn } from '@/lib/cn';
 
+import { TextoItem, type TextoItemData } from './TextoItem';
+
 export interface ProductSelection {
   productId: string;
   familyId: string;
@@ -35,14 +38,16 @@ export interface ProductSelection {
 }
 
 interface Props {
-  /** Se null, sidebar está em Estado A (escolher produto). Se definido, Estado B. */
   selection: ProductSelection | null;
-  /** Chamado em Estado A quando usuário confirma "Adicionar Produto". */
   onConfirmProduct: (data: ProductSelection) => void;
-  /** Chamado em Estado B no menu "+ Adicionar". Fase 5+ implementa cada tipo. */
   onAddItem?: (type: 'svg' | 'texto' | 'banco') => void;
-  /** Chamado pra reabrir Estado A (camadas preservadas). */
   onEditProduct?: () => void;
+  /** Lista de textos adicionados (F5). */
+  textos?: TextoItemData[];
+  /** Ref do engine compartilhado com a página. */
+  engineRef?: RefObject<CanvasEngine | null>;
+  /** Remove um texto pelo id. */
+  onRemoveTexto?: (id: string) => void;
 }
 
 export function NovoPedidoSidebar({
@@ -50,13 +55,23 @@ export function NovoPedidoSidebar({
   onConfirmProduct,
   onAddItem,
   onEditProduct,
+  textos = [],
+  engineRef,
+  onRemoveTexto,
 }: Props) {
   return (
     <aside className="flex w-[260px] shrink-0 flex-col overflow-y-auto border-r border-border bg-card">
       {selection === null ? (
         <EstadoA onConfirm={onConfirmProduct} />
       ) : (
-        <EstadoB selection={selection} onAddItem={onAddItem} onEditProduct={onEditProduct} />
+        <EstadoB
+          selection={selection}
+          onAddItem={onAddItem}
+          onEditProduct={onEditProduct}
+          textos={textos}
+          engineRef={engineRef}
+          onRemoveTexto={onRemoveTexto}
+        />
       )}
     </aside>
   );
@@ -313,13 +328,20 @@ function EstadoB({
   selection,
   onAddItem,
   onEditProduct,
+  textos = [],
+  engineRef,
+  onRemoveTexto,
 }: {
   selection: ProductSelection;
   onAddItem?: (type: 'svg' | 'texto' | 'banco') => void;
   onEditProduct?: () => void;
+  textos?: TextoItemData[];
+  engineRef?: RefObject<CanvasEngine | null>;
+  onRemoveTexto?: (id: string) => void;
 }) {
   return (
-    <div className="flex flex-col gap-5 p-4">
+    <div className="flex flex-col gap-4 p-4">
+      {/* Resumo do produto */}
       <div className="flex flex-col gap-1">
         <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
           Produto
@@ -339,6 +361,21 @@ function EstadoB({
         )}
       </div>
 
+      {/* Campos de texto adicionados */}
+      {textos.length > 0 && engineRef && (
+        <div className="flex flex-col gap-2 border-t border-border pt-3">
+          {textos.map((item) => (
+            <TextoItem
+              key={item.id}
+              item={item}
+              engineRef={engineRef}
+              onRemove={onRemoveTexto ?? (() => {})}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Botão + Adicionar */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="default" className="w-full gap-2">

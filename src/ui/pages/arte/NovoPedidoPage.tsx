@@ -1,16 +1,19 @@
 /**
- * NovoPedidoPage — editor de pedido (Onda 12 F4.3).
+ * NovoPedidoPage — editor de pedido (Onda 12 F5).
  *
  * Orquestra:
- *  - label do pedido (vive na topbar, auto-incrementado via countAll no mount)
+ *  - label do pedido (topbar, auto-incrementado)
  *  - selection de produto (Estado A/B da sidebar)
- *
- * F4.3: dropdown "+ Adicionar" mostra toast "Em breve" pra cada opção.
- * Engine (carregar produto + material no canvas) entra na próxima sub-fase.
+ *  - lista de textos adicionados (campos inline na sidebar)
+ *  - BancoDrawer (painel grande sobre canvas com 4 abas)
+ *  - Upar SVG (input file oculto)
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
+import { parseCorelSvg } from '@/core/canvas/corel-svg-parser';
+import { humanizeError } from '@/core/canvas/corel-svg-errors';
+import type { CanvasEngine } from '@/core/canvas/canvas-engine';
 import { countAll } from '@/data/repositories/orderRepository';
 import AppLayout from '@/ui/layout/AppLayout';
 
@@ -18,18 +21,17 @@ import { NovoPedidoCanvasArea } from './novo-pedido/NovoPedidoCanvasArea';
 import { NovoPedidoLayerSidebar } from './novo-pedido/NovoPedidoLayerSidebar';
 import { NovoPedidoSidebar, type ProductSelection } from './novo-pedido/NovoPedidoSidebar';
 import { NovoPedidoTopbar } from './novo-pedido/NovoPedidoTopbar';
-
-const ADD_TYPE_LABEL: Record<'svg' | 'texto' | 'banco', string> = {
-  svg: 'Upar SVG',
-  texto: 'Colocar texto',
-  banco: 'Usar banco de dados',
-};
+import { BancoDrawer } from './novo-pedido/BancoDrawer';
+import type { TextoItemData } from './novo-pedido/TextoItem';
 
 export default function NovoPedidoPage() {
   const [pedidoLabel, setPedidoLabel] = useState('');
   const [selection, setSelection] = useState<ProductSelection | null>(null);
+  const [textos, setTextos] = useState<TextoItemData[]>([]);
+  const [bancoOpen, setBancoOpen] = useState(false);
+  const engineRef = useRef<CanvasEngine | null>(null);
+  const svgInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Gera nome auto-incrementado no mount. Usuário pode editar na topbar.
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -40,7 +42,7 @@ export default function NovoPedidoPage() {
         const padded = next < 100 ? String(next).padStart(2, '0') : String(next);
         setPedidoLabel(`Novo Pedido ${padded}`);
       } catch {
-        // Fallback se countAll falhar (banco fora): mantém vazio, usuário digita.
+        // Banco fora — mantém vazio, usuário digita.
       }
     }
     void load();
@@ -51,34 +53,97 @@ export default function NovoPedidoPage() {
 
   function handleConfirmProduct(data: ProductSelection) {
     setSelection(data);
+    setTextos([]);
+    setBancoOpen(false);
   }
 
   function handleEditProduct() {
-    // Camadas no canvas NÃO são apagadas (decisão Gabriell: troca livre).
     setSelection(null);
+    setTextos([]);
+    setBancoOpen(false);
   }
 
   function handleAddItem(type: 'svg' | 'texto' | 'banco') {
-    toast.info('Em breve', {
-      description: `${ADD_TYPE_LABEL[type]} — Fase 5 do plano.`,
-    });
+    if (type === 'texto') {
+      const count = textos.length + 1;
+      const label = count === 1 ? 'Texto' : `Texto ${count}`;
+      const newItem: TextoItemData = {
+        id: crypto.randomUUID(),
+        slotId: crypto.randomUUID(),
+        label,
+      };
+      // Cria slot no canvas
+      engineRef.current?.createSlot('nome');
+      setTextos((prev) => [...prev, newItem]);
+      return;
+    }
+    if (type === 'banco') {
+      setBancoOpen(true);
+      return;
+    }
+    if (type === 'svg') {
+      svgInputRef.current?.click();
+      return;
+    }
+  }
+
+  function handleRemoveTexto(id: string) {
+    setTextos((prev) => prev.filter((t) => t.id !== id));
+  }
+
+  async function handleSvgFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.svg')) {
+      toast.error('Apenas arquivos SVG são aceitos.');
+      e.target.value = '';
+      return;
+    }
+    try {
+      const text = await file.text();
+      const meta = parseCorelSvg(text);
+      await engineRef.current?.addAppliqueSvg(
+        meta,
+        file.name.replace('.svg', ''),
+        crypto.randomUUID()
+      );
+      toast.success(`${file.name} adicionado`);
+    } catch (err) {
+      toast.error(humanizeError(err));
+    } finally {
+      e.target.value = '';
+    }
   }
 
   return (
     <AppLayout breadcrumb={[{ label: 'Arte', href: '/arte' }, { label: 'Novo Pedido' }]}>
       <div className="flex h-full flex-col">
         <NovoPedidoTopbar pedidoLabel={pedidoLabel} onLabelChange={setPedidoLabel} />
-        <div className="flex flex-1 overflow-hidden">
+        <div className="relative flex flex-1 overflow-hidden">
           <NovoPedidoSidebar
             selection={selection}
             onConfirmProduct={handleConfirmProduct}
             onAddItem={handleAddItem}
             onEditProduct={handleEditProduct}
+            textos={textos}
+            engineRef={engineRef}
+            onRemoveTexto={handleRemoveTexto}
           />
-          <NovoPedidoCanvasArea selection={selection} />
+          <NovoPedidoCanvasArea selection={selection} engineRef={engineRef} />
           <NovoPedidoLayerSidebar />
+
+          {bancoOpen && <BancoDrawer engineRef={engineRef} onClose={() => setBancoOpen(false)} />}
         </div>
       </div>
+
+      {/* Input oculto para upar SVG */}
+      <input
+        ref={svgInputRef}
+        type="file"
+        accept=".svg"
+        className="hidden"
+        onChange={handleSvgFile}
+      />
     </AppLayout>
   );
 }

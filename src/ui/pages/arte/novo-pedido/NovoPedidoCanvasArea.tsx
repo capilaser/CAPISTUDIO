@@ -1,16 +1,16 @@
 /**
- * NovoPedidoCanvasArea — área central (canvas) do editor (Onda 12 F4.3).
+ * NovoPedidoCanvasArea — área central (canvas) do editor (Onda 12 F4.3+F5).
  *
  * 2 estados:
  *  - selection=null → placeholder "Escolha um produto na sidebar esquerda"
  *  - selection=obj  → instancia useCanvasEngine, carrega base SVG + aplica material
  *
- * Engine vive aqui (encapsulado) porque é um detalhe interno desta área.
- * Quando produto muda (Estado B → editar → Estado A → confirma de novo), o
- * EngineHost desmonta e re-monta — engine.dispose() roda limpo.
+ * engineRef é exposto via prop para que NovoPedidoPage possa passar ao
+ * BancoDrawer e ao TextoItem sem prop drilling pelo EngineHost.
  */
-import { useEffect } from 'react';
+import { useEffect, type RefObject } from 'react';
 
+import type { CanvasEngine } from '@/core/canvas/canvas-engine';
 import {
   resolveAssetUrl,
   getById as getMaterialById,
@@ -23,9 +23,11 @@ const VIEWPORT = { widthPx: 900, heightPx: 600 };
 
 interface Props {
   selection: ProductSelection | null;
+  /** Ref compartilhada com a página para que BancoDrawer/TextoItem acessem o engine. */
+  engineRef: RefObject<CanvasEngine | null>;
 }
 
-export function NovoPedidoCanvasArea({ selection }: Props) {
+export function NovoPedidoCanvasArea({ selection, engineRef }: Props) {
   if (selection === null) {
     return (
       <div className="flex flex-1 items-center justify-center bg-background p-6">
@@ -39,27 +41,42 @@ export function NovoPedidoCanvasArea({ selection }: Props) {
     );
   }
 
-  // Re-monta com key=productId+materialId pra forçar dispose+remount quando
-  // troca de produto (mais simples que tentar trocar engine in-place).
   return (
-    <EngineHost key={`${selection.productId}-${selection.materialId}`} selection={selection} />
+    <EngineHost
+      key={`${selection.productId}-${selection.materialId}`}
+      selection={selection}
+      engineRef={engineRef}
+    />
   );
 }
 
-function EngineHost({ selection }: { selection: ProductSelection }) {
-  const { canvasRef, engineRef, ready, error } = useCanvasEngine({
+function EngineHost({
+  selection,
+  engineRef: externalEngineRef,
+}: {
+  selection: ProductSelection;
+  engineRef: RefObject<CanvasEngine | null>;
+}) {
+  const {
+    canvasRef,
+    engineRef: internalEngineRef,
+    ready,
+    error,
+  } = useCanvasEngine({
     productId: selection.productId,
-    // patternId undefined = canvas vazio (sem padrão pré-carregado).
-    // Pedido nasce do zero; o usuário adiciona camadas via "+ Adicionar".
     patternId: undefined,
     viewport: VIEWPORT,
     mode: 'operator',
   });
 
-  // Quando engine fica pronto, aplica material na base.
+  // Sincroniza o engineRef interno com o ref externo da página.
+  useEffect(() => {
+    externalEngineRef.current = internalEngineRef.current;
+  });
+
   useEffect(() => {
     if (!ready) return;
-    const engine = engineRef.current;
+    const engine = internalEngineRef.current;
     if (!engine) return;
 
     let cancelled = false;
@@ -78,7 +95,7 @@ function EngineHost({ selection }: { selection: ProductSelection }) {
     return () => {
       cancelled = true;
     };
-  }, [ready, engineRef, selection.materialId]);
+  }, [ready, internalEngineRef, selection.materialId]);
 
   return (
     <div className="relative flex flex-1 items-center justify-center bg-background p-6">
