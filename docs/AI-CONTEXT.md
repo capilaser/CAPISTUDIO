@@ -160,39 +160,42 @@ Justificativa: [...]
 
 ## 🏗️ Estrutura de ondas (ROADMAP)
 
-| Onda     | Tema                                                                            | Status                                                      |
-| -------- | ------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| 0        | Bootstrap (Tauri + Vite + React + TS)                                           | ✅ Fechada                                                  |
-| 1        | Banco SQLite + Seeds (24 tabelas pós-6a)                                        | ✅ Fechada                                                  |
-| 2        | Home + Layout Base                                                              | ✅ Fechada                                                  |
-| 3        | Canvas Fabric.js                                                                | ✅ Fechada                                                  |
-| 4        | Slots editáveis + fitText                                                       | ✅ Fechada                                                  |
-| 4.5      | Banco de Fontes Curado (5 fontes)                                               | ✅ Fechada                                                  |
-| 5        | Texturas (PNGs ABS Escovado)                                                    | ✅ Fechada                                                  |
-| 6a       | Schema de hierarquia (3 bancos novos)                                           | ✅ Fechada                                                  |
-| 6b       | Parser Corel + Cleanup + LayerMeta hierárquico                                  | ✅ Fechada                                                  |
-| 6c       | ❌ **REMOVIDA** — funcionalidade absorvida pela Onda 7                          | ❌ Removida                                                 |
-| 6.5      | UI Apliques completa                                                            | ✅ Fechada                                                  |
-| **8**    | **Padrões salvos + reabertura (Placa Advogado)**                                | **✅ Fechada (commit 17a23ae)**                             |
-| **9.5**  | **Mini-onda — Cadastrar 5 materiais novos (Acrílico Espelhado + Sólido)**       | **✅ Fechada (commit 94de574)**                             |
-| **7a**   | **Snap (Fases A+B) — motor matemático + integração Fabric**                     | **✅ Fechada (commit 8cb037f)**                             |
-| **7b**   | **Snap Fase C — guias visuais cyan + fix Alt+Tab**                              | **✅ Fechada (commit 0ccd989)**                             |
-| **7b**   | **Snap Fase D — toolbar de alinhamento (6 botões)**                             | **✅ Fechada (06d7442 + 9713f3b + db84315)**                |
-| **7b**   | **Snap Fase E — modo medição (V+H entre objs)**                                 | **✅ Fechada (commit ad65cfe)**                             |
-| **7b**   | **Snap Fase E2 — proximidade do entorno (1 obj selecionado)**                   | **✅ Fechada (commit 4e8f072)**                             |
-| **7b**   | **Snap Fase F — pontinhos da grade (toggle)**                                   | **✅ Fechada (commit 0557cc3)**                             |
-| **7b**   | **Snap Fase G — costura final + ADR 015 + DEBT.md**                             | **✅ Fechada (cleanup aeae83a)**                            |
-| **7.5**  | **Consertos do slot-manager (DEBT #3 e #4 — overlay e content seguem body)**    | **✅ Fechada (commit bf4610e)**                             |
-| **7**    | **Painel de Camadas hierárquico (visibility/lock/rename/delete/move/reparent)** | **✅ Fechada (commits dfb23c8, 0657f1a, 062307e)**          |
-| **8.5**  | **Banco de Gravações operacional (4ª aba + addEngravingSvg + categoryId)**      | **✅ Fechada (commits 9fc8e24, f9dc9d8, 33b1969, 28a66f7)** |
-| **8.6**  | **Mini-onda: fix de precisão viewBox vs Fabric (originalBounds autoritativo)**  | **✅ Fechada (commits 48008c2, f0f39d3)**                   |
-| **9**    | **Banco Marcações + Motor SVG/PNG + Dialog Export PNG (escopo final reduzido)** | **✅ Fechada (14 commits f0f5dd9 → docs)**                  |
-| 10       | UI cadastro de bancos (apliques + gravações + marcações + fontes)               | ⏳                                                          |
-| **11.A** | **Infra atômica: db_tx_execute + order_revisions + ADR 017 (DbInstances)**      | **✅ Fechada (5 commits a9c3d86 → 0b9f3fb)**                |
-| **11.B** | **Refactor modular do CanvasTest (Toolbar + Workspace + useCanvasEngine hook)** | **✅ Fechada (3 commits 4ad6d98 → 81de3a0)**                |
-| 11       | Histórico pedidos + status aprovação + UI export SVG production                 | ⏳ (motor SVG + infra atômica + hook reusável prontos)      |
-| 12       | Polimento final + build MSI Windows                                             | ⏳                                                          |
-| 13       | Validação final + smoke test do MVP completo                                    | ⏳                                                          |
+| Onda       | Tema                                                                            | Status                                                             |
+| ---------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| 0          | Bootstrap (Tauri + Vite + React + TS)                                           | ✅ Fechada                                                         |
+| 1          | Banco SQLite + Seeds (24 tabelas pós-6a)                                        | ✅ Fechada                                                         |
+| 2          | Home + Layout Base                                                              | ✅ Fechada                                                         |
+| 3          | Canvas Fabric.js                                                                | ✅ Fechada                                                         |
+| 4          | Slots editáveis + fitText                                                       | ✅ Fechada                                                         |
+| 4.5        | Banco de Fontes Curado (5 fontes)                                               | ✅ Fechada                                                         |
+| 5          | Texturas (PNGs ABS Escovado)                                                    | ✅ Fechada                                                         |
+| 6a         | Schema de hierarquia (3 bancos novos)                                           | ✅ Fechada                                                         |
+| 6b         | Parser Corel + Cleanup + LayerMeta hierárquico                                  | ✅ Fechada                                                         |
+| 6c         | ❌ **REMOVIDA** — funcionalidade absorvida pela Onda 7                          | ❌ Removida                                                        |
+| 6.5        | UI Apliques completa                                                            | ✅ Fechada                                                         |
+| **8**      | **Padrões salvos + reabertura (Placa Advogado)**                                | **✅ Fechada (commit 17a23ae)**                                    |
+| **9.5**    | **Mini-onda — Cadastrar 5 materiais novos (Acrílico Espelhado + Sólido)**       | **✅ Fechada (commit 94de574)**                                    |
+| **7a**     | **Snap (Fases A+B) — motor matemático + integração Fabric**                     | **✅ Fechada (commit 8cb037f)**                                    |
+| **7b**     | **Snap Fase C — guias visuais cyan + fix Alt+Tab**                              | **✅ Fechada (commit 0ccd989)**                                    |
+| **7b**     | **Snap Fase D — toolbar de alinhamento (6 botões)**                             | **✅ Fechada (06d7442 + 9713f3b + db84315)**                       |
+| **7b**     | **Snap Fase E — modo medição (V+H entre objs)**                                 | **✅ Fechada (commit ad65cfe)**                                    |
+| **7b**     | **Snap Fase E2 — proximidade do entorno (1 obj selecionado)**                   | **✅ Fechada (commit 4e8f072)**                                    |
+| **7b**     | **Snap Fase F — pontinhos da grade (toggle)**                                   | **✅ Fechada (commit 0557cc3)**                                    |
+| **7b**     | **Snap Fase G — costura final + ADR 015 + DEBT.md**                             | **✅ Fechada (cleanup aeae83a)**                                   |
+| **7.5**    | **Consertos do slot-manager (DEBT #3 e #4 — overlay e content seguem body)**    | **✅ Fechada (commit bf4610e)**                                    |
+| **7**      | **Painel de Camadas hierárquico (visibility/lock/rename/delete/move/reparent)** | **✅ Fechada (commits dfb23c8, 0657f1a, 062307e)**                 |
+| **8.5**    | **Banco de Gravações operacional (4ª aba + addEngravingSvg + categoryId)**      | **✅ Fechada (commits 9fc8e24, f9dc9d8, 33b1969, 28a66f7)**        |
+| **8.6**    | **Mini-onda: fix de precisão viewBox vs Fabric (originalBounds autoritativo)**  | **✅ Fechada (commits 48008c2, f0f39d3)**                          |
+| **9**      | **Banco Marcações + Motor SVG/PNG + Dialog Export PNG (escopo final reduzido)** | **✅ Fechada (14 commits f0f5dd9 → docs)**                         |
+| 10         | UI cadastro de bancos (apliques + gravações + marcações + fontes)               | ⏳                                                                 |
+| **11.A**   | **Infra atômica: db_tx_execute + order_revisions + ADR 017 (DbInstances)**      | **✅ Fechada (5 commits a9c3d86 → 0b9f3fb)**                       |
+| **11.B**   | **Refactor modular do CanvasTest (Toolbar + Workspace + useCanvasEngine hook)** | **✅ Fechada (3 commits 4ad6d98 → 81de3a0)**                       |
+| **11.C1**  | **Migration v9 + schema + orderRepository expandido (Kanban-ready)**            | **✅ Fechada (commit 58283f6, 375 testes)**                        |
+| **11.sec** | **Hardening Tauri (CSP + asset scope + path validation)**                       | **✅ Fechada (commit 6536e4a, ADR 017+CSP)**                       |
+| **12**     | **Reset frontend — 3 páginas: Inicial / Arte / Banco** (Onda em andamento)      | **🚧 Em andamento (6 commits F1→F4.2b, F4.3 revertida)**           |
+| 13         | Multi-broche empilhado no canvas (multi-item por pedido)                        | ⏳ (escopo deferido — ver IDEAS/onda-13-multi-broche-empilhado.md) |
+| 14         | Polimento final + build MSI Windows                                             | ⏳                                                                 |
+| 15         | Validação final + smoke test do MVP completo                                    | ⏳                                                                 |
 
 **Sequência travada (ordem de execução):**
 
@@ -535,4 +538,20 @@ Eu leio o contexto, faço perguntas estratégicas se necessário, e começamos c
 
 ---
 
-_Última atualização: **Onda 11 Fase B fechada** — refactor modular do `CanvasTest.tsx` (444 → 141 LOC, -68%) em 3 sub-fases sequenciais, cada uma validada com checkpoint visual em `/dev/canvas-test` e invariante "regressão zero". **B1** (`4ad6d98`): extraiu `CanvasToolbar` (126 LOC) com prop opcional `onAddRectangle?` pra isolar botão DEV-only. **B2** (`4c912c1`): extraiu `CanvasWorkspace` (73 LOC) — overlays (AlignmentToolbar/MeasurementOverlay/ProximityOverlay) + 3 colunas (canvas/UnifiedRightPanel/OperatorInputs). Prop `showOperatorInputs: boolean` desacopla do Zustand. Prop `viewport` desacopla do `DEV_VIEWPORT`. **B3** (`81de3a0`): extraiu `useCanvasEngine` hook (305 LOC) — boot + lifecycle + save/clear/loadPattern. `engineRef` exposto cru com JSDoc explicando decisão. `patternId` opcional (Fase C abre canvas vazio). `save()` lança erro tipado se sem patternId (hook não decide UX). `mode` recebido como prop pra desacoplar fonte do store. Ordem das sub-fases invertida deliberadamente — B1/B2 são movimentação de JSX (risco baixo, aquecimento do pipeline), B3 é lógica sequencial (risco alto) feita por último com pipeline já validado. **362 testes Vitest verdes + 4 testes Cargo Rust** preservados em todas as 3 sub-fases. Próximo na Onda 11: **Fase C** — primeira página de produção consumindo os 3 artefatos compartilhados. Antes da 11.B: Fase A entregou infra atômica (`db_tx_execute` + `order_revisions` + ADR 017 — pool `DbInstances` compartilhado). Antes da 11.A: Onda 9 fechou export PNG mockup + motor SVG production pronto._
+_Última atualização: **Onda 12 em andamento — Reset frontend (3 páginas)**. Decisão estratégica do Gabriell (sessão 2026-05-14): abandonar plano Kanban da Onda 11 Fase C e refazer o front pra 3 páginas focadas:_
+
+_**Inicial** (`/`, commit `b99d0e1`): lista de pedidos recentes + 2 botões grandes (Novo Pedido / Incluir Pedido em breve). **Arte** (`/arte`, commit `34f204c`): hub com 3 cartões (Novo Pedido ativo, Abrir Pedido + Criar Padrão "em breve"). **Banco** (`/banco`, stub commit `0025097`): 4 categorias (Produtos/Apliques/Gravações/Logos), 1 nível de subpasta, cadastro manual — implementação pendente (Fase F10)._
+
+_**Novo Pedido** (`/arte/novo`, principal — em construção): F4.1 (`36e3376`) entregou shell editor com topbar + 3 colunas + sidebar colapsável. F4.2 (`26e67c9`) sidebar com 2 estados (escolher produto / + Adicionar dropdown). **F4.2b (`1f275ee`)** moveu nome do pedido pra topbar como input inline + transformou seleção em **cascata Categoria → Variação → Cor** (Opção A — sem mexer em schema; categorias via `products.type`, variações via `material_families` cruzado com `products.config.compatibleMaterials`). **F4.3 (`a581597`) entregou `engine.applyMaterialToBase` + carregamento real do canvas mas REVERTIDA (`6e4ac4c`)** — tela ficou toda preta em runtime, bug não diagnosticado por falta de DevTools console. **Estado estável atual: HEAD = `6e4ac4c` (revert), cascata + placeholder canvas funcionando.**_
+
+_**Design tokens** (Onda 12.G1, commit `5235f93` + ajustes G1.1/G1.2): paleta Stitch aplicada (primary violeta `#7C3AED`, fundo `#09090B`, cards `#111113`, borda `#27272A`, texto `#FAFAFA`). Tokens semânticos novos: `success`/`warning`/`op-cut/grav/marc-bg/text`/`mkt-shopee/ml/whatsapp`/`machine-active`. Badge component novo. Button ganhou variants `approve` (verde) e `svg` (violeta). `--primary` no `.dark` mudou de laser-red pra violeta — afeta todos os `bg-primary` (botões shadcn default agora violeta)._
+
+_**Hardening Tauri (Onda 11.security, commit `6536e4a`)**: CSP estrita (`default-src 'self'`), `assetProtocol.scope` restrito a `$APPDATA/com.capilaser.studio/**` + `$RESOURCE/**`, path validation em 4 Tauri commands (`assert_under_assets` canonicalize + starts_with), size limit em `save_applique_file`, id validation contra path traversal. tokio consolidado em 1 linha._
+
+_**Onda 11.C1 (commit `58283f6`)**: migration v9 com 5 colunas novas em `orders` (`customer_name`, `olist_order_id`, `marketplace`, `folder_path`, `archived`) + relaxa `pattern_id`/`product_id` pra nullable + índice parcial `idx_orders_active`. `orderRepository` expandido: `listAll`, `listByStatus`, `updateStatus`, `archiveAll`, `setExportedPngPath`, `create(customerName)`, `countAll()`. **375 testes Vitest verdes** preservados._
+
+_**Multi-broche empilhado**: decidido deferir pra Onda 13 (doc `IDEAS/onda-13-multi-broche-empilhado.md`). MVP single-broche primeiro, depois refator do engine pra suportar BrocheInstance + N broches lado-a-lado num só canvas, copy-from-previous, export consolidado._
+
+_**Próximo na Onda 12**: investigar bug runtime da F4.3 com DevTools (provavelmente em `applyMaterialToBase` ou no `key=` que força remontagem). Estado bom é `6e4ac4c`. F5 (conteúdo do menu + Adicionar — Upar SVG / Texto / Banco) só depois de F4.3 funcionar._
+
+_**Lições da sessão**: (a) Engine tem `BASE_OBJECT_FLAG` + `excludeFromExport` na base — material aplicado nela aparece em canvas/PNG mas não em SVG production (correto). (b) DevTools console é **insubstituível** pra diagnosticar tela preta runtime — sem ele eu chuto. (c) Multi-broche é mudança paradigmática (canvas = chapa, não 1 produto) — só vale fazer depois de MVP rodar 1 semana em produção pro Gabriell descobrir o que precisa de verdade._
