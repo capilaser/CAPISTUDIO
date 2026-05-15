@@ -201,6 +201,19 @@ export async function count(): Promise<number> {
 }
 
 /**
+ * Conta TODOS os pedidos já criados (inclui arquivados e soft-deleted).
+ *
+ * Usado pelo onboarding pra gerar nome auto-incrementado "Novo Pedido N"
+ * sem risco de colisão: se um pedido N for deletado, N+1 continua o próximo.
+ * Não filtra archived/deleted_at justamente pra manter unicidade temporal.
+ */
+export async function countAll(): Promise<number> {
+  const db = await getDb();
+  const rows = await db.select<Array<{ n: number }>>(`SELECT COUNT(*) as n FROM orders`);
+  return rows[0]?.n ?? 0;
+}
+
+/**
  * Lista todos os pedidos ativos (não arquivados, não deletados). Usada pelo
  * Kanban no boot pra hidratar todas as 6 colunas. Ordenada por updated_at
  * desc — o consumer faz o groupBy(status) em JS, evitando 6 queries.
