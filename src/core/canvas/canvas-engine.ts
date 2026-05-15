@@ -1075,6 +1075,53 @@ export class CanvasEngine {
   }
 
   /**
+   * Applies a PNG material to the product base (Onda 12 F4.3 — front rework).
+   *
+   * Diferença pra applyMaterialToLayer:
+   *  - Atua no objeto marcado com BASE_OBJECT_FLAG (a base do produto, carregada
+   *    em loadProductSvgFromMeta) — não em uma camada visual qualquer.
+   *  - NÃO precisa de clipPath: a base JÁ é o próprio shape do produto.
+   *    O pattern preenche o group todo, que é o silhouette do broche/placa.
+   *  - A base é `excludeFromExport: true` — o material aplicado aqui aparece
+   *    no canvas (UX) e no export PNG (mockup pro cliente), mas NÃO entra no
+   *    SVG production (o laser não corta material, só contornos).
+   *
+   * Sem efeito se nenhum produto foi carregado ainda.
+   *
+   * @param materialId id da tabela materials (referência semântica, não persistido em LayerMeta)
+   * @param assetUrl   URL acessível pela WebView (de resolveAssetUrl)
+   */
+  async applyMaterialToBase(materialId: string, assetUrl: string): Promise<void> {
+    const baseObj = this.canvas.getObjects().find((o) => isBaseObject(o));
+    if (!baseObj) {
+      if (import.meta.env.DEV) {
+        console.warn('[canvas-engine] applyMaterialToBase: no base object loaded.');
+      }
+      return;
+    }
+
+    const w = baseObj.width ?? 0;
+    const h = baseObj.height ?? 0;
+
+    // Mesmo padrão de cache da applyMaterialToLayer.
+    const cachedLoader = async (url: string): Promise<HTMLImageElement> => {
+      const hit = this.materialImageCache.get(materialId);
+      if (hit) return hit;
+      const img = await loadImage(url);
+      this.materialImageCache.set(materialId, img);
+      return img;
+    };
+
+    const pattern = await buildMaterialPattern(assetUrl, w, h, cachedLoader);
+
+    // fill da base = pattern. Não toca em stroke (mantém o contorno preto do
+    // produto pra continuar visível como linha de corte).
+    baseObj.set({ fill: pattern });
+
+    this.canvas.requestRenderAll();
+  }
+
+  /**
    * Builds a `fabric.Path` representing the product's SVG contour for use as
    * an `absolutePositioned` clipPath (Checkpoint C, Cenário 1 — ADR 008).
    *
