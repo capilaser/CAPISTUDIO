@@ -1075,6 +1075,72 @@ export class CanvasEngine {
   }
 
   /**
+   * Applies a PNG material to the product base (Onda 12 F4.3).
+   *
+   * Diferença pra applyMaterialToLayer:
+   *  - Atua no grupo marcado com BASE_OBJECT_FLAG.
+   *  - NÃO precisa de clipPath: a base já é o silhouette do produto.
+   *  - Propaga o fill para os filhos do grupo (os paths individuais têm fill
+   *    próprio em Fabric, então setar só no group não surte efeito).
+   *  - Usa width*scaleX / height*scaleY para o patternTransform — o group tem
+   *    scale aplicado e width/height raw são coordenadas do viewBox, não px.
+   */
+  async applyMaterialToBase(materialId: string, assetUrl: string): Promise<void> {
+    const baseObj = this.canvas.getObjects().find((o) => isBaseObject(o));
+    if (!baseObj) {
+      if (import.meta.env.DEV) {
+        console.warn('[canvas-engine] applyMaterialToBase: no base object loaded.');
+      }
+      return;
+    }
+
+    const w = mmToPx(this.config.productWidthMm);
+    const h = mmToPx(this.config.productHeightMm);
+
+    const cachedLoader = async (url: string): Promise<HTMLImageElement> => {
+      const hit = this.materialImageCache.get(materialId);
+      if (hit) return hit;
+      const img = await loadImage(url);
+      this.materialImageCache.set(materialId, img);
+      return img;
+    };
+
+    const pattern = await buildMaterialPattern(assetUrl, w, h, cachedLoader);
+    const clipPath = this.buildProductClipPath();
+
+    // Remove rect de material anterior se existir.
+    const existing = this.canvas
+      .getObjects()
+      .find((o) => (o as unknown as Record<string, unknown>).__capiMaterialRect === true);
+    if (existing) this.canvas.remove(existing);
+
+    // Rect que recebe o material — mesmo tamanho do produto, clipado pelo contorno.
+    // Fica entre a base (contorno) e o fundo do canvas, excluído do export production.
+    const rect = new fabric.Rect({
+      left: baseObj.left ?? 0,
+      top: baseObj.top ?? 0,
+      width: w,
+      height: h,
+      fill: pattern,
+      selectable: false,
+      evented: false,
+      hoverCursor: 'default',
+      excludeFromExport: true,
+      ...(clipPath ? { clipPath } : {}),
+    });
+    (rect as unknown as Record<string, unknown>).__capiMaterialRect = true;
+
+    this.canvas.add(rect);
+    // Rect fica logo acima do fundo (sendObjectToBack move pra index 0),
+    // mas abaixo da base (contorno) e de tudo mais.
+    this.canvas.sendObjectToBack(rect);
+    // A base (contorno) deve ficar na frente do rect — move pra segundo plano.
+    this.canvas.sendObjectToBack(baseObj);
+
+    this.canvas.requestRenderAll();
+  }
+
+  /**
    * Builds a `fabric.Path` representing the product's SVG contour for use as
    * an `absolutePositioned` clipPath (Checkpoint C, Cenário 1 — ADR 008).
    *

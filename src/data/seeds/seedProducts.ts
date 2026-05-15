@@ -46,6 +46,28 @@ viewBox="0 0 24333.28 7311.33"
  </g>
 </svg>`;
 
+// Source: tests/fixtures/camadas-base/broche-simples.svg (ADR 013)
+const BROCHE_60X25_SVG = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Creator: CorelDRAW (Versão OEM) -->
+<svg xmlns="http://www.w3.org/2000/svg" xml:space="preserve" width="60.0759mm" height="25.076mm" version="1.1" style="shape-rendering:geometricPrecision; text-rendering:geometricPrecision; image-rendering:optimizeQuality; fill-rule:evenodd; clip-rule:evenodd"
+viewBox="0 0 5144.73 2147.44"
+ xmlns:xlink="http://www.w3.org/1999/xlink"
+ xmlns:xodm="http://www.corel.com/coreldraw/odm/2003">
+ <defs>
+  <style type="text/css">
+   <![CDATA[
+    .str0 {stroke:#373435;stroke-width:6.53;stroke-miterlimit:22.9256}
+    .fil0 {fill:none}
+   ]]>
+  </style>
+ </defs>
+ <g id="Camada_x0020_1">
+  <metadata id="CorelCorpID_0Corel-Layer"/>
+  <path class="fil0 str0" d="M367.21 3.26c0,0 4410.31,0 4410.31,0 200.18,0 363.95,163.77 363.95,363.95 0,0 0,1413.02 0,1413.02 0,200.17 -163.77,363.94 -363.95,363.94 0,0 -4410.31,0 -4410.31,0 -200.18,0 -363.95,-163.77 -363.95,-363.94 0,0 0,-1413.02 0,-1413.02 0,-200.18 163.77,-363.95 363.95,-363.95z"/>
+ </g>
+</svg>`;
+
 const PRODUCTS: ProductSeed[] = [
   {
     id: 'broche-60x25',
@@ -59,6 +81,7 @@ const PRODUCTS: ProductSeed[] = [
     machines: ['due-laser'],
     constraints: { sizeLocked: true, minGapMm: 2 },
     versionRev: 1,
+    baseSvg: BROCHE_60X25_SVG,
   },
   {
     id: 'placa-300x90',
