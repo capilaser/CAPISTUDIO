@@ -1,11 +1,11 @@
 /**
- * NovoPedidoTopbar — barra superior do editor (Onda 12 F4.1).
+ * NovoPedidoTopbar — barra superior do editor (Onda 12 F4.3).
  *
- * Esquerda: rótulo do pedido (ou "Sem nome" placeholder)
- * Direita: 4 botões — Aprovar / SVG / PNG / Salvar
+ * Esquerda: rótulo "PEDIDO" + input editável inline com nome auto-incrementado.
+ * Direita: 4 botões — Aprovar / SVG / PNG / Salvar.
  *
- * Onda 12 F4: todos os botões abrem toast "Em breve — Fase 9".
- * Fase 9 vai conectar cada um ao orderRepository / png-export / svg-export.
+ * F4.3: input controlado externamente (state vive na NovoPedidoPage).
+ * Todos os botões abrem toast "Em breve — Fase 9".
  */
 import { Check, Download, FileImage, Save } from 'lucide-react';
 import { toast } from 'sonner';
@@ -13,10 +13,11 @@ import { toast } from 'sonner';
 import { Button } from '@/ui/components/button';
 
 interface Props {
-  pedidoLabel: string | null;
+  pedidoLabel: string;
+  onLabelChange: (next: string) => void;
 }
 
-export function NovoPedidoTopbar({ pedidoLabel }: Props) {
+export function NovoPedidoTopbar({ pedidoLabel, onLabelChange }: Props) {
   function notReady(label: string) {
     toast.info('Em breve', {
       description: `${label} — chega na Fase 9 (salvar + export).`,
@@ -29,9 +30,13 @@ export function NovoPedidoTopbar({ pedidoLabel }: Props) {
         <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
           Pedido
         </span>
-        <span className="font-mono text-xs text-foreground">
-          {pedidoLabel || <span className="text-muted-foreground">Sem nome</span>}
-        </span>
+        <input
+          type="text"
+          value={pedidoLabel}
+          onChange={(e) => onLabelChange(e.target.value)}
+          placeholder="Sem nome"
+          className="h-7 min-w-[240px] rounded-md border border-transparent bg-transparent px-2 font-mono text-xs text-foreground transition-colors placeholder:text-muted-foreground hover:border-border focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/40"
+        />
       </div>
 
       <div className="flex items-center gap-2">

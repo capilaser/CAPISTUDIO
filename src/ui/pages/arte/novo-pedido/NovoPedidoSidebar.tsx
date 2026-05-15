@@ -1,22 +1,24 @@
 /**
- * NovoPedidoSidebar — sidebar esquerda do editor (Onda 12 F4.2).
+ * NovoPedidoSidebar — sidebar esquerda do editor (Onda 12 F4.3).
  *
  * 2 estados:
- *  - Estado A (produto não confirmado): formulário com Nome (auto-preenchido) +
- *    radio de Produto + bolinhas de Cor + botão "Adicionar Produto"
- *  - Estado B (produto confirmado): resumo Nome + Produto + botão "+ Adicionar"
- *    com dropdown de 3 opções (Upar SVG / Texto / Banco)
+ *  - Estado A (produto não confirmado): cascata Categoria → Variação → Cor +
+ *    botão "Adicionar Produto"
+ *  - Estado B (produto confirmado): resumo + botão "+ Adicionar" com dropdown
  *
- * F4.2: estados visuais funcionam, callbacks chamam a page orquestradora.
- * F4.3: produto confirmado dispara load do canvas com base SVG + material.
- * Fase 5+: opções do menu "+ Adicionar" abrem fluxos específicos.
+ * Nome do pedido NÃO vive aqui — vive na topbar (input editável inline).
+ *
+ * Cascata de produto (Opção A — sem mexer em banco):
+ *   Nível 1: Categoria = products.type único (broche, placa)
+ *   Nível 2: Variação = material_families compatíveis com produto da categoria
+ *   Nível 3: Cor = materials da família escolhida, mostrada como bolinhas
  */
 import { useEffect, useState } from 'react';
-import { Plus, FileUp, Type, Database } from 'lucide-react';
+import { Plus, FileUp, Type, Database, ChevronRight } from 'lucide-react';
 
-import { countAll } from '@/data/repositories/orderRepository';
 import { getAllProducts, type Product } from '@/data/repositories/productRepository';
 import { getAllMaterials, type Material } from '@/data/repositories/materialRepository';
+import { listFamilies, type MaterialFamily } from '@/data/repositories/materialFamilyRepository';
 import { Button } from '@/ui/components/button';
 import {
   DropdownMenu,
@@ -24,13 +26,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/ui/components/dropdown-menu';
-import { Input } from '@/ui/components/input';
-import { Label } from '@/ui/components/label';
 import { cn } from '@/lib/cn';
 
 export interface ProductSelection {
-  label: string;
   productId: string;
+  familyId: string;
   materialId: string;
 }
 
@@ -41,7 +41,7 @@ interface Props {
   onConfirmProduct: (data: ProductSelection) => void;
   /** Chamado em Estado B no menu "+ Adicionar". Fase 5+ implementa cada tipo. */
   onAddItem?: (type: 'svg' | 'texto' | 'banco') => void;
-  /** Chamado pra reabrir Estado A pra trocar produto (camadas preservadas). */
+  /** Chamado pra reabrir Estado A (camadas preservadas). */
   onEditProduct?: () => void;
 }
 
@@ -62,34 +62,39 @@ export function NovoPedidoSidebar({
   );
 }
 
-// ── Estado A — escolher produto ────────────────────────────────────────────
+// ── Estado A — cascata Categoria → Variação → Cor ──────────────────────────
+
+interface CategoryNode {
+  type: string;
+  label: string;
+  products: Product[];
+}
 
 function EstadoA({ onConfirm }: { onConfirm: (data: ProductSelection) => void }) {
   const [products, setProducts] = useState<Product[] | null>(null);
+  const [families, setFamilies] = useState<MaterialFamily[] | null>(null);
   const [materials, setMaterials] = useState<Material[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const [label, setLabel] = useState('');
+  // Estado da cascata
+  const [categoryType, setCategoryType] = useState('');
   const [productId, setProductId] = useState('');
+  const [familyId, setFamilyId] = useState('');
   const [materialId, setMaterialId] = useState('');
 
-  // Boot: carrega listas + gera nome auto-incrementado.
   useEffect(() => {
     let cancelled = false;
     async function load() {
       try {
-        const [prodList, matList, n] = await Promise.all([
+        const [prodList, famList, matList] = await Promise.all([
           getAllProducts(),
+          listFamilies(),
           getAllMaterials(),
-          countAll(),
         ]);
         if (cancelled) return;
         setProducts(prodList);
+        setFamilies(famList);
         setMaterials(matList);
-        // Padding: "Novo Pedido 01", "Novo Pedido 02", ... "Novo Pedido 99", "Novo Pedido 100"
-        const next = n + 1;
-        const padded = next < 100 ? String(next).padStart(2, '0') : String(next);
-        setLabel(`Novo Pedido ${padded}`);
       } catch (e) {
         if (!cancelled) setError(String(e));
       }
@@ -100,35 +105,73 @@ function EstadoA({ onConfirm }: { onConfirm: (data: ProductSelection) => void })
     };
   }, []);
 
-  // Materiais compatíveis com produto escolhido (config.compatibleMaterials).
-  // Se produto não restringe, mostra todos.
-  const selectedProduct = products?.find((p) => p.id === productId) ?? null;
-  const compatible = selectedProduct?.config?.compatibleMaterials;
-  const filteredMaterials =
-    compatible && compatible.length > 0
-      ? (materials?.filter((m) => compatible.includes(m.id)) ?? [])
-      : (materials ?? []);
-
-  function handleProductChange(nextProductId: string) {
-    setProductId(nextProductId);
-    // Reseta material se incompatível.
-    const nextProduct = products?.find((p) => p.id === nextProductId) ?? null;
-    const nextCompatible = nextProduct?.config?.compatibleMaterials;
-    if (
-      materialId &&
-      nextCompatible &&
-      nextCompatible.length > 0 &&
-      !nextCompatible.includes(materialId)
-    ) {
-      setMaterialId('');
+  // Nível 1 — Categorias únicas a partir de products.type
+  const categories: CategoryNode[] = (() => {
+    if (!products) return [];
+    const byType = new Map<string, Product[]>();
+    for (const p of products) {
+      const arr = byType.get(p.type) ?? [];
+      arr.push(p);
+      byType.set(p.type, arr);
     }
+    return Array.from(byType.entries()).map(([type, prods]) => ({
+      type,
+      label: type.charAt(0).toUpperCase() + type.slice(1),
+      products: prods,
+    }));
+  })();
+
+  // Nível 2 — Famílias compatíveis com o produto da categoria selecionada.
+  // Cada categoria pode ter N produtos (broche-60x25, broche-pin, etc), mas
+  // pra Opção A assumo 1 produto por categoria. Se houver mais de 1, pego o
+  // primeiro (limitação documentada).
+  const selectedCategory = categories.find((c) => c.type === categoryType);
+  const categoryProduct = selectedCategory?.products[0] ?? null;
+  const compatibleFamilyIds = categoryProduct?.config?.compatibleMaterials ?? [];
+
+  // Cruza: famílias presentes em compatibleMaterials (que listam material IDs,
+  // não family IDs — mas o material conhece sua família via Material.familyId).
+  const familiesForCategory: MaterialFamily[] = (() => {
+    if (!categoryProduct || !materials || !families) return [];
+    if (compatibleFamilyIds.length === 0) return families; // sem restrição
+    // Pega familyIds únicos dos materials que estão em compatibleMaterials.
+    const matIds = new Set(compatibleFamilyIds);
+    const famIds = new Set<string>();
+    for (const m of materials) {
+      if (matIds.has(m.id)) famIds.add(m.familyId);
+    }
+    return families.filter((f) => famIds.has(f.id));
+  })();
+
+  // Nível 3 — Cores da família escolhida, compatíveis com o produto.
+  const colorsForFamily: Material[] = (() => {
+    if (!familyId || !materials || !categoryProduct) return [];
+    const inFamily = materials.filter((m) => m.familyId === familyId);
+    if (compatibleFamilyIds.length === 0) return inFamily;
+    const allowed = new Set(compatibleFamilyIds);
+    return inFamily.filter((m) => allowed.has(m.id));
+  })();
+
+  function handleCategoryClick(type: string) {
+    const cat = categories.find((c) => c.type === type);
+    if (!cat) return;
+    setCategoryType(type);
+    setProductId(cat.products[0]?.id ?? '');
+    // Reseta níveis 2 e 3
+    setFamilyId('');
+    setMaterialId('');
   }
 
-  const isValid = label.trim().length >= 2 && productId !== '' && materialId !== '';
+  function handleFamilyClick(fid: string) {
+    setFamilyId(fid);
+    setMaterialId('');
+  }
+
+  const isValid = productId !== '' && familyId !== '' && materialId !== '';
 
   function handleAdd() {
     if (!isValid) return;
-    onConfirm({ label: label.trim(), productId, materialId });
+    onConfirm({ productId, familyId, materialId });
   }
 
   if (error) {
@@ -139,7 +182,7 @@ function EstadoA({ onConfirm }: { onConfirm: (data: ProductSelection) => void })
     );
   }
 
-  if (products === null || materials === null) {
+  if (products === null || families === null || materials === null) {
     return (
       <div className="p-4">
         <p className="font-mono text-xs text-muted-foreground">Carregando…</p>
@@ -149,72 +192,59 @@ function EstadoA({ onConfirm }: { onConfirm: (data: ProductSelection) => void })
 
   return (
     <div className="flex flex-col gap-5 p-4">
-      {/* Nome do pedido */}
-      <div className="flex flex-col gap-1.5">
-        <Label
-          htmlFor="pedido-nome"
-          className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground"
-        >
-          Nome do pedido
-        </Label>
-        <Input
-          id="pedido-nome"
-          type="text"
-          value={label}
-          onChange={(e) => setLabel(e.target.value)}
-          className="h-8 text-xs"
-        />
-      </div>
-
-      {/* Escolher Produto — radio (só 1) */}
+      {/* Nível 1 — Categoria */}
       <div className="flex flex-col gap-2">
         <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
           Escolher produto
         </span>
         <div className="flex flex-col gap-1">
-          {products.map((p) => (
-            <label
-              key={p.id}
-              className={cn(
-                'flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-xs transition-colors',
-                productId === p.id
-                  ? 'border-primary bg-primary/10 text-foreground'
-                  : 'border-border bg-background/40 text-muted-foreground hover:border-primary/40 hover:text-foreground'
-              )}
-            >
-              <input
-                type="radio"
-                name="produto"
-                value={p.id}
-                checked={productId === p.id}
-                onChange={() => handleProductChange(p.id)}
-                className="sr-only"
-              />
-              <span
-                className={cn(
-                  'h-3 w-3 shrink-0 rounded-full border',
-                  productId === p.id ? 'border-primary bg-primary' : 'border-muted-foreground/50'
-                )}
-              />
-              <span className="line-clamp-1">{p.label}</span>
-            </label>
+          {categories.map((cat) => (
+            <CascadeRow
+              key={cat.type}
+              label={cat.label}
+              selected={categoryType === cat.type}
+              onClick={() => handleCategoryClick(cat.type)}
+            />
           ))}
         </div>
       </div>
 
-      {/* Cor / Material — bolinhas redondas, só 1 selecionada */}
-      {productId !== '' && (
-        <div className="flex flex-col gap-2">
+      {/* Nível 2 — Variação (família) */}
+      {categoryType !== '' && (
+        <div className="flex flex-col gap-2 border-t border-border pt-4">
+          <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+            Variação
+          </span>
+          {familiesForCategory.length === 0 ? (
+            <p className="font-mono text-[11px] text-muted-foreground">
+              Sem variações cadastradas pra esse produto.
+            </p>
+          ) : (
+            <div className="flex flex-col gap-1">
+              {familiesForCategory.map((f) => (
+                <CascadeRow
+                  key={f.id}
+                  label={f.label}
+                  selected={familyId === f.id}
+                  onClick={() => handleFamilyClick(f.id)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Nível 3 — Cor (bolinhas) */}
+      {familyId !== '' && (
+        <div className="flex flex-col gap-2 border-t border-border pt-4">
           <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
             Cor
           </span>
-          {filteredMaterials.length === 0 ? (
-            <p className="font-mono text-[11px] text-muted-foreground">
-              Sem cores cadastradas pra esse produto.
-            </p>
+          {colorsForFamily.length === 0 ? (
+            <p className="font-mono text-[11px] text-muted-foreground">Sem cores nessa variação.</p>
           ) : (
             <div className="flex flex-wrap gap-2">
-              {filteredMaterials.map((m) => (
+              {colorsForFamily.map((m) => (
                 <button
                   key={m.id}
                   type="button"
@@ -223,7 +253,7 @@ function EstadoA({ onConfirm }: { onConfirm: (data: ProductSelection) => void })
                   className={cn(
                     'h-7 w-7 rounded-full border-2 transition-all',
                     materialId === m.id
-                      ? 'border-primary scale-110 shadow-md'
+                      ? 'scale-110 border-primary shadow-md'
                       : 'border-border hover:scale-105 hover:border-primary/50'
                   )}
                   style={{ backgroundColor: m.swatch }}
@@ -233,17 +263,47 @@ function EstadoA({ onConfirm }: { onConfirm: (data: ProductSelection) => void })
           )}
           {materialId !== '' && (
             <span className="font-mono text-[10px] text-muted-foreground">
-              {filteredMaterials.find((m) => m.id === materialId)?.label}
+              {colorsForFamily.find((m) => m.id === materialId)?.label}
             </span>
           )}
         </div>
       )}
 
-      {/* Botão Adicionar Produto */}
       <Button onClick={handleAdd} disabled={!isValid} className="mt-2 w-full" variant="default">
         Adicionar Produto
       </Button>
     </div>
+  );
+}
+
+// ── Row da cascata (categoria/família) com chevron à direita ───────────────
+
+interface CascadeRowProps {
+  label: string;
+  selected: boolean;
+  onClick: () => void;
+}
+
+function CascadeRow({ label, selected, onClick }: CascadeRowProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'flex items-center justify-between rounded-md border px-3 py-2 text-xs transition-colors',
+        selected
+          ? 'border-primary bg-primary/10 text-foreground'
+          : 'border-border bg-background/40 text-muted-foreground hover:border-primary/40 hover:text-foreground'
+      )}
+    >
+      <span className="line-clamp-1">{label}</span>
+      <ChevronRight
+        className={cn(
+          'h-3 w-3 shrink-0 transition-colors',
+          selected ? 'text-primary' : 'text-muted-foreground/50'
+        )}
+      />
+    </button>
   );
 }
 
@@ -260,22 +320,13 @@ function EstadoB({
 }) {
   return (
     <div className="flex flex-col gap-5 p-4">
-      {/* Resumo do pedido */}
-      <div className="flex flex-col gap-1">
-        <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-          Nome do pedido
-        </span>
-        <span className="font-mono text-sm text-foreground">{selection.label}</span>
-      </div>
-
-      {/* Resumo do produto */}
       <div className="flex flex-col gap-1">
         <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
           Produto
         </span>
         <span className="font-mono text-xs text-foreground">{selection.productId}</span>
         <span className="font-mono text-[10px] text-muted-foreground">
-          Cor: {selection.materialId}
+          {selection.familyId} · {selection.materialId}
         </span>
         {onEditProduct && (
           <button
@@ -288,9 +339,6 @@ function EstadoB({
         )}
       </div>
 
-      <div className="my-2 border-t border-border" />
-
-      {/* Menu Adicionar */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="default" className="w-full gap-2">

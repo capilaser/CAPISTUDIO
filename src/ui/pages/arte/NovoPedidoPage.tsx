@@ -1,16 +1,17 @@
 /**
- * NovoPedidoPage — editor de pedido (Onda 12 F4.2).
+ * NovoPedidoPage — editor de pedido (Onda 12 F4.3).
  *
- * Orquestra state da sidebar esquerda:
- *  - selection=null  → sidebar Estado A (escolher produto)
- *  - selection=obj   → sidebar Estado B (menu + Adicionar)
+ * Orquestra:
+ *  - label do pedido (vive na topbar, auto-incrementado via countAll no mount)
+ *  - selection de produto (Estado A/B da sidebar)
  *
- * F4.2: dropdown "+ Adicionar" mostra toast "Em breve" pra cada opção.
- * F4.3: ao confirmar produto, engine carrega base SVG + aplica material no canvas.
+ * F4.3: dropdown "+ Adicionar" mostra toast "Em breve" pra cada opção.
+ * Engine (carregar produto + material no canvas) entra na próxima sub-fase.
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
+import { countAll } from '@/data/repositories/orderRepository';
 import AppLayout from '@/ui/layout/AppLayout';
 
 import { NovoPedidoCanvasArea } from './novo-pedido/NovoPedidoCanvasArea';
@@ -25,16 +26,35 @@ const ADD_TYPE_LABEL: Record<'svg' | 'texto' | 'banco', string> = {
 };
 
 export default function NovoPedidoPage() {
+  const [pedidoLabel, setPedidoLabel] = useState('');
   const [selection, setSelection] = useState<ProductSelection | null>(null);
+
+  // Gera nome auto-incrementado no mount. Usuário pode editar na topbar.
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const n = await countAll();
+        if (cancelled) return;
+        const next = n + 1;
+        const padded = next < 100 ? String(next).padStart(2, '0') : String(next);
+        setPedidoLabel(`Novo Pedido ${padded}`);
+      } catch {
+        // Fallback se countAll falhar (banco fora): mantém vazio, usuário digita.
+      }
+    }
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function handleConfirmProduct(data: ProductSelection) {
     setSelection(data);
-    // F4.3 vai disparar engine.loadProductSvg + applyMaterial aqui.
   }
 
   function handleEditProduct() {
     // Camadas no canvas NÃO são apagadas (decisão Gabriell: troca livre).
-    // F4.3 vai re-carregar base no engine quando novo produto confirmado.
     setSelection(null);
   }
 
@@ -47,7 +67,7 @@ export default function NovoPedidoPage() {
   return (
     <AppLayout breadcrumb={[{ label: 'Arte', href: '/arte' }, { label: 'Novo Pedido' }]}>
       <div className="flex h-full flex-col">
-        <NovoPedidoTopbar pedidoLabel={selection?.label ?? null} />
+        <NovoPedidoTopbar pedidoLabel={pedidoLabel} onLabelChange={setPedidoLabel} />
         <div className="flex flex-1 overflow-hidden">
           <NovoPedidoSidebar
             selection={selection}
