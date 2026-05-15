@@ -5,7 +5,12 @@ import CanvasTest from '@/ui/pages/dev/CanvasTest';
 import MaterialsTestPage from '@/ui/pages/dev/MaterialsTestPage';
 import BancoApliquesPagina from '@/ui/pages/banco-apliques/BancoApliquesPagina';
 import DevDbCheck from '@/ui/pages/DevDbCheck';
-import Home from '@/ui/pages/Home';
+
+// Onda 12 — 3 páginas oficiais do app.
+import InicialPage from '@/ui/pages/inicial/InicialPage';
+import ArteHubPage from '@/ui/pages/arte/ArteHubPage';
+import NovoPedidoPage from '@/ui/pages/arte/NovoPedidoPage';
+import BancoPage from '@/ui/pages/banco/BancoPage';
 
 function useEscapeToHome() {
   const navigate = useNavigate();
@@ -35,7 +40,20 @@ export function RouterContent() {
 
   return (
     <Routes>
-      <Route path="/" element={<Home />} />
+      {/* Onda 12 — 3 páginas oficiais */}
+      <Route path="/" element={<InicialPage />} />
+      <Route path="/arte" element={<ArteHubPage />} />
+      <Route path="/arte/novo" element={<NovoPedidoPage />} />
+      <Route path="/banco" element={<BancoPage />} />
+
+      {/* Rotas legadas mantidas até serem absorvidas/removidas:
+       *   /banco/apliques → vai migrar pra aba dentro de /banco (Fase 10)
+       *
+       * Rotas DEV ocultas (sem link na nav, só pra debug em desenvolvimento):
+       *   /dev/db-check        — inspeciona banco SQLite
+       *   /dev/canvas-test     — sandbox do canvas
+       *   /dev/materials-test  — teste de materiais
+       */}
       <Route path="/banco/apliques" element={<BancoApliquesPagina />} />
       {import.meta.env.DEV && <Route path="/dev/db-check" element={<DevDbCheck />} />}
       {import.meta.env.DEV && <Route path="/dev/canvas-test" element={<CanvasTest />} />}
