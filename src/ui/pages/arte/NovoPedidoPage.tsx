@@ -75,7 +75,7 @@ export default function NovoPedidoPage() {
             onAddItem={handleAddItem}
             onEditProduct={handleEditProduct}
           />
-          <NovoPedidoCanvasArea selection={selection} />
+          <NovoPedidoCanvasArea />
           <NovoPedidoLayerSidebar />
         </div>
       </div>
