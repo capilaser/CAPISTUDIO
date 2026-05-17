@@ -9,6 +9,7 @@ import { seedMachines } from './seedMachines';
 import { seedMarkings } from './seedMarkings';
 import { seedMaterials } from './seedMaterials';
 import { seedOperations } from './seedOperations';
+import { seedPatterns } from './seedPatterns';
 import { seedProducts } from './seedProducts';
 import { seedSettings } from './seedSettings';
 import { seedSlotTypes } from './seedSlotTypes';
@@ -39,6 +40,9 @@ const SEEDS: Array<[string, SeedFn]> = [
   ['engravings', seedEngravings],
   // Onda 9 — markings bank. Estrutura pronta (array vazio); entries virão da UI.
   ['markings', seedMarkings],
+  // Onda 14 — patterns Wave 1 (estruturais/posicionais) pro fluxo Arte Rápida.
+  // Depende de seedProducts (FK pattern.product_id → products.id).
+  ['patterns', seedPatterns],
 ];
 
 export async function seedDatabase(): Promise<SeedResult[]> {

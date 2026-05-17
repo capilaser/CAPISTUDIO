@@ -38,6 +38,12 @@ export interface SlotManagerConfig {
 
 export interface SlotManagerOptions {
   onSelectionChange?: (id: string | null) => void;
+  /**
+   * Onda 14c — disparado após o usuário soltar drag/scale de um slot (evento
+   * Fabric `object:modified`). Permite que o painel de propriedades reflita
+   * a nova posição/dimensão sem que o usuário precise re-selecionar o slot.
+   */
+  onSlotModified?: (id: string) => void;
 }
 
 interface SlotEntry {
@@ -58,13 +64,45 @@ export class SlotManager {
   private readonly canvas: fabric.Canvas;
   private readonly config: SlotManagerConfig;
   private readonly onSelectionChangeCb?: (id: string | null) => void;
+  private readonly onSlotModifiedCb?: (id: string) => void;
   private readonly slots = new Map<string, SlotEntry>();
+  /**
+   * Onda 15.fix — refs dos handlers (event + função registrada) pra dispose
+   * conseguir remover. Tipos do Fabric variam por evento — guardamos como
+   * unknown e o canvas.off aceita por referência, sem precisar do shape exato.
+   */
+  private readonly canvasHandlers: Array<{ event: string; handler: unknown }> = [];
+  private clearedHandler?: () => void;
 
   constructor(canvas: fabric.Canvas, config: SlotManagerConfig, options?: SlotManagerOptions) {
     this.canvas = canvas;
     this.config = config;
     this.onSelectionChangeCb = options?.onSelectionChange;
+    this.onSlotModifiedCb = options?.onSlotModified;
     this.attachCanvasListeners();
+  }
+
+  /**
+   * Onda 15.fix — libera todos os listeners atachados ao canvas + apaga slots.
+   * Idempotente: chamar 2x não dá erro.
+   * O caller (CanvasEngine.dispose) é responsável por descartar o canvas em si.
+   */
+  dispose(): void {
+    // canvas.off por referência: TS aceita string + Function aqui via off
+    // genérico, sem precisar do tipo exato de cada evento.
+    for (const { event, handler } of this.canvasHandlers) {
+      (
+        this.canvas as unknown as {
+          off: (e: string, h: unknown) => void;
+        }
+      ).off(event, handler);
+    }
+    this.canvasHandlers.length = 0;
+    if (this.clearedHandler) {
+      this.canvas.off('selection:cleared', this.clearedHandler);
+      this.clearedHandler = undefined;
+    }
+    this.slots.clear();
   }
 
   // ─── Public CRUD ─────────────────────────────────────────────────────────
@@ -197,8 +235,14 @@ export class SlotManager {
     this.canvas.requestRenderAll();
   }
 
-  /** Loads an SVG string, scales it to fit the slot, centres it, and removes any placeholder. */
-  async addLogo(slotId: string, svgString: string): Promise<void> {
+  /**
+   * Loads an SVG string, scales it to fit the slot, centres it, and removes any placeholder.
+   *
+   * Onda 14b: `logoId` opcional — quando informado, grava no `entry.meta.logoId`
+   * (que é serializado via capiSlot). Permite re-popular o LogoSlotItem ao
+   * reabrir o pedido buscando o logo no banco pelo id.
+   */
+  async addLogo(slotId: string, svgString: string, logoId?: string): Promise<void> {
     const entry = this.slots.get(slotId);
     if (!entry) throw new Error(`[slot-manager] slot not found: ${slotId}`);
 
@@ -206,6 +250,12 @@ export class SlotManager {
     if (entry.content) {
       this.canvas.remove(entry.content);
       entry.content = undefined;
+    }
+
+    // Onda 14b — guarda logoId no meta + propaga via capiSlot do body.
+    if (logoId !== undefined) {
+      entry.meta = { ...entry.meta, logoId };
+      setCapiSlot(entry.body, entry.meta);
     }
 
     // Remove placeholder (if Operator mode had created one).
@@ -496,18 +546,18 @@ export class SlotManager {
   // ─── Canvas event listeners ───────────────────────────────────────────────
 
   private attachCanvasListeners(): void {
-    // Position sync during drag.
-    this.canvas.on('object:moving', (e) => {
+    // Onda 15.fix — handlers guardados em refs pra dispose conseguir remover.
+    const movingHandler = (e: { target: fabric.FabricObject }): void => {
       const entry = this.findEntryByBody(e.target);
       if (!entry) return;
       entry.overlay.set({ left: e.target.left ?? 0, top: e.target.top ?? 0 });
       entry.overlay.setCoords();
-      // Fix DEBT #4 (Onda 7.5): content também precisa seguir o drag.
       this.syncContentToBody(entry, 'transform');
-    });
+    };
+    this.canvas.on('object:moving', movingHandler);
+    this.canvasHandlers.push({ event: 'object:moving', handler: movingHandler });
 
-    // Size sync during scale (object:rotating is ignored — lockRotation=true on body).
-    this.canvas.on('object:scaling', (e) => {
+    const scalingHandler = (e: { target: fabric.FabricObject }): void => {
       const entry = this.findEntryByBody(e.target);
       if (!entry) return;
       entry.overlay.set({
@@ -517,13 +567,12 @@ export class SlotManager {
         scaleY: e.target.scaleY ?? 1,
       });
       entry.overlay.setCoords();
-      // Fix DEBT #4 (Onda 7.5): content recentraliza/reescala durante resize.
-      // Texto NÃO refaz fitText aqui (custoso a 60fps); refit acontece em commit.
       this.syncContentToBody(entry, 'transform');
-    });
+    };
+    this.canvas.on('object:scaling', scalingHandler);
+    this.canvasHandlers.push({ event: 'object:scaling', handler: scalingHandler });
 
-    // Persist final position + size into meta after any transform.
-    this.canvas.on('object:modified', (e) => {
+    const modifiedHandler = (e: { target: fabric.FabricObject }): void => {
       const entry = this.findEntryByBody(e.target);
       if (!entry) return;
       const body = e.target;
@@ -541,24 +590,25 @@ export class SlotManager {
         scaleY: body.scaleY ?? 1,
       });
       entry.overlay.setCoords();
-      // Fix DEBT #4 (Onda 7.5): commit final — texto refaz fitText com novas
-      // dimensões. Resolve bug latente também: callers que disparam
-      // `canvas.fire('object:modified', { target: child })` programaticamente
-      // (AlignmentToolbar da Fase D fazia isso e o content ficava parado).
       this.syncContentToBody(entry, 'commit');
-    });
+      this.onSlotModifiedCb?.(entry.meta.id);
+    };
+    this.canvas.on('object:modified', modifiedHandler);
+    this.canvasHandlers.push({ event: 'object:modified', handler: modifiedHandler });
 
-    // Selection visual feedback (strokeWidth 2 on selected slot overlay).
-    this.canvas.on('selection:created', (e) => {
-      this.handleFabricSelection((e as unknown as { selected?: fabric.FabricObject[] }).selected);
-    });
-    this.canvas.on('selection:updated', (e) => {
-      this.handleFabricSelection((e as unknown as { selected?: fabric.FabricObject[] }).selected);
-    });
-    this.canvas.on('selection:cleared', () => {
+    const selectionHandler = (e: { selected?: fabric.FabricObject[] }): void => {
+      this.handleFabricSelection(e.selected);
+    };
+    this.canvas.on('selection:created', selectionHandler);
+    this.canvasHandlers.push({ event: 'selection:created', handler: selectionHandler });
+    this.canvas.on('selection:updated', selectionHandler);
+    this.canvasHandlers.push({ event: 'selection:updated', handler: selectionHandler });
+
+    this.clearedHandler = (): void => {
       this.updateSelectionVisual(null);
       this.onSelectionChangeCb?.(null);
-    });
+    };
+    this.canvas.on('selection:cleared', this.clearedHandler);
   }
 
   private handleFabricSelection(selected: fabric.FabricObject[] | undefined): void {
@@ -637,11 +687,14 @@ export class SlotManager {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function getCapiSlot(obj: fabric.FabricObject): SlotMeta | undefined {
+// Exportados (Onda 16.fix) pra applyPatternObjects atualizar capiSlot.x/y do
+// body após deslocar o objeto pelo offset do broche-alvo. Sem isso, o overlay
+// criado por loadSlotsFromCanvas usa meta.x/y antigas e fica no broche errado.
+export function getCapiSlot(obj: fabric.FabricObject): SlotMeta | undefined {
   return (obj as unknown as Record<string, unknown>).capiSlot as SlotMeta | undefined;
 }
 
-function setCapiSlot(obj: fabric.FabricObject, meta: SlotMeta): void {
+export function setCapiSlot(obj: fabric.FabricObject, meta: SlotMeta): void {
   (obj as unknown as Record<string, unknown>).capiSlot = meta;
 }
 

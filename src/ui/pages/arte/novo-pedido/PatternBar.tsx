@@ -30,6 +30,7 @@ import { getPatternById, listByProduct } from '@/data/repositories/patternReposi
 import type { Pattern, PatternListItem } from '@/data/repositories/patternRepository';
 import { getProductById } from '@/data/repositories/productRepository';
 import { cn } from '@/lib/cn';
+import { sanitizeSvg } from '@/lib/sanitize-svg';
 import { Button } from '@/ui/components/button';
 
 import { PatternGalleryDialog } from './PatternGalleryDialog';
@@ -395,7 +396,7 @@ function PatternCard({
     >
       <div
         className="flex h-[40px] w-[90px] items-center justify-center"
-        dangerouslySetInnerHTML={{ __html: svgString }}
+        dangerouslySetInnerHTML={{ __html: sanitizeSvg(svgString) }}
       />
       <span
         className={cn(

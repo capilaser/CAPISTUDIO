@@ -13,6 +13,7 @@ import { useMemo } from 'react';
 import { renderPatternThumbnailSvg } from '@/core/export/pattern-thumbnail';
 import type { Pattern, PatternListItem } from '@/data/repositories/patternRepository';
 import { cn } from '@/lib/cn';
+import { sanitizeSvg } from '@/lib/sanitize-svg';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/ui/components/dialog';
 
 interface PatternWithMeta extends PatternListItem {
@@ -105,7 +106,7 @@ function GalleryCard({
     >
       <div
         className="flex h-[80px] w-full items-center justify-center"
-        dangerouslySetInnerHTML={{ __html: svgString }}
+        dangerouslySetInnerHTML={{ __html: sanitizeSvg(svgString) }}
       />
       <div className="flex w-full flex-col gap-0.5">
         <p

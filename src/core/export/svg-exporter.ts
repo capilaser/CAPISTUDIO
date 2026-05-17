@@ -288,11 +288,19 @@ export async function exportSvgByMachine(
     } else if (layerMeta.kind === 'visual') {
       assetId = layerMeta.engravingId ?? layerMeta.markingId ?? null;
       if (!assetId) {
-        throw new Error(
-          `[svg-exporter] VisualLayerMeta id="${id}" name="${layerMeta.name}" sem ` +
-            `engravingId nem markingId — camadas visuais avulsas (rect, slot) ainda ` +
-            `não têm rota de export. Cadastre o elemento num banco antes de exportar.`
+        // Onda 18: slots avulsos (campos de texto Nome/Profissão, retângulos
+        // de logo sem asset cadastrado) viram warn + skip em vez de throw.
+        // O export do pedido inteiro não pode travar porque o operador
+        // deixou um slot vazio — esse era o comportamento da Onda 9 que
+        // bloqueava export em pedidos reais. Trade-off: o slot avulso
+        // simplesmente não aparece no SVG/DXF, o que faz sentido produção
+        // (slot sem conteúdo cadastrado não tem o que cortar/gravar).
+        console.warn(
+          `[svg-exporter] camada visual id="${id}" name="${layerMeta.name}" sem ` +
+            `engravingId nem markingId — ignorada no export (cadastre o elemento ` +
+            `num banco se quiser que vá pro arquivo).`
         );
+        continue;
       }
     } else {
       // OperationLayerMeta é sub-camada — não tem objeto Fabric próprio. Ignorada.

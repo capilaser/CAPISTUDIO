@@ -256,17 +256,36 @@ export type FabricObject = {
   [key: string]: unknown;
 };
 
+/**
+ * Onda 13 — descritor de cada item (broche) na prancha.
+ * - productId: produto desse broche (cada item da prancha pode ter produto diferente).
+ * - offsetX/offsetY: posição (mm) da origem do broche dentro do canvas único da prancha.
+ *
+ * Pedido com 1 broche = items.length===1, offsets=0. Padrão (master) idem.
+ * Coluna 2 (6º+ broche) tem offsetX > 0.
+ */
+export type CanvasItem = {
+  productId: string;
+  offsetX: number;
+  offsetY: number;
+};
+
 export type FabricCanvasJson = {
   version: string;
   objects: FabricObject[];
   background?: string;
   capi?: {
-    productId: string;
+    /**
+     * Items da prancha. Onda 13 (schemaVersion≥3): sempre presente, mínimo 1.
+     * Padrões master sempre têm items.length===1 + offsets zerados.
+     */
+    items: CanvasItem[];
     units: 'mm';
     /**
      * Schema version for the LayerMeta format within capi.layers.
      *   1 = flat type (Ondas 3-5, pre-Fase C)
-     *   2 = discriminated union (Fase C+, ADR 010 §1)
+     *   2 = discriminated union (Fase C+, ADR 010 §1) — envelope tinha capi.productId
+     *   3 = Onda 13 multi-broche — envelope troca productId por items[]
      * Absent = treat as version 1.
      */
     schemaVersion: number;
@@ -354,21 +373,17 @@ export type OrderFields = {
   [key: string]: unknown;
 };
 
-// Onda 11 Fase C — Kanban Dashboard.
-// pattern_id/product_id passaram a NULLABLE (migration v9): pedido nasce sem
-// padrão/produto escolhidos. Editor da Fase D preenche quando o operador seleciona.
-// 5 colunas novas (customer_name, olist_order_id, marketplace, folder_path, archived).
+// Onda 13 — Multi-broche. orders agora guarda apenas metadados do pedido
+// (cliente, status, marketplace, pasta, archived) + outputs da prancha inteira
+// (exported_png_path, exported_svg_paths). Os 5 campos que antes ficavam aqui
+// (pattern_id, product_id, material_id, fields, canvas_json) viraram propriedade
+// de cada `order_items` (cada broche na prancha) — migration v10.
 export const orders = sqliteTable('orders', {
   id: text('id').primaryKey(),
-  patternId: text('pattern_id').references(() => patterns.id), // nullable — pre-editor
-  productId: text('product_id').references(() => products.id), // nullable — pre-editor
   label: text('label').notNull(),
-  fields: text('fields').notNull(), // JSON: OrderFields
-  materialId: text('material_id').references(() => materials.id),
   status: text('status').notNull().default('novo'),
   // 6 valores Kanban: 'novo' | 'aguardando_info' | 'arte_enviada' | 'aprovado'
   // | 'em_producao' | 'enviado'. Migração v9 traduziu 'pendente'/'enviado_cliente' → 'novo'.
-  canvasJson: text('canvas_json').notNull(), // JSON: FabricCanvasJson (snapshot at save)
   exportedPngPath: text('exported_png_path'),
   exportedSvgPaths: text('exported_svg_paths'), // JSON: string[]
   customerName: text('customer_name'), // preenchido no modal "Novo Pedido"
@@ -376,6 +391,10 @@ export const orders = sqliteTable('orders', {
   marketplace: text('marketplace'), // 'shopee' | 'mercado_livre' | 'whatsapp' | NULL
   folderPath: text('folder_path'), // pasta do pedido (editor Fase D)
   archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
+  // Onda 14b-schema (migration v12) — snapshot do canvas único da prancha
+  // (com todos os broches juntos), serializado via CanvasEngine.serialize.
+  // Substitui a gambiarra da Onda 13.7 que gravava em order_items[0].canvas_json.
+  boardCanvasJson: text('board_canvas_json').notNull().default('{}'),
   createdAt: integer('created_at', { mode: 'timestamp' })
     .notNull()
     .default(sql`(unixepoch())`),
@@ -385,31 +404,61 @@ export const orders = sqliteTable('orders', {
   deletedAt: integer('deleted_at', { mode: 'timestamp' }),
 });
 
+// ── 14.1. ORDER_ITEMS ────────────────────────────────────────────────────────
+// Onda 13 — cada linha = 1 broche na prancha de um pedido.
+// position é a ordem na prancha (0-based). Máx 5 por coluna; item 6+ vai pra
+// coluna 2 — a regra de offset X/Y é aplicada pelo canvas (não pelo banco).
+// product_id/pattern_id/material_id nullable: item nasce vazio, operador
+// escolhe depois. fields/canvas_json default '{}' por isso mesmo.
+export const orderItems = sqliteTable('order_items', {
+  id: text('id').primaryKey(),
+  orderId: text('order_id')
+    .notNull()
+    .references(() => orders.id, { onDelete: 'cascade' }),
+  position: integer('position').notNull(),
+  productId: text('product_id').references(() => products.id),
+  patternId: text('pattern_id').references(() => patterns.id),
+  materialId: text('material_id').references(() => materials.id),
+  fields: text('fields').notNull().default('{}'), // JSON: OrderFields
+  canvasJson: text('canvas_json').notNull().default('{}'), // JSON: FabricCanvasJson per item
+  createdAt: integer('created_at', { mode: 'timestamp' })
+    .notNull()
+    .default(sql`(unixepoch())`),
+  updatedAt: integer('updated_at', { mode: 'timestamp' })
+    .notNull()
+    .default(sql`(unixepoch())`),
+});
+
 // ── 14.5. ORDER_REVISIONS ─────────────────────────────────────────────────────
 // Onda 11: histórico imutável de revisões de cada pedido.
-// Spec arquitetural (decisão Fase A): cada revisão duplica fields + materialId +
-// canvasJson + exportedPngPath do snapshot daquele momento. `orders` mantém os
-// MESMOS 4 campos como "última revisão" (denormalizado). Invariante crítica:
-// toda escrita em `orders.{fields,materialId,canvasJson,exportedPngPath}`
-// acontece DENTRO da mesma transação SQL que cria a revisão correspondente.
-// Nunca um sem o outro.
+//
+// Onda 13 (multi-broche): o snapshot mudou de shape. Antes era
+// fields+materialId+canvasJson (uma arte por pedido). Agora é items_json:
+// JSON com o array completo de order_items daquela revisão (cada item com
+// seu próprio product/pattern/material/fields/canvasJson). exportedPngPath
+// e isApproved continuam por revisão (output da prancha inteira + aprovação
+// do cliente).
+//
+// Invariante mantida: toda mudança em order_items que justifique versionar
+// (operador clicou "Salvar revisão") cria uma linha aqui DENTRO da mesma
+// transação SQL — ver ADR 017 e orderRepository.saveRevision.
 //
 // UNIQUE INDEX em (orderId, number) protege contra race condition: INSERT
 // concorrente com mesmo `number` aborta limpo.
-//
-// isApproved é declarado AGORA mesmo sem uso na Onda 11 — Onda 12 (aprovação
-// de pedido) vai marcar TRUE na revisão que o cliente aprovou. Declarado em
-// v8 pra evitar migration v9 só pra adicionar coluna.
 export const orderRevisions = sqliteTable('order_revisions', {
   id: text('id').primaryKey(),
   orderId: text('order_id')
     .notNull()
-    .references(() => orders.id),
+    .references(() => orders.id, { onDelete: 'cascade' }),
   number: integer('number').notNull(), // 1, 2, 3... humano-visível
-  fields: text('fields').notNull(), // JSON: OrderFields (snapshot)
-  materialId: text('material_id').references(() => materials.id), // snapshot
-  canvasJson: text('canvas_json').notNull(), // JSON: FabricCanvasJson (snapshot)
-  exportedPngPath: text('exported_png_path'), // path do PNG dessa revisão
+  // JSON: Array<{ id, position, productId, patternId, materialId, fields, canvasJson }>
+  // — snapshot completo dos items dessa revisão. Repository serializa/desserializa.
+  itemsJson: text('items_json').notNull(),
+  // Onda 14b-schema (migration v12) — snapshot do canvas da prancha pra esta
+  // revisão. Mesma analogia de orders.boardCanvasJson — fonte de verdade pra
+  // reabrir uma revisão antiga.
+  boardCanvasJson: text('board_canvas_json').notNull().default('{}'),
+  exportedPngPath: text('exported_png_path'), // path do PNG da prancha dessa revisão
   isApproved: integer('is_approved', { mode: 'boolean' }).notNull().default(false), // Onda 12
   createdAt: integer('created_at', { mode: 'timestamp' })
     .notNull()

@@ -94,7 +94,8 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
     savingRef.current = true;
     setSaving(true);
     try {
-      const data = engine.serialize(p.id);
+      // Onda 13: serialize agora recebe items[]. Pattern master = 1 item, offsets 0.
+      const data = engine.serialize([{ productId: p.id, offsetX: 0, offsetY: 0 }]);
       await upsertPatternCanvas(patternId, p.id, JSON.stringify(data), patternLabel);
     } finally {
       savingRef.current = false;
@@ -117,14 +118,15 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
     if (!pattern?.canvasJson) return;
 
     const layers = pattern.canvasJson.capi?.layers ?? [];
+    // Onda 13: envelope agora carrega items[]. Pattern master sempre 1 item, offsets 0.
     await engine.deserialize(
       {
         version: pattern.canvasJson.version,
         objects: pattern.canvasJson.objects as Array<Record<string, unknown>>,
         capi: {
-          productId: p.id,
+          items: [{ productId: p.id, offsetX: 0, offsetY: 0 }],
           units: 'mm',
-          schemaVersion: pattern.canvasJson.capi?.schemaVersion ?? 2,
+          schemaVersion: pattern.canvasJson.capi?.schemaVersion ?? 3,
           layers,
         },
       },
@@ -201,9 +203,10 @@ export function useCanvasEngine(options: UseCanvasEngineOptions): UseCanvasEngin
                     version: existing.canvasJson.version,
                     objects: existing.canvasJson.objects as Array<Record<string, unknown>>,
                     capi: {
-                      productId: p.id,
+                      // Onda 13: envelope agora tem items[]. Pattern carrega 1 item base.
+                      items: [{ productId: p.id, offsetX: 0, offsetY: 0 }],
                       units: 'mm',
-                      schemaVersion: existing.canvasJson.capi?.schemaVersion ?? 1,
+                      schemaVersion: existing.canvasJson.capi?.schemaVersion ?? 3,
                       layers,
                     },
                   },

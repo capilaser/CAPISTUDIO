@@ -19,6 +19,7 @@ import { useEffect, useState } from 'react';
 import { ImagePlus, Search } from 'lucide-react';
 
 import { listFiltered, type Logo, type LogoRecency } from '@/data/repositories/logoRepository';
+import { sanitizeSvg } from '@/lib/sanitize-svg';
 import { readLogoFile } from '@/services/logo-storage';
 import { Button } from '@/ui/components/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/ui/components/dialog';
@@ -284,7 +285,7 @@ function LogoRow({
         <div className="pointer-events-none absolute left-full top-0 z-50 ml-2 hidden h-32 w-32 items-center justify-center rounded-md border border-ink-700 bg-surface-2 p-2 shadow-md lg:flex">
           <div
             className="flex h-full w-full items-center justify-center [&_svg]:max-h-full [&_svg]:max-w-full"
-            dangerouslySetInnerHTML={{ __html: previewSvg }}
+            dangerouslySetInnerHTML={{ __html: sanitizeSvg(previewSvg) }}
           />
         </div>
       )}

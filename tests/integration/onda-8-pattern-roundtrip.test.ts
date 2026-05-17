@@ -87,9 +87,11 @@ const canvasJson = {
     },
   ],
   capi: {
-    productId: PRODUCT_ID,
+    // Onda 13: envelope agora carrega items[] em vez de productId direto.
+    // Pattern master sempre tem 1 item, offsets 0.
+    items: [{ productId: PRODUCT_ID, offsetX: 0, offsetY: 0 }],
     units: 'mm' as const,
-    schemaVersion: 2,
+    schemaVersion: 3,
     layers: [visualBase, principalApliqueD, principalApliqueP],
   },
 };
@@ -216,6 +218,139 @@ describe('Onda 8 — round-trip de padrão (Checkpoint C)', () => {
       expect(slotObj).toBeDefined();
       const slot = slotObj!.capiSlot as { type: string };
       expect(slot.type).toBe('nome');
+    });
+  });
+
+  // ── Onda 14c — CRUD completo (editar/deletar/duplicar + tags) ───────────
+  describe('insertPattern com tags', () => {
+    it('persiste tags como JSON quando passadas', async () => {
+      const { insertPattern } = await import('@/data/repositories/patternRepository');
+      await insertPattern(PATTERN_ID, PRODUCT_ID, 'Pattern Tag', canvasJsonStr, [
+        'com-borda',
+        'com-logo',
+      ]);
+      const [, params] = mockDb.execute.mock.calls[0] as [string, unknown[]];
+      expect(params[5]).toBe(JSON.stringify(['com-borda', 'com-logo']));
+    });
+
+    it('default vira []  quando tags omitido (retrocompat)', async () => {
+      const { insertPattern } = await import('@/data/repositories/patternRepository');
+      await insertPattern(PATTERN_ID, PRODUCT_ID, 'Pattern', canvasJsonStr);
+      const [, params] = mockDb.execute.mock.calls[0] as [string, unknown[]];
+      expect(params[5]).toBe('[]');
+    });
+  });
+
+  describe('updatePattern', () => {
+    it('faz UPDATE apenas dos campos passados, sempre bumpa updated_at', async () => {
+      const { updatePattern } = await import('@/data/repositories/patternRepository');
+      await updatePattern(PATTERN_ID, { name: 'Novo Nome' });
+      const [sql, params] = mockDb.execute.mock.calls[0] as [string, unknown[]];
+      expect(sql).toContain('UPDATE patterns SET name = ?');
+      expect(sql).toContain('updated_at = unixepoch()');
+      expect(sql).toContain('WHERE id = ? AND deleted_at IS NULL');
+      expect(params[0]).toBe('Novo Nome');
+      expect(params[1]).toBe(PATTERN_ID);
+    });
+
+    it('atualiza name + tags + canvasJson juntos', async () => {
+      const { updatePattern } = await import('@/data/repositories/patternRepository');
+      await updatePattern(PATTERN_ID, {
+        name: 'X',
+        canvasJson: '{"objects":[]}',
+        tags: ['t1', 't2'],
+      });
+      const [sql, params] = mockDb.execute.mock.calls[0] as [string, unknown[]];
+      expect(sql).toContain('name = ?');
+      expect(sql).toContain('canvas_json = ?');
+      expect(sql).toContain('tags = ?');
+      expect(params).toEqual(['X', '{"objects":[]}', JSON.stringify(['t1', 't2']), PATTERN_ID]);
+    });
+
+    it('no-op silencioso quando fields vazio (não chama execute)', async () => {
+      const { updatePattern } = await import('@/data/repositories/patternRepository');
+      await updatePattern(PATTERN_ID, {});
+      expect(mockDb.execute).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('softDeletePattern', () => {
+    it('seta deleted_at via UPDATE, não DELETE físico', async () => {
+      const { softDeletePattern } = await import('@/data/repositories/patternRepository');
+      await softDeletePattern(PATTERN_ID);
+      const [sql, params] = mockDb.execute.mock.calls[0] as [string, unknown[]];
+      expect(sql).toContain('UPDATE patterns');
+      expect(sql).toContain('deleted_at = unixepoch()');
+      expect(sql).not.toMatch(/^\s*DELETE/i);
+      expect(params[0]).toBe(PATTERN_ID);
+    });
+  });
+
+  describe('duplicatePattern', () => {
+    it('clona com novo id/name e zera is_favorite/is_validated', async () => {
+      // 1ª chamada = SELECT do getPatternById (source). 2ª = INSERT.
+      mockDb.select.mockResolvedValueOnce([
+        {
+          ...makePatternRow(PATTERN_ID, 'Original'),
+          tags: '["a","b"]',
+          isFavorite: 1,
+          isValidated: 1,
+        },
+      ]);
+      const { duplicatePattern } = await import('@/data/repositories/patternRepository');
+      const newId = await duplicatePattern(PATTERN_ID, 'pattern-new', 'Cópia');
+
+      expect(newId).toBe('pattern-new');
+      const [sql, params] = mockDb.execute.mock.calls[0] as [string, unknown[]];
+      expect(sql).toContain('INSERT INTO patterns');
+      expect(sql).toContain('is_favorite, is_validated)');
+      expect(sql).toContain('0, 0)');
+      expect(params[0]).toBe('pattern-new');
+      expect(params[1]).toBe(PRODUCT_ID);
+      expect(params[2]).toBe('Cópia');
+      expect(params[5]).toBe(JSON.stringify(['a', 'b']));
+    });
+
+    it('throws quando source não existe', async () => {
+      mockDb.select.mockResolvedValueOnce([]);
+      const { duplicatePattern } = await import('@/data/repositories/patternRepository');
+      await expect(duplicatePattern('inexistente', 'x', 'y')).rejects.toThrow(/não encontrado/);
+    });
+  });
+
+  describe('getAllPatternSummaries (Onda 14c)', () => {
+    it('inclui name e tags parseados', async () => {
+      mockDb.select.mockResolvedValueOnce([
+        {
+          id: PATTERN_ID,
+          productId: PRODUCT_ID,
+          name: 'Placa Adv',
+          tags: '["com-borda"]',
+          canvasJsonLength: 1234,
+          updatedAt: 1700000000,
+        },
+      ]);
+      const { getAllPatternSummaries } = await import('@/data/repositories/patternRepository');
+      const list = await getAllPatternSummaries();
+      expect(list).toHaveLength(1);
+      expect(list[0].name).toBe('Placa Adv');
+      expect(list[0].tags).toEqual(['com-borda']);
+    });
+
+    it('tags inválido vira [] silenciosamente', async () => {
+      mockDb.select.mockResolvedValueOnce([
+        {
+          id: PATTERN_ID,
+          productId: PRODUCT_ID,
+          name: 'X',
+          tags: 'json-quebrado{',
+          canvasJsonLength: 0,
+          updatedAt: 0,
+        },
+      ]);
+      const { getAllPatternSummaries } = await import('@/data/repositories/patternRepository');
+      const list = await getAllPatternSummaries();
+      expect(list[0].tags).toEqual([]);
     });
   });
 

@@ -46,6 +46,7 @@
     "@tauri-apps/plugin-sql": "^2.4.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "dompurify": "^3.4.4",
     "drizzle-orm": "^0.45.2",
     "fabric": "^6.9.1",
     "lucide-react": "^1.14.0",

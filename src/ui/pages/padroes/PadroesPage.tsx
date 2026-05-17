@@ -18,6 +18,7 @@ import {
   type PatternListEntry,
 } from '@/data/repositories/patternRepository';
 import { getAllProducts, type Product } from '@/data/repositories/productRepository';
+import { sanitizeSvg } from '@/lib/sanitize-svg';
 import { Button } from '@/ui/components/button';
 import {
   Dialog,
@@ -239,7 +240,7 @@ function PatternCard({ pattern, productDims, onEdit, onDuplicate, onDelete }: Pa
       <button type="button" onClick={onEdit} className="flex flex-col items-start gap-2 text-left">
         <div
           className="flex h-[80px] w-full items-center justify-center overflow-hidden rounded-sm border border-border/60 bg-background/60"
-          dangerouslySetInnerHTML={{ __html: thumbSvg }}
+          dangerouslySetInnerHTML={{ __html: sanitizeSvg(thumbSvg) }}
         />
         <span className="line-clamp-1 w-full pr-8 font-body text-xs font-medium text-foreground">
           {pattern.name}

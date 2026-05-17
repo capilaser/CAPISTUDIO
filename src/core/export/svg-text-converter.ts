@@ -31,7 +31,7 @@
  *     - 'font-unsupported' (opentype falhou no parse ou getPath)
  *     - 'parse-error' (ArrayBuffer corrompido)
  */
-import opentype from 'opentype.js';
+import * as opentype from 'opentype.js';
 
 export type TextConversionErrorKind = 'font-not-found' | 'font-unsupported' | 'parse-error';
 

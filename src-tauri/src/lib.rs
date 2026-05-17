@@ -125,6 +125,43 @@ async fn read_marking_file(path: String, app: tauri::AppHandle) -> Result<String
     std::fs::read_to_string(p).map_err(|e| format!("Erro ao ler arquivo: {}", e))
 }
 
+#[tauri::command]
+async fn save_logo_file(
+    id: String,
+    content: String,
+    app: tauri::AppHandle,
+) -> Result<String, String> {
+    // Onda 14 — banco auto-crescente de logos. Mesma hardening do save_applique_file.
+    if content.len() > MAX_SVG_BYTES {
+        return Err(format!(
+            "SVG too large: {} bytes (max {})",
+            content.len(),
+            MAX_SVG_BYTES
+        ));
+    }
+    if id.is_empty()
+        || !id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
+        return Err(format!("invalid logo id: {:?}", id));
+    }
+
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let dir = app_data_dir.join("assets").join("logos");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let file_path = dir.join(format!("{}.svg", id));
+    std::fs::write(&file_path, content).map_err(|e| e.to_string())?;
+    Ok(file_path.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+async fn read_logo_file(path: String, app: tauri::AppHandle) -> Result<String, String> {
+    let p = Path::new(&path);
+    assert_under_assets(&app, p, "logos")?;
+    std::fs::read_to_string(p).map_err(|e| format!("Erro ao ler arquivo: {}", e))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let migrations = vec![
@@ -182,6 +219,30 @@ pub fn run() {
             sql: include_str!("../migrations/0008_orders_marketplace_kanban.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 10,
+            description: "order_items_multi",
+            sql: include_str!("../migrations/0009_order_items_multi.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 11,
+            description: "clean_test_patterns",
+            sql: include_str!("../migrations/0010_clean_test_patterns.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 12,
+            description: "board_canvas_json",
+            sql: include_str!("../migrations/0011_board_canvas_json.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 13,
+            description: "order_items_cascade",
+            sql: include_str!("../migrations/0012_order_items_cascade.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()
@@ -204,8 +265,17 @@ pub fn run() {
             read_applique_file,
             read_engraving_file,
             read_marking_file,
+            save_logo_file,
+            read_logo_file,
             db_tx::db_tx_execute
         ])
         .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        // Boot falho (DB lockado, porta 1420 ocupada em dev, etc): logar em
+        // stderr antes de sair com código != 0. Sem isso, panic mostra crash
+        // silencioso pro operador. MessageDialog não dá pra mostrar aqui —
+        // a app builder falhou; sem app, sem janela.
+        .unwrap_or_else(|err| {
+            eprintln!("[capi-studio] erro fatal ao inicializar Tauri: {err:?}");
+            std::process::exit(1);
+        });
 }

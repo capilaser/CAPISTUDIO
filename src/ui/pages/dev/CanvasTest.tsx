@@ -100,7 +100,10 @@ export default function CanvasTest() {
         getCanvasJson={() => {
           const engine = engineRef.current;
           if (!engine || !product) return '';
-          return JSON.stringify(engine.serialize(product.id));
+          // Onda 13: serialize agora recebe items[]. SaveAsPattern = 1 item base.
+          return JSON.stringify(
+            engine.serialize([{ productId: product.id, offsetX: 0, offsetY: 0 }])
+          );
         }}
         onClose={() => setSaveAsOpen(false)}
         onSaved={() => setSaveAsOpen(false)}

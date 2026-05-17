@@ -11,6 +11,8 @@ import InicialPage from '@/ui/pages/inicial/InicialPage';
 import ArteHubPage from '@/ui/pages/arte/ArteHubPage';
 import NovoPedidoPage from '@/ui/pages/arte/NovoPedidoPage';
 import BancoPage from '@/ui/pages/banco/BancoPage';
+import PadroesPage from '@/ui/pages/padroes/PadroesPage';
+import PadraoEditorPage from '@/ui/pages/padroes/PadraoEditorPage';
 
 function useEscapeToHome() {
   const navigate = useNavigate();
@@ -44,6 +46,9 @@ export function RouterContent() {
       <Route path="/" element={<InicialPage />} />
       <Route path="/arte" element={<ArteHubPage />} />
       <Route path="/arte/novo" element={<NovoPedidoPage />} />
+      <Route path="/padroes" element={<PadroesPage />} />
+      <Route path="/padroes/novo" element={<PadraoEditorPage />} />
+      <Route path="/padroes/editar/:id" element={<PadraoEditorPage />} />
       <Route path="/banco" element={<BancoPage />} />
 
       {/* Rotas legadas mantidas até serem absorvidas/removidas:

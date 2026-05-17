@@ -9,10 +9,17 @@ let _loading: Promise<Database> | null = null;
 export async function getDb(): Promise<Database> {
   if (_db) return _db;
   if (_loading) return _loading;
-  _loading = Database.load(DB_PATH).then((db) => {
-    _db = db;
-    _loading = null;
-    return db;
-  });
+  _loading = Database.load(DB_PATH)
+    .then((db) => {
+      _db = db;
+      _loading = null;
+      return db;
+    })
+    .catch((err) => {
+      // Sem reset, próximas chamadas ficariam presas com a promise rejeitada
+      // até reload do app — DB corrompido em DEV bloqueia retry após fix.
+      _loading = null;
+      throw err;
+    });
   return _loading;
 }

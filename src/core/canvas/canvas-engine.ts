@@ -1215,11 +1215,13 @@ export class CanvasEngine {
     // Log estruturado: entrada da função + estado do cache no momento.
     // Remove quando bug for resolvido (memory: debt_material_dourado_prata).
     const cacheHadKey = this.materialImageCache.has(materialId);
-    console.log(
-      `[DEBUG-mat] applyMaterialToLayer(layerId="${layerId}", materialId="${materialId}", ` +
-        `urlTail="${assetUrl.split('/').slice(-2).join('/')}", cacheHit=${cacheHadKey}, ` +
-        `cacheKeys=[${Array.from(this.materialImageCache.keys()).join(',')}])`
-    );
+    if (import.meta.env.DEV) {
+      console.log(
+        `[DEBUG-mat] applyMaterialToLayer(layerId="${layerId}", materialId="${materialId}", ` +
+          `urlTail="${assetUrl.split('/').slice(-2).join('/')}", cacheHit=${cacheHadKey}, ` +
+          `cacheKeys=[${Array.from(this.materialImageCache.keys()).join(',')}])`
+      );
+    }
 
     // Cached loader: reuse the HTMLImageElement for the same materialId
     // across calls within a session (avoids repeated IPC / network round-trips).

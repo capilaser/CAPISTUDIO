@@ -19,7 +19,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import * as fabric from 'fabric';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CanvasEngine } from '@/core/canvas/canvas-engine';
 import { parseCorelSvg } from '@/core/canvas/corel-svg-parser';
@@ -319,19 +319,39 @@ describe('svg-exporter (Onda 9 Fase 9D)', () => {
       ).rejects.toThrow(/assetLookup retornou null/);
     });
 
-    it('lança quando VisualLayerMeta não tem engravingId nem markingId', async () => {
-      // Reproduz cenário: usuário adiciona um rect avulso via addRectangle
-      // (LayerMeta kind='visual' sem FK de banco). Export precisa rejeitar.
+    it('Onda 18: VisualLayerMeta sem engravingId/markingId é ignorado (warn+skip, não throw)', async () => {
+      // Mudança de comportamento Onda 18: antes lançava, agora skipa com warn.
+      // Razão: em pedidos reais, operador tem slots de texto (Nome/Profissão)
+      // sem asset cadastrado — o export inteiro travava por causa disso.
+      // Agora: slot sem asset simplesmente não aparece no SVG/DXF.
+      const apliqueSvg = await loadFixture('apliques/aplique-1-formato-d.svg');
+      const apliqueMeta = parseCorelSvg(apliqueSvg);
+      await engine.addAppliqueSvg(apliqueMeta, 'Aplique 1', 'aplique-1-formato-d');
+
+      // Adiciona rect avulso SEM asset cadastrado (vira slot/visual sem rota)
       engine.addRectangle(10, 10, 20, 20);
 
-      await expect(
-        exportSvgByMachine(engine.canvas, {
-          productWidthMm: 300,
-          productHeightMm: 90,
-          layers: layersSnapshot(),
-          assetLookup: makeLookup({}),
-        })
-      ).rejects.toThrow(/sem engravingId nem markingId/);
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const out = await exportSvgByMachine(engine.canvas, {
+        productWidthMm: 300,
+        productHeightMm: 90,
+        layers: layersSnapshot(),
+        assetLookup: makeLookup({
+          'aplique-1-formato-d': { operation: 'corte', machines: ['fiber-laser'] },
+        }),
+      });
+
+      // Aplique normal foi exportado; rect avulso foi ignorado.
+      expect(out.size).toBe(1);
+      expect(out.has('fiber-laser')).toBe(true);
+
+      // Warning saiu pro console identificando o slot ignorado.
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringMatching(/camada visual.*sem engravingId nem markingId.*ignorada/)
+      );
+
+      warnSpy.mockRestore();
     });
   });
 

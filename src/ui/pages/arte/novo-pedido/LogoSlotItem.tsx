@@ -28,6 +28,7 @@ import {
   touch,
   type Logo,
 } from '@/data/repositories/logoRepository';
+import { sanitizeSvg } from '@/lib/sanitize-svg';
 import { readLogoFile, saveLogoFile } from '@/services/logo-storage';
 import { Button } from '@/ui/components/button';
 
@@ -184,7 +185,7 @@ export function LogoSlotItem({ label, itemId, engineRef, onRemove, slotVersion =
         <div className="flex flex-col gap-1.5">
           <div
             className="flex h-16 w-full items-center justify-center rounded border border-border bg-card"
-            dangerouslySetInnerHTML={{ __html: logoSvg }}
+            dangerouslySetInnerHTML={{ __html: sanitizeSvg(logoSvg) }}
           />
           <div className="flex items-center justify-between gap-2">
             <span className="line-clamp-1 font-mono text-[10px] text-muted-foreground">

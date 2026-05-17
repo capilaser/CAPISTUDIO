@@ -1,23 +1,30 @@
 /**
- * Onda 11.A — revisionRepository
+ * Onda 11.A → Onda 13 — revisionRepository
  *
  * Read-only. Escritas em `order_revisions` ficam em `orderRepository`
- * (createWithFirstRevision, saveRevision) DENTRO da mesma transação que
- * atualiza `orders` — ver ADR 017.
+ * (createWithItems, saveRevision) DENTRO da mesma transação que altera
+ * `order_items` — ver ADR 017.
  *
- * Campo isApproved é declarado no schema mas só consumido pela Onda 12
- * (aprovação de pedido). Aqui está exposto pra leitura ser uniforme.
+ * Onda 13: snapshot mudou de shape. Antes era fields+materialId+canvasJson
+ * (uma arte por pedido). Agora é items_json: JSON com o array completo
+ * de items naquela revisão. Cada item carrega seu próprio product/pattern/
+ * material/fields/canvasJson.
  */
 import { getDb } from '../client';
-import type { OrderFields } from '../schema';
+import type { OrderItem } from './orderRepository';
 
 export interface OrderRevision {
   id: string;
   orderId: string;
   number: number;
-  fields: OrderFields;
-  materialId: string | null;
-  canvasJson: string;
+  /** Snapshot dos items dessa revisão. Parsed de items_json. */
+  items: OrderItem[];
+  /**
+   * Onda 14b-schema (migration v12) — snapshot do canvas da prancha pra
+   * esta revisão. Vazio (`'{}'`) em revisões antigas que precederam v12 sem
+   * backfill (json_extract retornou null).
+   */
+  boardCanvasJson: string;
   exportedPngPath: string | null;
   /** Onda 12: marcado true na revisão que o cliente aprovou. */
   isApproved: boolean;
@@ -28,28 +35,36 @@ interface RevisionRow {
   id: string;
   orderId: string;
   number: number;
-  fields: string;
-  materialId: string | null;
-  canvasJson: string;
+  itemsJson: string;
+  boardCanvasJson: string;
   exportedPngPath: string | null;
   isApproved: number;
   createdAt: number;
 }
 
 const SELECT_COLS = `
-  id, order_id as orderId, number, fields, material_id as materialId,
-  canvas_json as canvasJson, exported_png_path as exportedPngPath,
+  id, order_id as orderId, number, items_json as itemsJson,
+  board_canvas_json as boardCanvasJson,
+  exported_png_path as exportedPngPath,
   is_approved as isApproved, created_at as createdAt
 `;
+
+function parseItems(raw: string): OrderItem[] {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? (parsed as OrderItem[]) : [];
+  } catch {
+    return [];
+  }
+}
 
 function toRevision(row: RevisionRow): OrderRevision {
   return {
     id: row.id,
     orderId: row.orderId,
     number: row.number,
-    fields: JSON.parse(row.fields) as OrderFields,
-    materialId: row.materialId,
-    canvasJson: row.canvasJson,
+    items: parseItems(row.itemsJson),
+    boardCanvasJson: row.boardCanvasJson,
     exportedPngPath: row.exportedPngPath,
     isApproved: row.isApproved === 1,
     createdAt: row.createdAt,
@@ -93,6 +108,33 @@ export async function getLatest(orderId: string): Promise<OrderRevision | null> 
     [orderId]
   );
   return rows[0] ? toRevision(rows[0]) : null;
+}
+
+/**
+ * Onda 13.8 — marca a última revisão (maior number) de um pedido como
+ * aprovada (is_approved=1). Idempotente: se a última revisão já está
+ * aprovada, segue sem erro.
+ *
+ * Lança erro se o pedido não tem revisão (não deveria acontecer — pedido
+ * sempre nasce com revisão 1 via createWithItems/create).
+ *
+ * NÃO toca em `orders` (status do Kanban é coisa separada — operador
+ * decide se "aprovar" muda status pra 'aprovado' depois).
+ */
+export async function approveLatestRevision(orderId: string): Promise<void> {
+  const db = await getDb();
+  // UPDATE the revision with the max number for this order.
+  // SQLite subquery handles it atomicamente.
+  const result = await db.execute(
+    `UPDATE order_revisions
+        SET is_approved = 1
+      WHERE order_id = ?
+        AND number = (SELECT MAX(number) FROM order_revisions WHERE order_id = ?)`,
+    [orderId, orderId]
+  );
+  if (result.rowsAffected === 0) {
+    throw new Error(`Pedido ${orderId} sem revisões — nada pra aprovar.`);
+  }
 }
 
 export async function count(orderId: string): Promise<number> {

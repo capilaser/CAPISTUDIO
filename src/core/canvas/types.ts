@@ -20,6 +20,12 @@ export interface SlotMeta {
   content?: string;
   /** dataURL or path (logo slot) */
   logoSrc?: string;
+  /**
+   * Onda 14b — id do logo no banco `logos` (quando slot é do tipo logo e
+   * tem conteúdo aplicado). Persiste no canvasJson via capiSlot. Permite
+   * re-popular o LogoSlotItem ao reabrir pedido sem duplicar SVG no JSON.
+   */
+  logoId?: string;
 }
 
 export interface FitTextOptions {

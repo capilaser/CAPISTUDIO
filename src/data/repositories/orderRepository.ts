@@ -1,34 +1,26 @@
 /**
- * Onda 11.A → Onda 11.C — orderRepository
+ * Onda 11.A → Onda 13 — orderRepository
  *
- * Gerencia pedidos. Os 4 campos "snapshot" (fields, materialId, canvasJson,
- * exportedPngPath) são denormalizados: ficam em `orders` como "última revisão"
- * E são duplicados em `order_revisions` como histórico imutável.
+ * Onda 13 (multi-broche): `orders` perdeu pattern_id/product_id/material_id/
+ * fields/canvas_json — esses 5 campos viraram propriedade de cada item da
+ * prancha (tabela order_items). Pedido de 1 broche = prancha com 1 item.
+ * Pedido vazio = zero items.
  *
- * INVARIANTE crítica: toda escrita desses 4 campos em `orders` acontece DENTRO
- * da mesma transação SQL que cria a revisão correspondente. Usar a infra
- * `executeTransaction` (ver `data/transaction.ts` + ADR 017) — nunca chamar
- * `db.execute()` solto pra atualizar esses campos.
+ * INVARIANTE crítica (mantida da Onda 11): toda escrita em `order_items`
+ * que represente "nova versão do pedido" acontece DENTRO da mesma transação
+ * SQL que cria uma linha em `order_revisions`. Snapshot dos items vai pro
+ * campo items_json. Usar `executeTransaction` (ver ADR 017) — nunca
+ * `db.execute()` solto pra alterar items de um pedido versionado.
  *
- * Onda 11.C estendeu o repositório:
- *  - OrderStatus agora tem 6 valores Kanban
- *  - Order ganhou customerName/olistOrderId/marketplace/folderPath/archived
- *  - patternId/productId viraram nullable (pedido nasce vazio, editor preenche)
- *  - Novos métodos: listAll, listByStatus, listGroupedByStatus, updateStatus,
- *    create (atalho do createWithFirstRevision sem padrão/produto),
- *    archiveAll, setExportedPngPath
+ * Estratégia de saveRevision: delete-all + insert-all em order_items.
+ * Simples, atômico e o histórico do "antes" fica preservado na revisão
+ * anterior (items_json). Sem diff incremental.
  */
 import { getDb } from '../client';
-import { executeTransaction, type TxParam } from '../transaction';
+import { executeTransaction, type TxParam, type TxQuery } from '../transaction';
 import type { OrderFields } from '../schema';
 
-// 6 status Kanban — fluxo:
-//   novo → aguardando_info (manual) → ... → novo (manual de volta)
-//   novo → arte_enviada    (auto ao salvar/exportar)
-//   arte_enviada → aprovado     (manual)
-//   aprovado     → em_producao  (manual)
-//   em_producao  → enviado      (manual)
-//   enviado      → archived=1   (boot job — separado de status)
+// 6 status Kanban (idem Onda 11.C).
 export type OrderStatus =
   | 'novo'
   | 'aguardando_info'
@@ -46,41 +38,54 @@ export const ORDER_STATUSES: readonly OrderStatus[] = [
   'enviado',
 ] as const;
 
-// Marketplaces conhecidos. NULL = pedido criado dentro do app (sem origem externa).
 export type Marketplace = 'shopee' | 'mercado_livre' | 'whatsapp';
+
+export interface OrderItem {
+  id: string;
+  orderId: string;
+  /** 0-based. 0..4 = coluna 1 da prancha, 5..9 = coluna 2 etc. */
+  position: number;
+  productId: string | null;
+  patternId: string | null;
+  materialId: string | null;
+  fields: OrderFields;
+  /** JSON serializado de FabricCanvasJson do item. '{}' quando ainda vazio. */
+  canvasJson: string;
+  createdAt: number;
+  updatedAt: number;
+}
 
 export interface Order {
   id: string;
-  patternId: string | null;
-  productId: string | null;
   label: string;
-  fields: OrderFields;
-  materialId: string | null;
   status: OrderStatus;
-  /** Snapshot da última revisão. Espelha `order_revisions[last].canvas_json`. */
-  canvasJson: string;
-  /** Path do PNG da última revisão. Null = nunca exportado. */
+  /** PNG da prancha inteira (output da última export). */
   exportedPngPath: string | null;
+  /** SVGs por máquina da prancha inteira (output da última export). */
   exportedSvgPaths: string[] | null;
   customerName: string | null;
   olistOrderId: string | null;
   marketplace: Marketplace | null;
   folderPath: string | null;
   archived: boolean;
+  /**
+   * Onda 14b-schema (migration v12) — snapshot do canvas único da prancha
+   * (com todos os broches juntos). Substitui a gambiarra da Onda 13.7 que
+   * gravava em order_items[0].canvasJson. Vazio (`'{}'`) quando pedido nunca
+   * foi salvo via NovoPedidoPage (criado direto pelo Kanban etc).
+   */
+  boardCanvasJson: string;
   createdAt: number;
   updatedAt: number;
   deletedAt: number | null;
+  /** Items da prancha, sempre ordenados por position asc. Vazio = pedido sem broches. */
+  items: OrderItem[];
 }
 
 interface OrderRow {
   id: string;
-  patternId: string | null;
-  productId: string | null;
   label: string;
-  fields: string;
-  materialId: string | null;
   status: string;
-  canvasJson: string;
   exportedPngPath: string | null;
   exportedSvgPaths: string | null;
   customerName: string | null;
@@ -88,19 +93,39 @@ interface OrderRow {
   marketplace: string | null;
   folderPath: string | null;
   archived: number;
+  boardCanvasJson: string;
   createdAt: number;
   updatedAt: number;
   deletedAt: number | null;
 }
 
-const SELECT_COLS = `
-  id, pattern_id as patternId, product_id as productId, label,
-  fields, material_id as materialId, status,
-  canvas_json as canvasJson, exported_png_path as exportedPngPath,
-  exported_svg_paths as exportedSvgPaths,
+interface ItemRow {
+  id: string;
+  orderId: string;
+  position: number;
+  productId: string | null;
+  patternId: string | null;
+  materialId: string | null;
+  fields: string;
+  canvasJson: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+const SELECT_ORDER_COLS = `
+  id, label, status,
+  exported_png_path as exportedPngPath, exported_svg_paths as exportedSvgPaths,
   customer_name as customerName, olist_order_id as olistOrderId,
   marketplace, folder_path as folderPath, archived,
+  board_canvas_json as boardCanvasJson,
   created_at as createdAt, updated_at as updatedAt, deleted_at as deletedAt
+`;
+
+const SELECT_ITEM_COLS = `
+  id, order_id as orderId, position,
+  product_id as productId, pattern_id as patternId, material_id as materialId,
+  fields, canvas_json as canvasJson,
+  created_at as createdAt, updated_at as updatedAt
 `;
 
 function parseStatus(raw: string): OrderStatus {
@@ -112,36 +137,72 @@ function parseMarketplace(raw: string | null): Marketplace | null {
   return null;
 }
 
-function toOrder(row: OrderRow): Order {
-  let exportedSvgPaths: string[] | null = null;
-  if (row.exportedSvgPaths) {
-    try {
-      const parsed = JSON.parse(row.exportedSvgPaths) as unknown;
-      if (Array.isArray(parsed)) exportedSvgPaths = parsed as string[];
-    } catch {
-      exportedSvgPaths = null;
-    }
+function parseExportedSvgPaths(raw: string | null): string[] | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? (parsed as string[]) : null;
+  } catch {
+    return null;
   }
+}
+
+function rowToItem(row: ItemRow): OrderItem {
   return {
     id: row.id,
-    patternId: row.patternId,
+    orderId: row.orderId,
+    position: row.position,
     productId: row.productId,
-    label: row.label,
-    fields: JSON.parse(row.fields) as OrderFields,
+    patternId: row.patternId,
     materialId: row.materialId,
-    status: parseStatus(row.status),
+    fields: JSON.parse(row.fields) as OrderFields,
     canvasJson: row.canvasJson,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+function rowToOrder(row: OrderRow, items: OrderItem[]): Order {
+  return {
+    id: row.id,
+    label: row.label,
+    status: parseStatus(row.status),
     exportedPngPath: row.exportedPngPath,
-    exportedSvgPaths,
+    exportedSvgPaths: parseExportedSvgPaths(row.exportedSvgPaths),
     customerName: row.customerName,
     olistOrderId: row.olistOrderId,
     marketplace: parseMarketplace(row.marketplace),
     folderPath: row.folderPath,
     archived: row.archived === 1,
+    boardCanvasJson: row.boardCanvasJson,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     deletedAt: row.deletedAt,
+    items,
   };
+}
+
+// ── Items helpers ────────────────────────────────────────────────────────────
+
+async function fetchItemsForOrders(orderIds: string[]): Promise<Map<string, OrderItem[]>> {
+  const result = new Map<string, OrderItem[]>();
+  if (orderIds.length === 0) return result;
+  const db = await getDb();
+  const placeholders = orderIds.map(() => '?').join(', ');
+  const rows = await db.select<ItemRow[]>(
+    `SELECT ${SELECT_ITEM_COLS}
+       FROM order_items
+      WHERE order_id IN (${placeholders})
+   ORDER BY position ASC`,
+    orderIds
+  );
+  for (const id of orderIds) result.set(id, []);
+  for (const row of rows) {
+    const item = rowToItem(row);
+    const list = result.get(item.orderId);
+    if (list) list.push(item);
+  }
+  return result;
 }
 
 // ── Reads ────────────────────────────────────────────────────────────────────
@@ -149,10 +210,12 @@ function toOrder(row: OrderRow): Order {
 export async function getById(id: string): Promise<Order | null> {
   const db = await getDb();
   const rows = await db.select<OrderRow[]>(
-    `SELECT ${SELECT_COLS} FROM orders WHERE id = ? AND deleted_at IS NULL`,
+    `SELECT ${SELECT_ORDER_COLS} FROM orders WHERE id = ? AND deleted_at IS NULL`,
     [id]
   );
-  return rows[0] ? toOrder(rows[0]) : null;
+  if (!rows[0]) return null;
+  const itemsByOrder = await fetchItemsForOrders([id]);
+  return rowToOrder(rows[0], itemsByOrder.get(id) ?? []);
 }
 
 export interface OrderListItem {
@@ -163,9 +226,8 @@ export interface OrderListItem {
 }
 
 /**
- * Listagem paginada — Fase D vai chamar com page size 50.
- * Ordena por updated_at desc (mais recente primeiro).
- * Filtra archived=0 (pedidos despachados não aparecem aqui).
+ * Listagem paginada — não carrega items (uso só pra lista resumida).
+ * Quem precisar dos items deve chamar getById ou listAll.
  */
 export async function listPage(opts: { limit: number; offset: number }): Promise<OrderListItem[]> {
   const db = await getDb();
@@ -200,13 +262,6 @@ export async function count(): Promise<number> {
   return rows[0]?.n ?? 0;
 }
 
-/**
- * Conta TODOS os pedidos já criados (inclui arquivados e soft-deleted).
- *
- * Usado pelo onboarding pra gerar nome auto-incrementado "Novo Pedido N"
- * sem risco de colisão: se um pedido N for deletado, N+1 continua o próximo.
- * Não filtra archived/deleted_at justamente pra manter unicidade temporal.
- */
 export async function countAll(): Promise<number> {
   const db = await getDb();
   const rows = await db.select<Array<{ n: number }>>(`SELECT COUNT(*) as n FROM orders`);
@@ -214,25 +269,21 @@ export async function countAll(): Promise<number> {
 }
 
 /**
- * Lista todos os pedidos ativos (não arquivados, não deletados). Usada pelo
- * Kanban no boot pra hidratar todas as 6 colunas. Ordenada por updated_at
- * desc — o consumer faz o groupBy(status) em JS, evitando 6 queries.
+ * Lista todos os pedidos ativos + carrega items de todos numa única query.
+ * Usado pelo Kanban no boot. Mantém comportamento de "hidratar com items"
+ * pra UI poder mostrar produto/quantidade direto.
  */
 export async function listAll(): Promise<Order[]> {
   const db = await getDb();
   const rows = await db.select<OrderRow[]>(
-    `SELECT ${SELECT_COLS} FROM orders
+    `SELECT ${SELECT_ORDER_COLS} FROM orders
       WHERE deleted_at IS NULL AND archived = 0
    ORDER BY updated_at DESC`
   );
-  return rows.map(toOrder);
+  const itemsByOrder = await fetchItemsForOrders(rows.map((r) => r.id));
+  return rows.map((r) => rowToOrder(r, itemsByOrder.get(r.id) ?? []));
 }
 
-/**
- * Lista pedidos por status. Usada pelo boot job pra varrer só 'enviado'.
- * Inclui arquivados ou não conforme o parâmetro (boot job precisa pegar
- * pedidos enviado que ainda NÃO foram arquivados — default false).
- */
 export async function listByStatus(
   status: OrderStatus,
   opts: { includeArchived?: boolean } = {}
@@ -241,84 +292,34 @@ export async function listByStatus(
   const includeArchived = opts.includeArchived ?? false;
   const archivedClause = includeArchived ? '' : 'AND archived = 0';
   const rows = await db.select<OrderRow[]>(
-    `SELECT ${SELECT_COLS} FROM orders
+    `SELECT ${SELECT_ORDER_COLS} FROM orders
       WHERE deleted_at IS NULL AND status = ? ${archivedClause}
    ORDER BY updated_at DESC`,
     [status]
   );
-  return rows.map(toOrder);
+  const itemsByOrder = await fetchItemsForOrders(rows.map((r) => r.id));
+  return rows.map((r) => rowToOrder(r, itemsByOrder.get(r.id) ?? []));
 }
 
 // ── Writes (atomic) ──────────────────────────────────────────────────────────
 
-export interface CreateOrderInput {
-  id: string;
-  patternId: string;
-  productId: string;
-  label: string;
-  fields: OrderFields;
+/** Input pra cada item ao criar/atualizar pedido. Sem id/orderId/timestamps. */
+export interface OrderItemInput {
+  position: number;
+  productId?: string | null;
+  patternId?: string | null;
   materialId?: string | null;
-  canvasJson: string;
+  fields?: OrderFields;
+  canvasJson?: string;
 }
 
 /**
- * Cria pedido + revisão 1 atomicamente. Status inicial = 'novo'.
+ * Atalho usado pelo modal "Novo Pedido" do Kanban.
  *
- * Onda 11.C: status default agora é 'novo' (era 'pendente' na Fase A).
+ * Cria pedido vazio: só customer_name preenchido. Zero items. A revisão 1
+ * fica com items_json='[]'. Operador adiciona items no editor (Fase C).
  *
- * Layout da transação:
- *   1. INSERT orders (status='novo', revisão 1 denormalizada)
- *   2. INSERT order_revisions (number=1, is_approved=0)
- *
- * Falha em qualquer query → rollback completo (nem orders nem revisão
- * persistem). Garantia provida por `executeTransaction` (ver ADR 017).
- */
-export async function createWithFirstRevision(input: CreateOrderInput): Promise<void> {
-  const revisionId = crypto.randomUUID();
-  const fieldsJson = JSON.stringify(input.fields);
-  const materialId: TxParam = input.materialId ?? null;
-
-  await executeTransaction([
-    {
-      sql: `INSERT INTO orders (
-              id, pattern_id, product_id, label, fields, material_id, status,
-              canvas_json, exported_png_path, exported_svg_paths,
-              created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, 'novo', ?, NULL, NULL, unixepoch(), unixepoch())`,
-      params: [
-        input.id,
-        input.patternId,
-        input.productId,
-        input.label,
-        fieldsJson,
-        materialId,
-        input.canvasJson,
-      ],
-    },
-    {
-      sql: `INSERT INTO order_revisions (
-              id, order_id, number, fields, material_id, canvas_json,
-              exported_png_path, is_approved, created_at
-            ) VALUES (?, ?, 1, ?, ?, ?, NULL, 0, unixepoch())`,
-      params: [revisionId, input.id, fieldsJson, materialId, input.canvasJson],
-    },
-  ]);
-}
-
-/**
- * Atalho usado pelo modal "Novo Pedido" do Kanban (Onda 11.C).
- *
- * Cria um pedido "vazio": apenas customer_name preenchido, sem padrão,
- * sem produto, sem material. fields={}, canvas_json='{}'. Status='novo'.
- *
- * A revisão 1 também é criada (snapshot inicial vazio) — Onda 11.A
- * garante atomicidade via createWithFirstRevision, mas aqui patternId
- * e productId são NULL (relaxados na migration v9).
- *
- * Reusa a mesma transação atômica de `createWithFirstRevision`, mas
- * o INSERT precisa permitir NULL nos FKs — fazemos via SQL inline.
- *
- * Retorna o `id` do pedido criado pra UI redirecionar pro editor.
+ * Retorna o `id` do pedido criado pra UI redirecionar.
  */
 export async function create(customerName: string): Promise<string> {
   const trimmed = customerName.trim();
@@ -327,83 +328,197 @@ export async function create(customerName: string): Promise<string> {
   }
   const orderId = crypto.randomUUID();
   const revisionId = crypto.randomUUID();
-  const label = trimmed;
-  const fieldsJson = '{}';
-  const emptyCanvasJson = '{}';
 
   await executeTransaction([
     {
       sql: `INSERT INTO orders (
-              id, pattern_id, product_id, label, fields, material_id, status,
-              canvas_json, exported_png_path, exported_svg_paths,
+              id, label, status,
+              exported_png_path, exported_svg_paths,
               customer_name, olist_order_id, marketplace, folder_path, archived,
               created_at, updated_at
-            ) VALUES (?, NULL, NULL, ?, ?, NULL, 'novo', ?, NULL, NULL,
-                      ?, NULL, NULL, NULL, 0, unixepoch(), unixepoch())`,
-      params: [orderId, label, fieldsJson, emptyCanvasJson, trimmed],
+            ) VALUES (?, ?, 'novo', NULL, NULL, ?, NULL, NULL, NULL, 0,
+                      unixepoch(), unixepoch())`,
+      params: [orderId, trimmed, trimmed],
     },
     {
       sql: `INSERT INTO order_revisions (
-              id, order_id, number, fields, material_id, canvas_json,
-              exported_png_path, is_approved, created_at
-            ) VALUES (?, ?, 1, ?, NULL, ?, NULL, 0, unixepoch())`,
-      params: [revisionId, orderId, fieldsJson, emptyCanvasJson],
+              id, order_id, number, items_json, exported_png_path, is_approved, created_at
+            ) VALUES (?, ?, 1, '[]', NULL, 0, unixepoch())`,
+      params: [revisionId, orderId],
     },
   ]);
 
   return orderId;
 }
 
-export interface SaveRevisionInput {
-  orderId: string;
-  fields: OrderFields;
-  materialId?: string | null;
-  canvasJson: string;
+export interface CreateOrderWithItemsInput {
+  id: string;
+  label: string;
+  customerName?: string | null;
+  items: OrderItemInput[];
+  /**
+   * Onda 14b-schema — snapshot do canvas da prancha. Default '{}' quando
+   * não informado (operador pode salvar pedido sem canvas pré-construído,
+   * ex: fluxo Kanban-first).
+   */
+  boardCanvasJson?: string;
 }
 
 /**
- * Salva nova revisão. Cria order_revisions[next] e ATUALIZA orders pra refletir
- * o snapshot da nova revisão. Número da revisão é calculado atomicamente via
- * `(SELECT COALESCE(MAX(number), 0) + 1 FROM order_revisions WHERE order_id=?)`
- * — protegido contra race por UNIQUE INDEX (order_id, number).
+ * Cria pedido + N items + revisão 1, tudo numa única transação.
+ * Snapshot da revisão 1 = items recém-inseridos (com seus ids gerados aqui).
+ */
+export async function createWithItems(input: CreateOrderWithItemsInput): Promise<void> {
+  const revisionId = crypto.randomUUID();
+  const itemsWithIds: OrderItem[] = input.items.map((it) => ({
+    id: crypto.randomUUID(),
+    orderId: input.id,
+    position: it.position,
+    productId: it.productId ?? null,
+    patternId: it.patternId ?? null,
+    materialId: it.materialId ?? null,
+    fields: it.fields ?? {},
+    canvasJson: it.canvasJson ?? '{}',
+    createdAt: 0, // será sobrescrito pelo SQL default
+    updatedAt: 0,
+  }));
+
+  const boardCanvasJson = input.boardCanvasJson ?? '{}';
+
+  const queries: TxQuery[] = [
+    {
+      sql: `INSERT INTO orders (
+              id, label, status,
+              exported_png_path, exported_svg_paths,
+              customer_name, olist_order_id, marketplace, folder_path, archived,
+              board_canvas_json,
+              created_at, updated_at
+            ) VALUES (?, ?, 'novo', NULL, NULL, ?, NULL, NULL, NULL, 0, ?,
+                      unixepoch(), unixepoch())`,
+      params: [input.id, input.label, input.customerName ?? null, boardCanvasJson],
+    },
+  ];
+
+  for (const item of itemsWithIds) {
+    queries.push({
+      sql: `INSERT INTO order_items (
+              id, order_id, position, product_id, pattern_id, material_id,
+              fields, canvas_json, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, unixepoch(), unixepoch())`,
+      params: [
+        item.id,
+        item.orderId,
+        item.position,
+        item.productId,
+        item.patternId,
+        item.materialId,
+        JSON.stringify(item.fields),
+        item.canvasJson,
+      ] as TxParam[],
+    });
+  }
+
+  queries.push({
+    sql: `INSERT INTO order_revisions (
+            id, order_id, number, items_json, board_canvas_json,
+            exported_png_path, is_approved, created_at
+          ) VALUES (?, ?, 1, ?, ?, NULL, 0, unixepoch())`,
+    params: [revisionId, input.id, JSON.stringify(itemsWithIds), boardCanvasJson],
+  });
+
+  await executeTransaction(queries);
+}
+
+export interface SaveRevisionInput {
+  orderId: string;
+  items: OrderItemInput[];
+  /** Onda 14b-schema — snapshot do canvas da prancha. Default '{}'. */
+  boardCanvasJson?: string;
+}
+
+/**
+ * Salva nova revisão da prancha. Estratégia: delete-all + insert-all em
+ * order_items + INSERT em order_revisions com items_json = snapshot dos
+ * items novos. Tudo numa única transação.
  *
- * Nova revisão SEMPRE entra com is_approved=0. Status do pedido NÃO é alterado
- * aqui (continua o que estava). Fase D vai trigger a transição automática
- * novo→arte_enviada quando salvar OU exportar PNG. Onda 12 vai marcar
- * is_approved=1 em comando dedicado.
+ * Número da revisão calculado atomicamente via COALESCE(MAX(number),0)+1.
+ * UNIQUE INDEX (order_id, number) protege contra race.
+ *
+ * Status do pedido NÃO é alterado aqui. Fase D pode promover novo→arte_enviada
+ * via updateStatus em chamada separada.
  */
 export async function saveRevision(input: SaveRevisionInput): Promise<void> {
   const revisionId = crypto.randomUUID();
-  const fieldsJson = JSON.stringify(input.fields);
-  const materialId: TxParam = input.materialId ?? null;
+  const itemsWithIds: OrderItem[] = input.items.map((it) => ({
+    id: crypto.randomUUID(),
+    orderId: input.orderId,
+    position: it.position,
+    productId: it.productId ?? null,
+    patternId: it.patternId ?? null,
+    materialId: it.materialId ?? null,
+    fields: it.fields ?? {},
+    canvasJson: it.canvasJson ?? '{}',
+    createdAt: 0,
+    updatedAt: 0,
+  }));
 
-  await executeTransaction([
+  const queries: TxQuery[] = [
     {
-      sql: `UPDATE orders
-               SET fields = ?, material_id = ?, canvas_json = ?, updated_at = unixepoch()
-             WHERE id = ? AND deleted_at IS NULL`,
-      params: [fieldsJson, materialId, input.canvasJson, input.orderId],
+      sql: `DELETE FROM order_items WHERE order_id = ?`,
+      params: [input.orderId],
     },
-    {
-      sql: `INSERT INTO order_revisions (
-              id, order_id, number, fields, material_id, canvas_json,
-              exported_png_path, is_approved, created_at
-            )
-            SELECT ?, ?, COALESCE(MAX(number), 0) + 1, ?, ?, ?, NULL, 0,
-                   unixepoch()
-              FROM order_revisions
-             WHERE order_id = ?`,
-      params: [revisionId, input.orderId, fieldsJson, materialId, input.canvasJson, input.orderId],
-    },
-  ]);
+  ];
+
+  for (const item of itemsWithIds) {
+    queries.push({
+      sql: `INSERT INTO order_items (
+              id, order_id, position, product_id, pattern_id, material_id,
+              fields, canvas_json, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, unixepoch(), unixepoch())`,
+      params: [
+        item.id,
+        item.orderId,
+        item.position,
+        item.productId,
+        item.patternId,
+        item.materialId,
+        JSON.stringify(item.fields),
+        item.canvasJson,
+      ] as TxParam[],
+    });
+  }
+
+  const boardCanvasJson = input.boardCanvasJson ?? '{}';
+
+  queries.push({
+    sql: `UPDATE orders SET board_canvas_json = ?, updated_at = unixepoch()
+           WHERE id = ? AND deleted_at IS NULL`,
+    params: [boardCanvasJson, input.orderId],
+  });
+
+  queries.push({
+    sql: `INSERT INTO order_revisions (
+            id, order_id, number, items_json, board_canvas_json,
+            exported_png_path, is_approved, created_at
+          )
+          SELECT ?, ?, COALESCE(MAX(number), 0) + 1, ?, ?, NULL, 0, unixepoch()
+            FROM order_revisions
+           WHERE order_id = ?`,
+    params: [
+      revisionId,
+      input.orderId,
+      JSON.stringify(itemsWithIds),
+      boardCanvasJson,
+      input.orderId,
+    ],
+  });
+
+  await executeTransaction(queries);
 }
 
 /**
- * Atualiza apenas o status do pedido. Não cria revisão (status não é
- * snapshot — é metadata operacional). Usado pelos botões do Kanban
- * ("Aguardando Info", "Aprovar", "Iniciar Produção", "Embalado").
- *
- * Atualiza updated_at — garante que o card sobe na ordenação após a ação.
+ * Atualiza apenas o status do pedido. Não cria revisão (status é metadata
+ * operacional, não snapshot). Usado pelos botões do Kanban.
  */
 export async function updateStatus(orderId: string, status: OrderStatus): Promise<void> {
   const db = await getDb();
@@ -414,14 +529,6 @@ export async function updateStatus(orderId: string, status: OrderStatus): Promis
   );
 }
 
-/**
- * Marca múltiplos pedidos como archived=1. Usado pelo boot job após
- * copiar os arquivos do pedido pra pasta de despacho com sucesso.
- *
- * Não usa transação Rust (single UPDATE batch) — opera só em uma tabela
- * sem invariante cruzada. Atomicidade da própria query é garantida pelo
- * SQLite.
- */
 export async function archiveAll(ids: string[]): Promise<void> {
   if (ids.length === 0) return;
   const db = await getDb();
@@ -434,13 +541,7 @@ export async function archiveAll(ids: string[]): Promise<void> {
 }
 
 /**
- * Atualiza apenas o path do PNG exportado em `orders` (denormalizado).
- * Fase D vai chamar isso depois do export PNG. Se o pedido tem revisão
- * "em aberto" (não foi salvo desde último export), também atualiza
- * `order_revisions[last].exported_png_path` — caller decide via flag.
- *
- * Fase D vai chamar isso quando exportar PNG. Fase C declara a função
- * pra fechar o contrato do repositório.
+ * Atualiza o PNG da prancha inteira. Output da última export.
  */
 export async function setExportedPngPath(orderId: string, pngPath: string): Promise<void> {
   const db = await getDb();
@@ -451,7 +552,7 @@ export async function setExportedPngPath(orderId: string, pngPath: string): Prom
   );
 }
 
-/** Soft-delete. Não toca em revisions (histórico permanece). */
+/** Soft-delete. Não toca em items ou revisions (histórico permanece). */
 export async function softDelete(id: string): Promise<void> {
   const db = await getDb();
   await db.execute(

@@ -75,11 +75,14 @@ describe('Onda 9 — fluxo end-to-end de export PNG', () => {
     expect(engine.getSlotText(nomeMeta.id)).toBe('João Silva');
 
     // ── 2. Compõe o filename do dialog em tempo real ────────────────────────
+    // Onda 17 — nome agora inclui data ISO. Injetamos data fixa pro teste.
+    const fixedDate = new Date(2026, 4, 17); // 2026-05-17 local
     const filename = buildPngFilename({
       cliente: engine.getSlotText(nomeMeta.id) ?? '',
       profissao: 'Advogado',
+      date: fixedDate,
     });
-    expect(filename).toBe('joao-silva-advogado_mockup.png');
+    expect(filename).toBe('joao-silva-advogado_2026-05-17.png');
 
     // ── 3. Roda o exporter ──────────────────────────────────────────────────
     const layers = Array.from(engine.getAllLayerMetas().values());

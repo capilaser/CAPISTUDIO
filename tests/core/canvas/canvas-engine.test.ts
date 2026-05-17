@@ -194,14 +194,18 @@ describe('CanvasEngine', () => {
     expect(rect.evented).toBe(true);
   });
 
-  it('serialize returns envelope with productId, mm units, and exported objects', () => {
+  it('serialize returns envelope with items, mm units, and exported objects', () => {
     engine = new CanvasEngine(canvasEl, baseConfig);
     engine.addRectangle(10, 10, 20, 10);
     engine.addRectangle(35, 5, 15, 8);
 
-    const data = engine.serialize('broche-60x25');
+    const data = engine.serialize([{ productId: 'broche-60x25', offsetX: 0, offsetY: 0 }]);
 
-    expect(data.capi.productId).toBe('broche-60x25');
+    expect(data.capi.items).toHaveLength(1);
+    expect(data.capi.items[0].productId).toBe('broche-60x25');
+    expect(data.capi.items[0].offsetX).toBe(0);
+    expect(data.capi.items[0].offsetY).toBe(0);
+    expect(data.capi.schemaVersion).toBe(3);
     expect(data.capi.units).toBe('mm');
     // layers now contains LayerMeta entries — one per user object
     expect(data.capi.layers).toHaveLength(2);
@@ -220,8 +224,8 @@ describe('CanvasEngine', () => {
     engine = new CanvasEngine(canvasEl, baseConfig);
     engine.addRectangle(10, 10, 20, 10);
 
-    const first = engine.serialize('broche-60x25');
-    const second = engine.serialize('broche-60x25');
+    const first = engine.serialize([{ productId: 'broche-60x25', offsetX: 0, offsetY: 0 }]);
+    const second = engine.serialize([{ productId: 'broche-60x25', offsetX: 0, offsetY: 0 }]);
 
     expect(second.objects[0].id).toBe(first.objects[0].id);
   });
@@ -233,7 +237,7 @@ describe('CanvasEngine', () => {
     base.excludeFromExport = true;
     engine.addRectangle(10, 10, 20, 10);
 
-    const data = engine.serialize('broche-60x25');
+    const data = engine.serialize([{ productId: 'broche-60x25', offsetX: 0, offsetY: 0 }]);
     expect(data.objects).toHaveLength(1);
   });
 
@@ -243,7 +247,7 @@ describe('CanvasEngine', () => {
     rect.set({ angle: 23, scaleX: 1.4, scaleY: 0.9 });
     engine.canvas.requestRenderAll();
 
-    const snapshot = engine.serialize('broche-60x25');
+    const snapshot = engine.serialize([{ productId: 'broche-60x25', offsetX: 0, offsetY: 0 }]);
     const originalLeft = rect.left;
     const originalTop = rect.top;
     const originalWidth = rect.width;
@@ -272,7 +276,12 @@ describe('CanvasEngine', () => {
     await engine.deserialize({
       version: 'test',
       objects: [],
-      capi: { productId: 'broche-60x25', units: 'mm', layers: [] },
+      capi: {
+        items: [{ productId: 'broche-60x25', offsetX: 0, offsetY: 0 }],
+        units: 'mm',
+        schemaVersion: 3,
+        layers: [],
+      },
     });
 
     const remaining = engine.canvas.getObjects();
@@ -325,7 +334,7 @@ describe('CanvasEngine', () => {
       await engine.applyMaterialToLayer(id, 'abs-escovado-prata', 'http://asset.localhost/mat.png');
       expect(rect.fill).toBeInstanceOf(fabric.Pattern); // Pattern is live before serialize
 
-      const json = engine.serialize('broche-60x25');
+      const json = engine.serialize([{ productId: 'broche-60x25', offsetX: 0, offsetY: 0 }]);
 
       // The serialized object fill must NOT be a pattern (URL stripped)
       const serializedFill = json.objects[0]?.fill;
@@ -343,7 +352,7 @@ describe('CanvasEngine', () => {
       const id = (rect as unknown as Record<string, unknown>).id as string;
 
       await engine.applyMaterialToLayer(id, 'abs-escovado-prata', 'http://asset.localhost/mat.png');
-      engine.serialize('broche-60x25'); // strip + restore
+      engine.serialize([{ productId: 'broche-60x25', offsetX: 0, offsetY: 0 }]); // strip + restore
 
       // After serialize, the live canvas object must have its Pattern back
       expect(rect.fill).toBeInstanceOf(fabric.Pattern);
@@ -355,7 +364,7 @@ describe('CanvasEngine', () => {
       const id = (rect as unknown as Record<string, unknown>).id as string;
 
       await engine.applyMaterialToLayer(id, 'abs-escovado-prata', 'http://asset.localhost/mat.png');
-      const snapshot = engine.serialize('broche-60x25');
+      const snapshot = engine.serialize([{ productId: 'broche-60x25', offsetX: 0, offsetY: 0 }]);
 
       // snapshot.objects[0].fill is 'transparent' (stripped)
       // deserialize must re-apply using the resolveUrl callback
@@ -376,7 +385,7 @@ describe('CanvasEngine', () => {
       const id = (rect as unknown as Record<string, unknown>).id as string;
 
       await engine.applyMaterialToLayer(id, 'abs-escovado-prata', 'http://asset.localhost/mat.png');
-      const snapshot = engine.serialize('broche-60x25');
+      const snapshot = engine.serialize([{ productId: 'broche-60x25', offsetX: 0, offsetY: 0 }]);
 
       await engine.deserialize(snapshot);
 
@@ -548,7 +557,7 @@ describe('CanvasEngine', () => {
       expect(fillBefore).toBeInstanceOf(fabric.Pattern);
       expect(clipPathBefore).toBeDefined();
 
-      const json = engine.serialize('broche-60x25');
+      const json = engine.serialize([{ productId: 'broche-60x25', offsetX: 0, offsetY: 0 }]);
 
       // Live canvas must be UNCHANGED after serialize (symmetric restore)
       expect(rect.fill).toBe(fillBefore);
@@ -676,7 +685,7 @@ describe('CanvasEngine', () => {
       engine = new CanvasEngine(canvasEl, baseConfig);
 
       const id = await engine.addAppliqueSvg(meta, 'Aplique Pill', 'aplique-3-pill');
-      const data = engine.serialize('placa-300x90');
+      const data = engine.serialize([{ productId: 'placa-300x90', offsetX: 0, offsetY: 0 }]);
 
       const layer = data.capi.layers.find((l) => l.id === id);
       expect(layer).toBeDefined();
@@ -730,7 +739,7 @@ describe('CanvasEngine', () => {
       const topBefore = objBefore.top;
       const scaleXBefore = objBefore.scaleX;
 
-      const snapshot = engine.serialize('placa-300x90');
+      const snapshot = engine.serialize([{ productId: 'placa-300x90', offsetX: 0, offsetY: 0 }]);
       await engine.deserialize(snapshot);
 
       // LayerMeta restaurado de capi.layers
@@ -754,14 +763,15 @@ describe('CanvasEngine', () => {
     it('T7: deserialize com appliqueId ausente (JSON legado) não quebra', async () => {
       engine = new CanvasEngine(canvasEl, baseConfig);
 
-      // Simula JSON gerado antes da Fase A: kind='principal' mas sem appliqueId
+      // Simula JSON gerado antes da Fase A: kind='principal' mas sem appliqueId.
+      // Onda 13: envelope agora tem items[] em vez de productId.
       const legacySnapshot = {
         version: '6.0.0',
         objects: [],
         capi: {
-          productId: 'broche-60x25',
+          items: [{ productId: 'broche-60x25', offsetX: 0, offsetY: 0 }],
           units: 'mm' as const,
-          schemaVersion: 2,
+          schemaVersion: 3,
           layers: [
             {
               id: 'legacy-id-001',

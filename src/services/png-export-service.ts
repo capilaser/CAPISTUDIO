@@ -42,30 +42,65 @@ export interface TauriIO {
 export interface BuildFilenameOptions {
   cliente: string;
   profissao: string;
+  /**
+   * Onda 17 — data carimbada no nome. Default `new Date()` (now).
+   * Injetável pra testes determinísticos.
+   */
+  date?: Date;
+  /**
+   * Onda 17 — quantidade de broches na prancha. Quando > 1, o nome ganha
+   * prefixo `lote_Nx_`. Default 1 (single broche, sem prefixo).
+   */
+  boardItemCount?: number;
 }
 
 /**
- * Gera o nome do arquivo `.png` a partir de cliente + profissão.
+ * Onda 17 — Formata data como `YYYY-MM-DD` em horário LOCAL.
  *
- * Regras (briefing Fase 9F):
- *   - "João Silva" + "Advogado" → "joao-silva-advogado_mockup.png"
- *   - Cliente vazio (qualquer estado de profissão) → "mockup.png"
- *     (placeholder previsível — usuário sabe que o cliente não foi
- *      preenchido só de olhar o nome)
- *   - Cliente preenchido + profissão vazia → "joao-silva_mockup.png"
+ * Por que local e não UTC: operador no Brasil exportando às 22h–23h não
+ * quer arquivo carimbado com data de amanhã. O locale `sv-SE` produz o
+ * formato ISO sem precisar montar string manualmente.
+ *
+ * Exportado pra teste unitário.
+ */
+export function isoDate(d: Date): string {
+  return d.toLocaleDateString('sv-SE');
+}
+
+/**
+ * Gera o nome do arquivo `.png` a partir de cliente + profissão + data.
+ *
+ * Regras (briefing Onda 17):
+ *   - Single "João Silva" + "Advogado" + 2026-05-17
+ *       → "joao-silva-advogado_2026-05-17.png"
+ *   - Cliente vazio (qualquer profissão) → "mockup_2026-05-17.png"
+ *   - Cliente preenchido + profissão vazia → "joao-silva_2026-05-17.png"
+ *   - Multi-broche (boardItemCount > 1)
+ *       → "lote_5x_joao-silva-advogado_2026-05-17.png"
+ *   - Multi + cliente vazio
+ *       → "lote_5x_mockup_2026-05-17.png"
  *
  * Exportado pra teste unitário + uso direto pelo dialog (preview em tempo real).
  */
 export function buildPngFilename(opts: BuildFilenameOptions): string {
   const cliente = opts.cliente.trim();
   const profissao = opts.profissao.trim();
+  const date = opts.date ?? new Date();
+  const count = opts.boardItemCount ?? 1;
 
-  if (cliente.length === 0) return 'mockup.png';
+  const dateStr = isoDate(date);
 
-  const normCliente = normalizeAssetName(cliente);
-  const normProf = profissao.length > 0 ? normalizeAssetName(profissao) : '';
-  const stem = normProf.length > 0 ? `${normCliente}-${normProf}` : normCliente;
-  return `${stem}_mockup.png`;
+  let stem: string;
+  if (cliente.length === 0) {
+    stem = 'mockup';
+  } else {
+    const normCliente = normalizeAssetName(cliente);
+    const normProf = profissao.length > 0 ? normalizeAssetName(profissao) : '';
+    stem = normProf.length > 0 ? `${normCliente}-${normProf}` : normCliente;
+  }
+
+  const prefix = count > 1 ? `lote_${count}x_` : '';
+  return `${prefix}${stem}_${dateStr}.png`;
 }
 
 /**

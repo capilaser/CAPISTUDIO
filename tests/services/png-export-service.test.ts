@@ -22,9 +22,14 @@ import {
   EXPORT_LAST_FOLDER_KEY,
   buildPngFilename,
   getDefaultExportFolder,
+  isoDate,
   savePng,
   type TauriIO,
 } from '@/services/png-export-service';
+
+/** Data fixa pros testes determinísticos. Local time — vide isoDate. */
+const FIXED_DATE = new Date(2026, 4, 17); // 2026-05-17 local
+const FIXED_DATE_STR = '2026-05-17';
 
 function makeMockIO(overrides: Partial<TauriIO> = {}): TauriIO {
   return {
@@ -43,29 +48,99 @@ beforeEach(() => {
 
 describe('buildPngFilename', () => {
   // ── 1. Nome do arquivo gerado corretamente com normalização ──────────────
-  it('cliente + profissão → kebab-case + sufixo _mockup.png', () => {
-    expect(buildPngFilename({ cliente: 'João Silva', profissao: 'Advogado' })).toBe(
-      'joao-silva-advogado_mockup.png'
+  it('cliente + profissão + data → kebab-case + data ISO', () => {
+    expect(
+      buildPngFilename({ cliente: 'João Silva', profissao: 'Advogado', date: FIXED_DATE })
+    ).toBe(`joao-silva-advogado_${FIXED_DATE_STR}.png`);
+    // Acentos removidos, lowercase, espaços viram hífen.
+    expect(
+      buildPngFilename({ cliente: 'Maria Helena', profissao: 'Médica', date: FIXED_DATE })
+    ).toBe(`maria-helena-medica_${FIXED_DATE_STR}.png`);
+  });
+
+  // ── 2. Cliente vazio → placeholder com data ──────────────────────────────
+  it('cliente vazio (qualquer profissão) → mockup_<data>.png', () => {
+    expect(buildPngFilename({ cliente: '', profissao: 'Advogado', date: FIXED_DATE })).toBe(
+      `mockup_${FIXED_DATE_STR}.png`
     );
-    // Acentos removidos, lowercase, espaços viram hífen. Ponto preservado
-    // (normalizeAssetName trata ponto como separador de extensão).
-    expect(buildPngFilename({ cliente: 'Maria Helena', profissao: 'Médica' })).toBe(
-      'maria-helena-medica_mockup.png'
+    expect(buildPngFilename({ cliente: '   ', profissao: '', date: FIXED_DATE })).toBe(
+      `mockup_${FIXED_DATE_STR}.png`
+    );
+    expect(buildPngFilename({ cliente: '', profissao: '', date: FIXED_DATE })).toBe(
+      `mockup_${FIXED_DATE_STR}.png`
     );
   });
 
-  // ── 2. Cliente vazio → placeholder ───────────────────────────────────────
-  it('cliente vazio (qualquer profissão) → placeholder mockup.png', () => {
-    expect(buildPngFilename({ cliente: '', profissao: 'Advogado' })).toBe('mockup.png');
-    expect(buildPngFilename({ cliente: '   ', profissao: '' })).toBe('mockup.png');
-    expect(buildPngFilename({ cliente: '', profissao: '' })).toBe('mockup.png');
+  it('cliente preenchido + profissão vazia → só cliente_<data>.png', () => {
+    expect(buildPngFilename({ cliente: 'João Silva', profissao: '', date: FIXED_DATE })).toBe(
+      `joao-silva_${FIXED_DATE_STR}.png`
+    );
+    expect(buildPngFilename({ cliente: 'João', profissao: '   ', date: FIXED_DATE })).toBe(
+      `joao_${FIXED_DATE_STR}.png`
+    );
   });
 
-  it('cliente preenchido + profissão vazia → só cliente_mockup.png', () => {
-    expect(buildPngFilename({ cliente: 'João Silva', profissao: '' })).toBe(
-      'joao-silva_mockup.png'
-    );
-    expect(buildPngFilename({ cliente: 'João', profissao: '   ' })).toBe('joao_mockup.png');
+  // ── 3. Onda 17 — Multi-broche (lote) ─────────────────────────────────────
+  it('boardItemCount > 1 → prefixo lote_Nx_', () => {
+    expect(
+      buildPngFilename({
+        cliente: 'João Silva',
+        profissao: 'Advogado',
+        date: FIXED_DATE,
+        boardItemCount: 5,
+      })
+    ).toBe(`lote_5x_joao-silva-advogado_${FIXED_DATE_STR}.png`);
+    expect(
+      buildPngFilename({
+        cliente: 'João',
+        profissao: '',
+        date: FIXED_DATE,
+        boardItemCount: 100,
+      })
+    ).toBe(`lote_100x_joao_${FIXED_DATE_STR}.png`);
+  });
+
+  it('boardItemCount > 1 + cliente vazio → lote_Nx_mockup_<data>.png', () => {
+    expect(
+      buildPngFilename({
+        cliente: '',
+        profissao: '',
+        date: FIXED_DATE,
+        boardItemCount: 3,
+      })
+    ).toBe(`lote_3x_mockup_${FIXED_DATE_STR}.png`);
+  });
+
+  it('boardItemCount = 1 → SEM prefixo lote (default)', () => {
+    expect(
+      buildPngFilename({
+        cliente: 'João',
+        profissao: 'Advogado',
+        date: FIXED_DATE,
+        boardItemCount: 1,
+      })
+    ).toBe(`joao-advogado_${FIXED_DATE_STR}.png`);
+  });
+
+  // ── 4. Default date = now ────────────────────────────────────────────────
+  it('sem date → usa now (formato YYYY-MM-DD)', () => {
+    const name = buildPngFilename({ cliente: 'João', profissao: '' });
+    expect(name).toMatch(/^joao_\d{4}-\d{2}-\d{2}\.png$/);
+  });
+});
+
+describe('isoDate', () => {
+  it('formata data como YYYY-MM-DD em horário local', () => {
+    expect(isoDate(new Date(2026, 0, 1))).toBe('2026-01-01');
+    expect(isoDate(new Date(2026, 11, 31))).toBe('2026-12-31');
+    expect(isoDate(FIXED_DATE)).toBe(FIXED_DATE_STR);
+  });
+
+  it('usa horário LOCAL (não UTC) — operador noturno BRT não vai pular o dia', () => {
+    // 2026-05-17 23:30 local — em UTC já é 18 ou 17 dependendo de fuso.
+    // isoDate deve devolver 17 (data local).
+    const lateNight = new Date(2026, 4, 17, 23, 30, 0);
+    expect(isoDate(lateNight)).toBe('2026-05-17');
   });
 });
 

@@ -2,6 +2,8 @@
 
 > **Como usar:** anexe este arquivo no início de cada chat novo com Claude (chat web/app desktop). Ele dá ao assistente o contexto completo do projeto em ~2 minutos de leitura, sem você precisar reexplicar.
 
+> ⚠️ **ESTE ARQUIVO ESTÁ CONGELADO EM ONDA 12.** O projeto avançou até **Onda 18** (DXF Export R12 + svg-exporter tolerante a slots avulsos). Para o estado atual + roadmap atualizado, **leia primeiro `docs/STATUS-ONDA-18.md`** (snapshot mais recente). Snapshots anteriores ainda úteis pra contexto: `STATUS-ONDA-17.md` (PNG mockup) e `STATUS-ONDA-16.md` (multi-broche estável). Só leia este AI-CONTEXT depois, pra contexto histórico/arquitetural mais antigo.
+
 ---
 
 ## 🎯 Sobre o projeto
