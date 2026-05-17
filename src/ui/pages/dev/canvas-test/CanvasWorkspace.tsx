@@ -2,6 +2,7 @@ import { type RefObject } from 'react';
 
 import type { CanvasEngine } from '@/core/canvas/canvas-engine';
 import { AlignmentToolbar } from '@/ui/canvas/AlignmentToolbar';
+import { LiveMetricsOverlay } from '@/ui/canvas/LiveMetricsOverlay';
 import { MeasurementOverlay } from '@/ui/canvas/MeasurementOverlay';
 import { ProximityOverlay } from '@/ui/canvas/ProximityOverlay';
 
@@ -44,6 +45,12 @@ export function CanvasWorkspace({
           até a coisa mais próxima em cada direção (ou borda da placa). Aparece
           quando há exatamente 1 objeto selecionado, independente do Ruler. */}
       {ready && <ProximityOverlay engineRef={engineRef} />}
+
+      {/* Onda 26 — HUD numérico flutuante durante drag/resize. Aparece ao lado
+          do objeto sendo manipulado, mostrando x/y/Δx/Δy (drag) ou w/h (resize)
+          em mm em tempo real. Some no mouse:up. Toggle global em canvas-store
+          (`liveMetricsEnabled`, default true). */}
+      {ready && <LiveMetricsOverlay engineRef={engineRef} />}
 
       {/* 2-column layout: canvas + 1 painel direito.
        *

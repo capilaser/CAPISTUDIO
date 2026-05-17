@@ -49,6 +49,13 @@ interface CanvasStore {
    * false ao abrir o app. Estado de UI puro, NÃO persiste em canvasJson.
    */
   gridVisible: boolean;
+  /**
+   * Onda 26 — HUD numérico flutuante durante drag/resize. Mostra x/y/Δx/Δy
+   * em mm enquanto o operador move um objeto, e w/h enquanto redimensiona.
+   * Default true (ligado por padrão — ferramenta de produção). Estado de UI
+   * puro, NÃO persiste em canvasJson. Operador pode desligar se incomodar.
+   */
+  liveMetricsEnabled: boolean;
 
   // ── Onda 13 — multi-broche ──────────────────────────────────────────────
   /** Items da prancha (broches) em memória. Vazio = nenhum broche ainda. */
@@ -63,6 +70,7 @@ interface CanvasStore {
   setSelectedLayerKind: (kind: 'principal' | 'operation' | 'visual' | null) => void;
   toggleMeasurementMode: () => void;
   toggleGridVisible: () => void;
+  toggleLiveMetrics: () => void;
 
   /**
    * Adiciona um broche novo no fim da prancha. Retorna o índice do item criado.
@@ -103,6 +111,7 @@ export const useCanvasStore = create<CanvasStore>((set) => ({
   selectedLayerKind: null,
   measurementMode: false,
   gridVisible: false,
+  liveMetricsEnabled: true,
   boardItems: [],
   selectedOrderItemIndex: -1,
 
@@ -113,6 +122,7 @@ export const useCanvasStore = create<CanvasStore>((set) => ({
   setSelectedLayerKind: (kind) => set({ selectedLayerKind: kind }),
   toggleMeasurementMode: () => set((s) => ({ measurementMode: !s.measurementMode })),
   toggleGridVisible: () => set((s) => ({ gridVisible: !s.gridVisible })),
+  toggleLiveMetrics: () => set((s) => ({ liveMetricsEnabled: !s.liveMetricsEnabled })),
 
   addBoardItem: (item) => {
     let newIndex = -1;
