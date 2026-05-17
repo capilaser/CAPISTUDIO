@@ -26,9 +26,12 @@ import {
   create as createLogo,
   getById as getLogoById,
   touch,
+  type Logo,
 } from '@/data/repositories/logoRepository';
 import { readLogoFile, saveLogoFile } from '@/services/logo-storage';
 import { Button } from '@/ui/components/button';
+
+import { LogoBankDialog } from './LogoBankDialog';
 
 interface Props {
   label: string;
@@ -50,6 +53,8 @@ export function LogoSlotItem({ label, itemId, engineRef, onRemove, slotVersion =
   const [logoName, setLogoName] = useState<string>('');
   const [logoId, setLogoId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  // Onda 21 — dialog que mostra o banco de logos antes de cair no file picker.
+  const [bankOpen, setBankOpen] = useState(false);
 
   // Onda 14 — re-aplica logo ao trocar de pattern.
   useEffect(() => {
@@ -88,8 +93,35 @@ export function LogoSlotItem({ label, itemId, engineRef, onRemove, slotVersion =
     };
   }, [engineRef, slotVersion, logoSvg]);
 
+  function handleOpenBank() {
+    setBankOpen(true);
+  }
+
   function handlePickFile() {
     inputRef.current?.click();
+  }
+
+  // Onda 21 — operador escolheu um logo existente do banco.
+  async function handlePickFromBank(logo: Logo, content: string) {
+    setUploading(true);
+    try {
+      // Marca como recém-usado (move pra topo da lista em pedidos futuros).
+      await touch(logo.id);
+
+      const engine = engineRef.current;
+      if (engine) {
+        await engine.fillLogoSlot(content, logo.id);
+      }
+      setLogoSvg(content);
+      setLogoName(logo.name);
+      setLogoId(logo.id);
+      toast.success(`Logo "${logo.name}" aplicada`);
+    } catch (err) {
+      console.error('[LogoSlotItem] falha aplicar logo do banco:', err);
+      toast.error(`Erro ao aplicar logo: ${String(err)}`);
+    } finally {
+      setUploading(false);
+    }
   }
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -134,16 +166,6 @@ export function LogoSlotItem({ label, itemId, engineRef, onRemove, slotVersion =
     }
   }
 
-  function handleClearLogo() {
-    const engine = engineRef.current;
-    if (engine) {
-      engine.clearSlotContent('logo');
-    }
-    setLogoSvg(null);
-    setLogoName('');
-    setLogoId(null);
-  }
-
   return (
     <div className="flex flex-col gap-2 rounded-md border border-border bg-background/40 p-3">
       <div className="flex items-center justify-between">
@@ -170,7 +192,7 @@ export function LogoSlotItem({ label, itemId, engineRef, onRemove, slotVersion =
             </span>
             <button
               type="button"
-              onClick={handleClearLogo}
+              onClick={handleOpenBank}
               className="text-[10px] text-muted-foreground hover:text-foreground hover:underline"
             >
               trocar
@@ -183,15 +205,22 @@ export function LogoSlotItem({ label, itemId, engineRef, onRemove, slotVersion =
           variant="outline"
           size="sm"
           className="w-full gap-2"
-          onClick={handlePickFile}
+          onClick={handleOpenBank}
           disabled={uploading}
         >
           <ImagePlus className="h-3.5 w-3.5" />
-          {uploading ? 'Enviando...' : 'Escolher logo (SVG)'}
+          {uploading ? 'Enviando...' : 'Escolher logo'}
         </Button>
       )}
 
       <input ref={inputRef} type="file" accept=".svg" className="hidden" onChange={handleFile} />
+
+      <LogoBankDialog
+        open={bankOpen}
+        onClose={() => setBankOpen(false)}
+        onPick={(logo, content) => void handlePickFromBank(logo, content)}
+        onUploadNew={handlePickFile}
+      />
     </div>
   );
 }
