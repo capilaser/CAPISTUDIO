@@ -42,7 +42,7 @@ export function RulerToggle({ disabled }: Props): React.ReactElement {
             <Ruler />
           </Button>
         </TooltipTrigger>
-        <TooltipContent side="bottom" className="font-mono text-[11px]">
+        <TooltipContent side="bottom" className="text-[11px]">
           Modo medição (mostra distância entre objetos selecionados)
         </TooltipContent>
       </Tooltip>

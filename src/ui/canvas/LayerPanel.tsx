@@ -25,6 +25,34 @@ import { DeleteLayerDialog } from './layer-panel/DeleteLayerDialog';
 
 interface Props {
   engineRef: RefObject<CanvasEngine | null>;
+  /**
+   * Onda 15 — sinal de que o engine ficou pronto. Quando este boolean
+   * transita false→true, o painel re-anexa listeners (caso tenha sido
+   * montado ANTES do engine existir).
+   *
+   * Onda 15.fix — quando o engine é TROCADO (não só "ficou pronto" — outra
+   * instância), `engineReady` pode permanecer true entre as duas, e o
+   * useEffect do painel não re-roda. Resultado: listeners atados ao canvas
+   * antigo (já disposed). Pra resolver, callers que recriam engine devem
+   * passar `engineVersion: number` que incrementa a cada novo engine. O
+   * painel usa esse número como dep do useEffect.
+   *
+   * Default true: pra callers que já têm o engine pronto no mount
+   * (ex: /dev/canvas-test).
+   */
+  engineReady?: boolean;
+  /**
+   * Onda 15.fix — incrementado a cada novo engine. Quando muda, força
+   * re-anexação dos listeners do canvas (cleanup do anterior + setup no novo).
+   * Default 0 — pra callers single-engine (ex: /dev/canvas-test).
+   */
+  engineVersion?: number;
+  /**
+   * Onda 15 — quando o componente é embutido em uma sidebar que já tem
+   * header próprio (NovoPedidoLayerSidebar, PadraoEditorPage), passamos
+   * false pra evitar duplicar "Camadas" na tela. Default true.
+   */
+  showTitle?: boolean;
 }
 
 interface DeleteTarget {
@@ -33,7 +61,12 @@ interface DeleteTarget {
   cascadeChildren: string[];
 }
 
-export function LayerPanel({ engineRef }: Props): React.ReactElement {
+export function LayerPanel({
+  engineRef,
+  engineReady = true,
+  engineVersion = 0,
+  showTitle = true,
+}: Props): React.ReactElement {
   const [hierarchy, setHierarchy] = useState<LayerNode[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -107,9 +140,10 @@ export function LayerPanel({ engineRef }: Props): React.ReactElement {
         handler
       );
     };
-    // engineRef é estável; refresh é local ao effect.
+    // engineRef é estável. engineReady + engineVersion são os sinais pra
+    // re-anexar quando o engine fica pronto ou é trocado (ver JSDoc das props).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [engineReady, engineVersion]);
 
   // Reparent options: lista de apliques + opção "Solto" — recalculada
   // a partir da hierarchy atual. Sem useMemo: cálculo é O(N principais).
@@ -220,9 +254,11 @@ export function LayerPanel({ engineRef }: Props): React.ReactElement {
   return (
     <>
       <div className="flex flex-col gap-0.5 p-2" data-testid="layer-panel">
-        <p className="mb-1 px-1.5 font-mono text-[10px] font-medium uppercase tracking-wider text-ink-400">
-          Camadas
-        </p>
+        {showTitle && (
+          <p className="mb-1 px-1.5 text-[10px] font-medium uppercase tracking-wider text-ink-400">
+            Camadas
+          </p>
+        )}
         {flat.map(({ node, indentPx }) => {
           const zo = zOrder.get(node.id);
           const canMoveUp = zo?.canMoveUp ?? false;

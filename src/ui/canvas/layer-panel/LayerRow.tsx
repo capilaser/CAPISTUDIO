@@ -8,6 +8,7 @@
 import { ChevronDown, Layers as LayersIcon, Square } from 'lucide-react';
 
 import type { LayerNode } from '@/core/canvas/canvas-engine';
+import { ChildCountBadge, OperationBadge } from './LayerBadge';
 import { LayerActions } from './LayerActions';
 import { RenameInput } from './RenameInput';
 
@@ -90,10 +91,18 @@ export function LayerRow({
             e.stopPropagation();
             onStartRename();
           }}
-          className="min-w-0 flex-1 truncate font-mono text-[11px] text-ink-200"
+          className="min-w-0 flex-1 truncate text-[11px] text-ink-200"
         >
           {node.name}
         </span>
+      )}
+
+      {/* Badges (Onda 15) — só fora do modo edição pra não competir visualmente */}
+      {!renaming && node.kind === 'operation' && (
+        <OperationBadge operation={node.operation} machines={node.machines} />
+      )}
+      {!renaming && node.kind === 'principal' && (
+        <ChildCountBadge operations={node.children.filter((c) => c.kind === 'operation').length} />
       )}
 
       {/* Ações inline */}

@@ -44,11 +44,7 @@ export function MoveToDropdown({
       >
         <Move className="h-3 w-3" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align="end"
-        side="bottom"
-        className="min-w-[180px] font-mono text-[11px]"
-      >
+      <DropdownMenuContent align="end" side="bottom" className="min-w-[180px] text-[11px]">
         <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-ink-500">
           Mover pra
         </DropdownMenuLabel>

@@ -38,10 +38,8 @@ export function DeleteLayerDialog({
     <Dialog open={open} onOpenChange={(v) => !v && onCancel()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle className="font-mono text-sm">
-            Excluir &ldquo;{layerName}&rdquo;?
-          </DialogTitle>
-          <DialogDescription className="font-mono text-[11px]">
+          <DialogTitle className="text-sm">Excluir &ldquo;{layerName}&rdquo;?</DialogTitle>
+          <DialogDescription className="text-[11px]">
             {hasCascade ? (
               <>
                 Esta ação também vai excluir <strong>{cascadeChildren.length}</strong>{' '}
@@ -54,7 +52,7 @@ export function DeleteLayerDialog({
         </DialogHeader>
 
         {hasCascade && (
-          <ul className="my-2 max-h-32 overflow-y-auto rounded border border-ink-700 bg-ink-950 px-3 py-2 font-mono text-[11px] text-ink-300">
+          <ul className="my-2 max-h-32 overflow-y-auto rounded border border-ink-700 bg-ink-950 px-3 py-2 text-[11px] text-ink-300">
             {cascadeChildren.map((name, i) => (
               <li key={`${name}-${i}`} className="py-0.5">
                 • {name}
@@ -64,14 +62,14 @@ export function DeleteLayerDialog({
         )}
 
         <DialogFooter className="gap-2">
-          <Button variant="ghost" size="sm" onClick={onCancel} className="font-mono text-[11px]">
+          <Button variant="ghost" size="sm" onClick={onCancel} className="text-[11px]">
             Cancelar
           </Button>
           <Button
             variant="destructive"
             size="sm"
             onClick={onConfirm}
-            className="font-mono text-[11px]"
+            className="text-[11px]"
             data-testid="confirm-delete-layer"
           >
             {hasCascade ? 'Excluir tudo' : 'Excluir'}

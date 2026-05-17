@@ -1,19 +1,24 @@
 /**
- * ExportPngDialog — Onda 9.F
+ * ExportPngDialog — Onda 9.F + Onda 17 (mockup profissional)
  *
  * Modal pra exportar PNG mockup do canvas pro cliente. Lê cliente/profissão
- * dos slots, gera nome de arquivo em tempo real, escolhe pasta (com default
- * persistido em settings), exporta via png-exporter, salva via Tauri fs,
+ * dos slots, gera nome de arquivo em tempo real (com data + lote), escolhe
+ * pasta (com default persistido em settings), mostra preview thumbnail,
+ * exporta via png-exporter com fundo cinza + sombra, salva via Tauri fs,
  * abre Explorer.
  *
- * Não tem UI de aprovação de pedido nem botão SVG produção (Onda 11).
+ * Onda 17:
+ *   - Preview ~300px do mockup antes de exportar (debounce 200ms)
+ *   - Background `#F4F4F2` + sombra difusa em principals
+ *   - Recorte por `boardBounds` (caller informa bbox dos broches)
+ *   - Nome de arquivo com data ISO + prefixo `lote_Nx_` quando multi
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { open as openFolderPicker } from '@tauri-apps/plugin-dialog';
 import { toast } from 'sonner';
 
 import type { CanvasEngine } from '@/core/canvas/canvas-engine';
-import { exportPngMockup } from '@/core/export/png-exporter';
+import { exportPngMockup, type PngBoundingBoxPx } from '@/core/export/png-exporter';
 import { buildPngFilename, getDefaultExportFolder, savePng } from '@/services/png-export-service';
 import { makeTauriIO } from '@/services/tauri-io';
 import { Button } from '@/ui/components/button';
@@ -27,6 +32,17 @@ import {
 import { Input } from '@/ui/components/input';
 import { Label } from '@/ui/components/label';
 
+/** Margem em mm (briefing Onda 17, ajustada pós-validação pra 3mm — foco no produto). */
+const MOCKUP_MARGIN_MM = 3;
+/** Cor de fundo do mockup (briefing Onda 17). */
+const MOCKUP_BACKGROUND = '#F4F4F2';
+/** DPI usado pro preview do dialog — leve, suficiente pra thumbnail. */
+const PREVIEW_DPI = 72;
+/** DPI do export final — qualidade de impressão. */
+const EXPORT_DPI = 300;
+/** MM_TO_PX = 4 (canvas Fabric usa 4 px/mm em units.ts). */
+const MM_TO_PX = 4;
+
 interface ExportPngDialogProps {
   open: boolean;
   /**
@@ -35,6 +51,18 @@ interface ExportPngDialogProps {
    */
   getEngine: () => CanvasEngine | null;
   onClose: () => void;
+  /**
+   * Onda 17 — bounding box dos broches em px do canvas Fabric. Quando
+   * informado, o export é recortado nessa região + margem (cinza ao redor).
+   * Sem informar (CanvasTest, single broche legado), exporta viewport
+   * inteiro com fundo cinza ainda assim.
+   */
+  boardBounds?: PngBoundingBoxPx | null;
+  /**
+   * Onda 17 — quantos broches estão na prancha. Quando >1, filename ganha
+   * prefixo `lote_Nx_`. Default 1.
+   */
+  boardItemCount?: number;
 }
 
 /** Lê o texto do PRIMEIRO slot do tipo dado. Retorna '' se não houver. */
@@ -45,11 +73,26 @@ function readSlotText(engine: CanvasEngine | null, type: 'nome' | 'profissao'): 
   return engine.getSlotText(slots[0].id) ?? '';
 }
 
-export function ExportPngDialog({ open, getEngine, onClose }: ExportPngDialogProps) {
+/** Converte mm → px no espaço do canvas Fabric. */
+function mmToCanvasPx(mm: number): number {
+  return mm * MM_TO_PX;
+}
+
+export function ExportPngDialog({
+  open,
+  getEngine,
+  onClose,
+  boardBounds = null,
+  boardItemCount = 1,
+}: ExportPngDialogProps) {
   const [cliente, setCliente] = useState('');
   const [profissao, setProfissao] = useState('');
   const [folder, setFolder] = useState('');
   const [exporting, setExporting] = useState(false);
+
+  // Onda 17 — preview do mockup.
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   // io é estável durante o ciclo de vida do dialog. useRef evita criar
   // adapter novo em todo render.
@@ -82,7 +125,78 @@ export function ExportPngDialog({ open, getEngine, onClose }: ExportPngDialogPro
   }, [open, getEngine]);
 
   // Nome do arquivo gerado em tempo real conforme digita.
-  const filename = useMemo(() => buildPngFilename({ cliente, profissao }), [cliente, profissao]);
+  // Onda 17 — inclui data (now) + prefixo lote_Nx_ quando aplicável.
+  const filename = useMemo(
+    () => buildPngFilename({ cliente, profissao, boardItemCount }),
+    [cliente, profissao, boardItemCount]
+  );
+
+  // ── Onda 17 — Preview thumbnail ─────────────────────────────────────────
+  // Debounce de 200ms pra evitar gerar preview a cada keystroke. A imagem
+  // não depende do texto digitado, mas depende do estado do canvas — que
+  // pode mudar antes do dialog abrir. Regeneramos uma vez quando abre +
+  // sempre que `boardBounds` muda.
+  useEffect(() => {
+    if (!open) {
+      // Limpa preview anterior ao fechar pra não vazar blob URL.
+      // Promise.resolve() pra fugir do warning react-hooks/set-state-in-effect.
+      void Promise.resolve().then(() => {
+        setPreviewUrl((prev) => {
+          if (prev) URL.revokeObjectURL(prev);
+          return null;
+        });
+      });
+      return;
+    }
+
+    let cancelled = false;
+    let currentBlobUrl: string | null = null;
+
+    const timer = setTimeout(() => {
+      if (cancelled) return;
+      const engine = getEngine();
+      if (!engine) return;
+
+      setPreviewLoading(true);
+      void (async () => {
+        try {
+          const layers = Array.from(engine.getAllLayerMetas().values());
+          const marginPx = mmToCanvasPx(MOCKUP_MARGIN_MM);
+          const bytes = await exportPngMockup(engine.canvas, {
+            layers,
+            dpi: PREVIEW_DPI,
+            backgroundColor: MOCKUP_BACKGROUND,
+            shadow: true,
+            marginPx,
+            clientBounds: boardBounds ?? undefined,
+          });
+          if (cancelled) return;
+          const blob = new Blob([bytes], { type: 'image/png' });
+          const url = URL.createObjectURL(blob);
+          currentBlobUrl = url;
+          setPreviewUrl((prev) => {
+            if (prev) URL.revokeObjectURL(prev);
+            return url;
+          });
+        } catch (err) {
+          if (!cancelled && import.meta.env.DEV) {
+            console.warn('[ExportPngDialog] preview falhou:', err);
+          }
+        } finally {
+          if (!cancelled) setPreviewLoading(false);
+        }
+      })();
+    }, 200);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      // Não revoga `currentBlobUrl` aqui — o setPreviewUrl substitui e
+      // revoga o anterior; revogar aqui causaria flash no <img> que
+      // ainda referencia o URL.
+      void currentBlobUrl;
+    };
+  }, [open, getEngine, boardBounds]);
 
   function handleClose() {
     if (exporting) return;
@@ -112,9 +226,14 @@ export function ExportPngDialog({ open, getEngine, onClose }: ExportPngDialogPro
     setExporting(true);
     try {
       const layers = Array.from(engine.getAllLayerMetas().values());
+      const marginPx = mmToCanvasPx(MOCKUP_MARGIN_MM);
       const bytes = await exportPngMockup(engine.canvas, {
         layers,
-        backgroundColor: '#ffffff',
+        dpi: EXPORT_DPI,
+        backgroundColor: MOCKUP_BACKGROUND,
+        shadow: true,
+        marginPx,
+        clientBounds: boardBounds ?? undefined,
       });
 
       const result = await savePng(ioRef.current, {
@@ -173,6 +292,24 @@ export function ExportPngDialog({ open, getEngine, onClose }: ExportPngDialogPro
             />
           </div>
 
+          {/* Onda 17 — Preview thumbnail (~300px wide, altura flexível). */}
+          <div className="space-y-1.5">
+            <Label className="text-xs text-ink-400">Preview</Label>
+            <div className="flex h-[180px] items-center justify-center overflow-hidden rounded border border-ink-700 bg-ink-950">
+              {previewLoading && !previewUrl ? (
+                <p className="animate-pulse text-[10px] text-ink-500">Gerando preview…</p>
+              ) : previewUrl ? (
+                <img
+                  src={previewUrl}
+                  alt="Preview do mockup"
+                  className="max-h-full max-w-full object-contain"
+                />
+              ) : (
+                <p className="text-[10px] text-ink-500">— sem preview —</p>
+              )}
+            </div>
+          </div>
+
           <div className="space-y-1.5">
             <Label className="text-xs text-ink-400">Arquivo</Label>
             <p className="font-mono text-[11px] text-ink-200 break-all">{filename}</p>
@@ -189,7 +326,7 @@ export function ExportPngDialog({ open, getEngine, onClose }: ExportPngDialogPro
                 size="sm"
                 onClick={() => void handlePickFolder()}
                 disabled={exporting}
-                className="font-mono text-[11px]"
+                className="text-[11px]"
               >
                 Escolher…
               </Button>

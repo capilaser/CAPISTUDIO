@@ -3,6 +3,10 @@
  *
  * 4 abas: Apliques / Gravações / Marcações / Fontes.
  * Reutiliza os painéis já existentes em canvas-test/.
+ *
+ * Padrões NÃO ficam aqui — viraram secção dedicada na sidebar (Onda 13.9),
+ * porque são pilar central do sistema (CLAUDE.md) e merecem destaque
+ * próprio, não estar misturados com assets de banco.
  */
 import { type RefObject } from 'react';
 import { X } from 'lucide-react';
@@ -28,7 +32,7 @@ export function BancoDrawer({ engineRef, onClose }: Props) {
       <div className="relative z-10 ml-auto flex w-[520px] flex-col border-l border-border bg-card shadow-xl">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <span className="font-mono text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
             Banco de Dados
           </span>
           <button
@@ -43,16 +47,16 @@ export function BancoDrawer({ engineRef, onClose }: Props) {
         {/* Abas */}
         <Tabs defaultValue="apliques" className="flex min-h-0 flex-1 flex-col">
           <TabsList className="grid h-auto shrink-0 grid-cols-4 gap-0.5 rounded-none border-b border-border bg-card p-1">
-            <TabsTrigger value="apliques" className="font-mono text-[11px]">
+            <TabsTrigger value="apliques" className="text-[11px]">
               Apliques
             </TabsTrigger>
-            <TabsTrigger value="gravacoes" className="font-mono text-[11px]">
+            <TabsTrigger value="gravacoes" className="text-[11px]">
               Gravações
             </TabsTrigger>
-            <TabsTrigger value="marcacoes" className="font-mono text-[11px]">
+            <TabsTrigger value="marcacoes" className="text-[11px]">
               Marcações
             </TabsTrigger>
-            <TabsTrigger value="fontes" className="font-mono text-[11px]">
+            <TabsTrigger value="fontes" className="text-[11px]">
               Fontes
             </TabsTrigger>
           </TabsList>
@@ -68,9 +72,7 @@ export function BancoDrawer({ engineRef, onClose }: Props) {
           </TabsContent>
           <TabsContent value="fontes" className="min-h-0 flex-1 overflow-y-auto">
             <div className="flex flex-col items-center justify-center gap-2 p-8 text-center">
-              <p className="font-mono text-xs text-muted-foreground">
-                Gerenciamento de fontes em breve.
-              </p>
+              <p className="text-xs text-muted-foreground">Gerenciamento de fontes em breve.</p>
             </div>
           </TabsContent>
         </Tabs>

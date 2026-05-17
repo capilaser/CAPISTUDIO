@@ -197,7 +197,7 @@ export function AlignmentToolbar({ engineRef }: Props): React.ReactElement | nul
         className="flex h-10 items-center gap-1 border-b border-ink-700 bg-ink-800 px-4 animate-in slide-in-from-top-1 fade-in duration-150 ease-out"
         data-testid="alignment-toolbar"
       >
-        <span className="font-mono text-[10px] uppercase tracking-wide text-ink-500">Alinhar</span>
+        <span className="text-[10px] uppercase tracking-wide text-ink-500">Alinhar</span>
         <div className="ml-2 flex items-center gap-0.5">
           {BUTTONS.map(({ command, icon: Icon, label }) => (
             <Tooltip key={command}>
@@ -212,7 +212,7 @@ export function AlignmentToolbar({ engineRef }: Props): React.ReactElement | nul
                   <Icon />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="bottom" className="font-mono text-[11px]">
+              <TooltipContent side="bottom" className="text-[11px]">
                 {label}
               </TooltipContent>
             </Tooltip>

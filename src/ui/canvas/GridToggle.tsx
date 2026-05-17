@@ -59,7 +59,7 @@ export function GridToggle({ engineRef, disabled }: Props): React.ReactElement {
             <Grid3x3 />
           </Button>
         </TooltipTrigger>
-        <TooltipContent side="bottom" className="font-mono text-[11px]">
+        <TooltipContent side="bottom" className="text-[11px]">
           Mostrar pontos da grade (snap 1mm sempre ativo)
         </TooltipContent>
       </Tooltip>

@@ -94,6 +94,19 @@ const config: Config = {
         'mkt-whatsapp': '#25D366',
         // Cor de máquina ativa (badge M1/M2/M3) — derivada do violeta primary:
         'machine-active': '#4C1D95',
+
+        // Onda 19.C — 4 níveis de superfície (hierarquia visual).
+        // Convivem com background/card/popover semânticos: estes tokens
+        // são pra dropdown/dialog/popover/tooltip que precisam ficar
+        // visualmente ACIMA do card.
+        //   surface-0 = mesma cor do background (deepest, sem elevação)
+        //   surface-1 = mesma cor do card (elevação 1, default)
+        //   surface-2 = dropdowns, popovers, tooltips (elevação 2)
+        //   surface-3 = dialogs/modais (elevação 3, topo absoluto)
+        'surface-0': '#0A0A0B',
+        'surface-1': '#111113',
+        'surface-2': '#16161A',
+        'surface-3': '#1C1D22',
       },
       fontFamily: {
         display: ['"JetBrains Mono Variable"', '"JetBrains Mono"', 'ui-monospace', 'monospace'],

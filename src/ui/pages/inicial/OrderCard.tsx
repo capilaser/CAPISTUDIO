@@ -64,8 +64,14 @@ export function OrderCard({ order }: Props) {
         <Badge variant={STATUS_VARIANT[order.status]}>{STATUS_LABEL[order.status]}</Badge>
       </div>
 
-      <div className="font-mono text-[11px] text-muted-foreground">
-        {order.productId ? `Produto: ${order.productId}` : 'Sem produto'}
+      <div className="text-[11px] text-muted-foreground">
+        {order.items.length === 0
+          ? 'Sem broches'
+          : order.items.length === 1
+            ? order.items[0].productId
+              ? `Produto: ${order.items[0].productId}`
+              : 'Sem produto'
+            : `${order.items.length} broches`}
       </div>
 
       <div className="flex items-center justify-between font-mono text-[10px] text-muted-foreground/70">

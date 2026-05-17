@@ -21,23 +21,23 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/cn';
 
 const badgeVariants = cva(
-  'inline-flex items-center justify-center rounded-[4px] px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase tracking-wide leading-none',
+  'inline-flex items-center justify-center rounded-[4px] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide leading-none',
   {
     variants: {
       variant: {
         default: 'bg-ink-800 text-ink-200',
-        // Operações (LayerPanel)
-        cut: 'bg-op-cut-bg text-op-cut-text',
-        grav: 'bg-op-grav-bg text-op-grav-text',
-        marc: 'bg-op-marc-bg text-op-marc-text',
+        // Operações (LayerPanel) — siglas técnicas (CUT/GRAV/MARC) → mono
+        cut: 'bg-op-cut-bg text-op-cut-text font-mono',
+        grav: 'bg-op-grav-bg text-op-grav-text font-mono',
+        marc: 'bg-op-marc-bg text-op-marc-text font-mono',
         // Marketplaces (Kanban — futuro)
         shopee: 'bg-mkt-shopee text-white',
         ml: 'bg-mkt-ml text-black',
         whatsapp: 'bg-mkt-whatsapp text-white',
-        // Máquinas (M1/M2/M3 toggles no LayerPanel)
-        'machine-active': 'bg-machine-active text-white',
-        'machine-inactive': 'bg-ink-900 text-ink-600',
-        // Status semânticos
+        // Máquinas (M1/M2/M3 toggles no LayerPanel) — siglas → mono
+        'machine-active': 'bg-machine-active text-white font-mono',
+        'machine-inactive': 'bg-ink-900 text-ink-600 font-mono',
+        // Status semânticos — labels humanos (Aprovado, Aguardando Info)
         success: 'bg-success/15 text-success border border-success/30',
         warning: 'bg-warning/15 text-warning border border-warning/30',
         danger: 'bg-destructive/15 text-destructive border border-destructive/30',

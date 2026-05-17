@@ -61,7 +61,7 @@ export default function ArteHubPage() {
       <div className="mx-auto flex h-full max-w-5xl flex-col gap-8 p-8">
         <header className="flex flex-col gap-2">
           <h1 className="font-display text-lg font-medium tracking-wider text-foreground">Arte</h1>
-          <p className="font-mono text-xs text-muted-foreground">Editor de pedidos e padrões.</p>
+          <p className="text-xs text-muted-foreground">Editor de pedidos e padrões.</p>
         </header>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -91,7 +91,7 @@ export default function ArteHubPage() {
                 <div className="flex items-center gap-2">
                   <h3 className="font-display text-sm font-medium text-foreground">{card.title}</h3>
                   {disabled && (
-                    <span className="rounded-[4px] bg-muted px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+                    <span className="rounded-[4px] bg-muted px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-muted-foreground">
                       em breve
                     </span>
                   )}

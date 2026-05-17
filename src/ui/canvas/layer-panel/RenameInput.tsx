@@ -53,7 +53,7 @@ export function RenameInput({ initialValue, onSave, onCancel }: Props): React.Re
       onChange={(e) => setValue(e.target.value)}
       onKeyDown={handleKey}
       onBlur={commit}
-      className="min-w-0 flex-1 rounded-sm border border-ink-600 bg-ink-950 px-1 py-0.5 font-mono text-[11px] text-ink-100 outline-none focus:border-laser"
+      className="min-w-0 flex-1 rounded-sm border border-ink-600 bg-ink-950 px-1 py-0.5 text-[11px] text-ink-100 outline-none focus:border-laser"
     />
   );
 }

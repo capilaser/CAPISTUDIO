@@ -10,12 +10,13 @@
  */
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Sparkles } from 'lucide-react';
+import { Inbox, Plus, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { listAll, type Order } from '@/data/repositories/orderRepository';
 import AppLayout from '@/ui/layout/AppLayout';
 import { Button } from '@/ui/components/button';
+import { EmptyState } from '@/ui/components/empty-state';
 
 import { OrderCard } from './OrderCard';
 
@@ -70,7 +71,7 @@ export default function InicialPage() {
           >
             <Sparkles className="h-5 w-5" />
             Incluir Pedido
-            <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
               em breve
             </span>
           </Button>
@@ -83,29 +84,34 @@ export default function InicialPage() {
               Pedidos Recentes
             </h2>
             {orders && orders.length > 0 && (
-              <span className="font-mono text-[11px] text-muted-foreground">
+              <span className="text-[11px] tabular-nums text-muted-foreground">
                 {orders.length} {orders.length === 1 ? 'pedido' : 'pedidos'}
               </span>
             )}
           </div>
 
           {error && (
-            <p className="rounded-md border border-destructive/40 bg-destructive/10 p-4 font-mono text-xs text-destructive">
+            <p className="rounded-md border border-destructive/40 bg-destructive/10 p-4 text-xs text-destructive">
               Erro ao carregar pedidos: {error}
             </p>
           )}
 
           {!error && orders === null && (
-            <p className="font-mono text-xs text-muted-foreground">Carregando…</p>
+            <p className="text-xs text-muted-foreground">Carregando…</p>
           )}
 
           {!error && orders !== null && orders.length === 0 && (
-            <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-card/40 p-12 text-center">
-              <p className="font-mono text-sm text-muted-foreground">Nenhum pedido ainda.</p>
-              <p className="font-mono text-xs text-muted-foreground/70">
-                Comece clicando em <span className="text-primary">Novo Pedido</span> acima.
-              </p>
-            </div>
+            <EmptyState
+              icon={Inbox}
+              title="Nenhum pedido ainda"
+              description="Comece criando seu primeiro pedido para gerar artes e exportar arquivos de produção."
+              action={
+                <Button onClick={handleNovoPedido} variant="default" size="sm" className="gap-2">
+                  <Plus className="h-4 w-4" />
+                  Criar primeiro pedido
+                </Button>
+              }
+            />
           )}
 
           {!error && orders !== null && orders.length > 0 && (

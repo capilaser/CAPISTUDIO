@@ -17,6 +17,7 @@ interface Props {
 const NAV_LINKS = [
   { to: '/', label: 'Início', end: true },
   { to: '/arte', label: 'Arte', end: false },
+  { to: '/padroes', label: 'Padrões', end: false },
   { to: '/banco', label: 'Banco', end: false },
 ] as const;
 
@@ -36,7 +37,7 @@ export function AppHeader({ breadcrumb }: Props) {
             end={link.end}
             className={({ isActive }) =>
               cn(
-                'rounded-md px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider transition-colors',
+                'rounded-md px-3 py-1.5 text-[11px] uppercase tracking-wider transition-colors',
                 isActive
                   ? 'bg-primary/15 text-primary'
                   : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
