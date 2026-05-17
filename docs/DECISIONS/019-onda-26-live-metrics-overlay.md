@@ -75,6 +75,7 @@ Quando `measurementMode` (par de medição) e Live Metrics estão ativos ao mesm
 ## Arquivos tocados
 
 - `src/stores/canvas-store.ts` — novo flag `liveMetricsEnabled` + `toggleLiveMetrics`
-- `src/ui/canvas/LiveMetricsOverlay.tsx` — componente novo
-- `src/ui/pages/dev/canvas-test/CanvasWorkspace.tsx` — mount
-- `tests/ui/LiveMetricsOverlay.test.tsx` — render + formatação
+- `src/core/canvas/format-metrics.ts` — formatadores puros (`formatMm`, `formatDeltaMm`, `composeDragLine`, `composeResizeLine`)
+- `src/ui/canvas/LiveMetricsOverlay.tsx` — componente do HUD
+- `src/ui/pages/dev/canvas-test/CanvasWorkspace.tsx` — mount do overlay
+- `tests/core/canvas/format-metrics.test.ts` — 15 testes dos formatadores puros (seguindo regra do CLAUDE.md: testes vivem em `core/`, não em UI)
