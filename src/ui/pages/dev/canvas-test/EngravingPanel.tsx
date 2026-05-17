@@ -13,7 +13,7 @@ import { Stamp } from 'lucide-react';
 import { toast } from 'sonner';
 
 import type { CanvasEngine } from '@/core/canvas/canvas-engine';
-import { humanizeError } from '@/core/canvas/corel-svg-errors';
+import { svgErrorToToastArgs } from '@/core/canvas/corel-svg-errors';
 import { parseCorelSvg } from '@/core/canvas/corel-svg-parser';
 import { resolveParentAppliqueId } from '@/core/canvas/resolve-parent-applique';
 import { listByCategory, type Engraving } from '@/data/repositories/engravingRepository';
@@ -136,7 +136,8 @@ export function EngravingPanel({ engineRef }: EngravingPanelProps) {
         parentLayerId ? `${engraving.name} adicionada ao aplique` : `${engraving.name} adicionada`
       );
     } catch (err) {
-      toast.error(humanizeError(err));
+      const { title, options } = svgErrorToToastArgs(err);
+      toast.error(title, options);
     } finally {
       setAdding(null);
     }

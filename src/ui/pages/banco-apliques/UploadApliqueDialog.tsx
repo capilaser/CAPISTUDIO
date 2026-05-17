@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 
-import { humanizeError } from '@/core/canvas/corel-svg-errors';
+import { humanizeError, type SvgErrorMessage } from '@/core/canvas/corel-svg-errors';
 import { parseCorelSvg, type CorelSvgMeta } from '@/core/canvas/corel-svg-parser';
 import { create as createApplique } from '@/data/repositories/appliqueRepository';
 import { saveAppliqueFile } from '@/services/applique-storage';
@@ -26,7 +26,7 @@ type Step = 'pick' | 'name';
 export function UploadApliqueDialog({ open, onClose, onSaved }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState<Step>('pick');
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<SvgErrorMessage | null>(null);
   const [meta, setMeta] = useState<CorelSvgMeta | null>(null);
   const [rawSvg, setRawSvg] = useState<string>('');
   const [name, setName] = useState('');
@@ -61,7 +61,7 @@ export function UploadApliqueDialog({ open, onClose, onSaved }: Props) {
       setName(file.name.replace(/\.svg$/i, ''));
       setStep('name');
     } catch (err) {
-      setError(humanizeError(err as Error));
+      setError(humanizeError(err));
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   }
@@ -89,7 +89,7 @@ export function UploadApliqueDialog({ open, onClose, onSaved }: Props) {
       reset();
       onSaved();
     } catch (err) {
-      setError(`Erro ao salvar: ${String(err)}`);
+      setError({ title: 'Erro ao salvar aplique', description: String(err) });
       setSaving(false);
     }
   }
@@ -116,11 +116,14 @@ export function UploadApliqueDialog({ open, onClose, onSaved }: Props) {
             />
           </div>
 
-          {/* Error message */}
+          {/* Error message — Onda 23: título destacado + descrição opcional. */}
           {error && (
-            <p className="rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
-              {error}
-            </p>
+            <div className="rounded-md border border-danger/30 bg-danger/10 px-3 py-2">
+              <p className="text-xs font-medium text-danger">{error.title}</p>
+              {error.description && (
+                <p className="mt-1 text-[11px] text-danger/80">{error.description}</p>
+              )}
+            </div>
           )}
 
           {/* Step 2: dimensions preview + name input */}

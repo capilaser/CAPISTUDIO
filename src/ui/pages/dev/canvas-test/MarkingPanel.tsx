@@ -13,7 +13,7 @@ import { Crosshair } from 'lucide-react';
 import { toast } from 'sonner';
 
 import type { CanvasEngine } from '@/core/canvas/canvas-engine';
-import { humanizeError } from '@/core/canvas/corel-svg-errors';
+import { svgErrorToToastArgs } from '@/core/canvas/corel-svg-errors';
 import { parseCorelSvg } from '@/core/canvas/corel-svg-parser';
 import { resolveParentAppliqueId } from '@/core/canvas/resolve-parent-applique';
 import { getCategoriesByScope, type Category } from '@/data/repositories/categoryRepository';
@@ -134,7 +134,8 @@ export function MarkingPanel({ engineRef }: MarkingPanelProps) {
         parentLayerId ? `${marking.name} adicionada ao aplique` : `${marking.name} adicionada`
       );
     } catch (err) {
-      toast.error(humanizeError(err));
+      const { title, options } = svgErrorToToastArgs(err);
+      toast.error(title, options);
     } finally {
       setAdding(null);
     }

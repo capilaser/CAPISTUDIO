@@ -12,7 +12,7 @@ import { type RefObject, useEffect, useState } from 'react';
 import { BookmarkPlus } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { humanizeError } from '@/core/canvas/corel-svg-errors';
+import { svgErrorToToastArgs } from '@/core/canvas/corel-svg-errors';
 import { parseCorelSvg } from '@/core/canvas/corel-svg-parser';
 import type { CanvasEngine } from '@/core/canvas/canvas-engine';
 import { list, type Applique } from '@/data/repositories/appliqueRepository';
@@ -112,7 +112,8 @@ export function ApliquePanel({ engineRef }: ApliquesPanelProps) {
       await engine.addAppliqueSvg(meta, applique.name, applique.id);
       toast.success(`${applique.name} adicionado`);
     } catch (err) {
-      toast.error(humanizeError(err));
+      const { title, options } = svgErrorToToastArgs(err);
+      toast.error(title, options);
     } finally {
       setAdding(null);
     }
