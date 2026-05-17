@@ -8,7 +8,7 @@
  * Onda 13.5: Salvar agora chama callback real (createWithItems / saveRevision).
  * Aprovar / SVG / PNG continuam mostrando "Em breve" — não foram conectados.
  */
-import { Check, Download, FileImage, Loader2, Save } from 'lucide-react';
+import { Check, Download, FileImage, History, Loader2, Save } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Button } from '@/ui/components/button';
@@ -21,6 +21,8 @@ interface Props {
   onSvg?: () => void;
   onPng?: () => void;
   onApprove?: () => void | Promise<void>;
+  /** Onda 22 — abre dialog read-only com histórico de revisões. */
+  onRevisions?: () => void;
 }
 
 export function NovoPedidoTopbar({
@@ -31,6 +33,7 @@ export function NovoPedidoTopbar({
   onSvg,
   onPng,
   onApprove,
+  onRevisions,
 }: Props) {
   function notReady(label: string) {
     toast.info('Em breve', {
@@ -52,6 +55,19 @@ export function NovoPedidoTopbar({
       </div>
 
       <div className="flex items-center gap-2">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="gap-1.5"
+          onClick={() => {
+            if (onRevisions) onRevisions();
+            else notReady('Revisões');
+          }}
+          title="Histórico de revisões"
+        >
+          <History className="h-3.5 w-3.5" />
+          Revisões
+        </Button>
         <Button
           variant="approveSubtle"
           size="sm"

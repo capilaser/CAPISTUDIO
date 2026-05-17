@@ -22,7 +22,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 
 import { parseCorelSvg } from '@/core/canvas/corel-svg-parser';
-import { humanizeError } from '@/core/canvas/corel-svg-errors';
+import { svgErrorToToastArgs } from '@/core/canvas/corel-svg-errors';
 import type { CanvasEngine } from '@/core/canvas/canvas-engine';
 import {
   countAll,
@@ -52,6 +52,7 @@ import { NovoPedidoLayerSidebar } from './novo-pedido/NovoPedidoLayerSidebar';
 import { NovoPedidoSidebar, type ProductSelection } from './novo-pedido/NovoPedidoSidebar';
 import { NovoPedidoTopbar } from './novo-pedido/NovoPedidoTopbar';
 import { BancoDrawer } from './novo-pedido/BancoDrawer';
+import { RevisionsDialog } from './novo-pedido/RevisionsDialog';
 import type { TextoItemData } from './novo-pedido/TextoItem';
 
 export default function NovoPedidoPage() {
@@ -75,6 +76,7 @@ export default function NovoPedidoPage() {
   const [bancoOpen, setBancoOpen] = useState(false);
   const [svgDialogOpen, setSvgDialogOpen] = useState(false);
   const [pngDialogOpen, setPngDialogOpen] = useState(false);
+  const [revisionsDialogOpen, setRevisionsDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [boardDims, setBoardDims] = useState<{ widthMm: number; heightMm: number } | null>(null);
   // Onda 14 — tick incrementado a cada pattern aplicado. TextoItem usa pra
@@ -470,7 +472,8 @@ export default function NovoPedidoPage() {
       );
       toast.success(`${file.name} adicionado`);
     } catch (err) {
-      toast.error(humanizeError(err));
+      const { title, options } = svgErrorToToastArgs(err);
+      toast.error(title, options);
     } finally {
       e.target.value = '';
     }
@@ -584,6 +587,7 @@ export default function NovoPedidoPage() {
           onSvg={() => setSvgDialogOpen(true)}
           onPng={() => setPngDialogOpen(true)}
           onApprove={handleApprove}
+          onRevisions={() => setRevisionsDialogOpen(true)}
         />
         <div className="relative flex flex-1 overflow-hidden">
           <NovoPedidoSidebar
@@ -701,6 +705,12 @@ export default function NovoPedidoPage() {
         boardBounds={boardBoundsPx}
         boardItemCount={boardItems.length}
         onClose={() => setPngDialogOpen(false)}
+      />
+
+      <RevisionsDialog
+        open={revisionsDialogOpen}
+        orderId={orderIdFromUrl}
+        onClose={() => setRevisionsDialogOpen(false)}
       />
 
       {/* Input oculto para upar SVG */}
