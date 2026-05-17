@@ -113,6 +113,17 @@ const config: Config = {
         body: ['"Geist Variable"', '"Geist"', 'system-ui', 'sans-serif'],
         mono: ['"JetBrains Mono Variable"', '"JetBrains Mono"', 'ui-monospace', 'monospace'],
       },
+      fontSize: {
+        // Onda 25 Fase A — tipografia editorial pros headings de página.
+        // Body permanece nos defaults do Tailwind (text-xs, text-sm, etc).
+        // Letter-spacing negativo é o detalhe que diferencia Stripe/Vercel/Linear
+        // de SaaS genérico.
+        'display-lg': ['1.5rem', { lineHeight: '1.2', letterSpacing: '-0.02em', fontWeight: '600' }],
+        'display-md': [
+          '1.125rem',
+          { lineHeight: '1.3', letterSpacing: '-0.015em', fontWeight: '500' },
+        ],
+      },
       borderRadius: {
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',

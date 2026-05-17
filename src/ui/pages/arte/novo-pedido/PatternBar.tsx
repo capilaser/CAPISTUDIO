@@ -32,6 +32,7 @@ import { getProductById } from '@/data/repositories/productRepository';
 import { cn } from '@/lib/cn';
 import { sanitizeSvg } from '@/lib/sanitize-svg';
 import { Button } from '@/ui/components/button';
+import { Skeleton } from '@/ui/components/skeleton';
 
 import { PatternGalleryDialog } from './PatternGalleryDialog';
 
@@ -233,8 +234,10 @@ export function PatternBar({
 
   if (loading) {
     return (
-      <div className="flex h-[110px] shrink-0 items-center justify-center border-b border-border bg-card/60 px-4">
-        <p className="animate-pulse text-[11px] text-muted-foreground">Carregando padrões…</p>
+      <div className="flex h-[110px] shrink-0 items-center gap-2 border-b border-border bg-card/60 px-4">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Skeleton key={i} className="h-[80px] w-[80px] shrink-0 rounded-md" />
+        ))}
       </div>
     );
   }

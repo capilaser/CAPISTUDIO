@@ -1,0 +1,40 @@
+# Onda 25 Fase I — CI baseline: typecheck + lint + testes.
+#
+# Não roda `tauri build` (lento + custa créditos). Build de release é local
+# até decisão de auto-release. O objetivo aqui é bloquear merge em main se
+# baseline-ready falhar.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  validate:
+    name: typecheck + lint + tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Tests
+        run: npm test -- --run

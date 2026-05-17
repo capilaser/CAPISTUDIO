@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, Shapes } from 'lucide-react';
 
 import { list, softDelete, update, type Applique } from '@/data/repositories/appliqueRepository';
 import { deleteAppliqueFile } from '@/services/applique-storage';
 import { Button } from '@/ui/components/button';
+import { EmptyState } from '@/ui/components/empty-state';
+import { Tabs, TabsList, TabsTrigger } from '@/ui/components/tabs';
 import AppLayout from '@/ui/layout/AppLayout';
 
 import { ApliqueCard } from './ApliqueCard';
@@ -35,7 +37,6 @@ export default function BancoApliquesPagina() {
 
   async function handleDelete() {
     if (!deleteTarget) return;
-    // Remove file from disk if it's a user-uploaded absolute path (not a bundled resource)
     if (deleteTarget.filePath && !deleteTarget.filePath.startsWith('resource://')) {
       await deleteAppliqueFile(deleteTarget.filePath).catch((e) =>
         console.warn('[BancoApliquesPagina] file delete failed (continuing):', e)
@@ -55,33 +56,21 @@ export default function BancoApliquesPagina() {
       ]}
     >
       <div className="p-6">
-        {/* Tab strip — extensible for Onda 6.6 (Gravações, Marcações) */}
-        <div className="mb-6 flex items-center justify-between border-b border-ink-800 pb-4">
-          <div className="flex gap-1">
-            <button className="rounded-sm px-3 py-1.5 font-display text-xs font-medium text-ink-100 underline underline-offset-4 decoration-laser">
-              Apliques
-            </button>
-            <button
-              disabled
-              className="rounded-sm px-3 py-1.5 font-display text-xs text-ink-600 cursor-not-allowed"
-              title="Disponível na Onda 6.6"
-            >
-              Gravações
-            </button>
-            <button
-              disabled
-              className="rounded-sm px-3 py-1.5 font-display text-xs text-ink-600 cursor-not-allowed"
-              title="Disponível na Onda 6.6"
-            >
-              Marcações
-            </button>
-          </div>
+        {/* Tab strip — Onda 25 Fase D: shadcn Tabs no lugar de buttons manuais. */}
+        <div className="mb-6 flex items-center justify-between">
+          <Tabs defaultValue="apliques">
+            <TabsList>
+              <TabsTrigger value="apliques">Apliques</TabsTrigger>
+              <TabsTrigger value="gravacoes" disabled>
+                Gravações
+              </TabsTrigger>
+              <TabsTrigger value="marcacoes" disabled>
+                Marcações
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
 
-          <Button
-            size="sm"
-            onClick={() => setUploadOpen(true)}
-            className="gap-1.5 bg-ink-700 text-ink-100 hover:bg-ink-600"
-          >
+          <Button size="sm" onClick={() => setUploadOpen(true)} className="gap-1.5">
             <Plus size={14} />
             Adicionar aplique
           </Button>
@@ -89,7 +78,11 @@ export default function BancoApliquesPagina() {
 
         {/* Grid */}
         {apliques.length === 0 ? (
-          <p className="text-center font-body text-sm text-ink-500">Nenhum aplique cadastrado.</p>
+          <EmptyState
+            icon={Shapes}
+            title="Nenhum aplique cadastrado"
+            description='Adicione apliques SVG pelo botão "Adicionar aplique" acima. Apliques ficam disponíveis em todos os pedidos.'
+          />
         ) : (
           <div className="grid grid-cols-4 gap-4 max-xl:grid-cols-3 max-lg:grid-cols-2">
             {apliques.map((ap) => (

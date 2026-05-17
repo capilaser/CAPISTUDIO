@@ -23,6 +23,7 @@ import { sanitizeSvg } from '@/lib/sanitize-svg';
 import { readLogoFile } from '@/services/logo-storage';
 import { Button } from '@/ui/components/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/ui/components/dialog';
+import { Skeleton } from '@/ui/components/skeleton';
 
 interface Props {
   open: boolean;
@@ -192,8 +193,10 @@ function LogoList({ logos, error, pickingId, onPick, search, recency }: LogoList
 
   if (logos === null) {
     return (
-      <div className="flex h-[260px] items-center justify-center">
-        <p className="text-xs text-muted-foreground">Carregando…</p>
+      <div className="grid h-[260px] grid-cols-3 gap-2 p-1">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Skeleton key={i} className="h-full rounded-md" />
+        ))}
       </div>
     );
   }

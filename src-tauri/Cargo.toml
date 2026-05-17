@@ -24,6 +24,10 @@ tauri-plugin-sql = { version = "2", features = ["sqlite"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-shell = "2"
+# Onda 25 Fase G — bloqueia 2ª instância. Sem isso, 2 janelas abertas
+# disputam o mesmo SQLite e corrompem dados (WAL mode + 2 writers = race
+# condition garantida).
+tauri-plugin-single-instance = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # Onda 11.A — necessário para `db_tx_execute`, comando custom que executa

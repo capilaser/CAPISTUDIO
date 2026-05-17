@@ -17,7 +17,6 @@ export function AppFooter() {
           />
           tauri:{version ?? 'detecting…'}
         </span>
-        <span>onda:5</span>
       </div>
 
       <div className="flex items-center gap-3">

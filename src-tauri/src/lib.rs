@@ -1,10 +1,77 @@
 use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::Manager;
 use tauri_plugin_sql::{Builder as SqlBuilder, Migration, MigrationKind};
 
 mod db_tx;
 
 const MAX_SVG_BYTES: usize = 10 * 1024 * 1024; // 10 MB — limite defensivo pra IPC
+const MAX_BACKUPS: usize = 10; // Onda 25 Fase H — rolling backup count
+
+/// Onda 25 Fase H — backup automático do SQLite antes de qualquer migration
+/// nova rodar. Copia `capi-studio.db` → `backups/capi-studio.<timestamp>.db`
+/// e mantém só os MAX_BACKUPS mais recentes. Sem isso, qualquer migration
+/// ruim ou crash de WAL destrói trabalho do operador permanentemente.
+///
+/// Chamado DENTRO do `.setup()` do Tauri builder, ANTES do plugin-sql tentar
+/// abrir o DB. Falha silenciosa (loga em stderr) — backup é uma rede, não
+/// pode bloquear boot. Se o usuário tem permissão pra abrir o app mas não
+/// pra criar `backups/`, é melhor o app funcionar sem backup do que travar.
+fn backup_db_if_exists(app: &tauri::AppHandle) {
+    let app_data = match app.path().app_data_dir() {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("[capi-studio] backup skip: app_data_dir indisponível: {e}");
+            return;
+        }
+    };
+
+    let db_path = app_data.join("capi-studio.db");
+    if !db_path.exists() {
+        // Primeira execução — DB ainda não existe. Plugin-sql vai criar.
+        return;
+    }
+
+    let backups_dir = app_data.join("backups");
+    if let Err(e) = std::fs::create_dir_all(&backups_dir) {
+        eprintln!("[capi-studio] backup skip: create_dir_all falhou: {e}");
+        return;
+    }
+
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let backup_path = backups_dir.join(format!("capi-studio.{}.db", timestamp));
+
+    if let Err(e) = std::fs::copy(&db_path, &backup_path) {
+        eprintln!("[capi-studio] backup falhou: {e}");
+        return;
+    }
+
+    // Rolling: mantém só os MAX_BACKUPS mais recentes (por mtime).
+    let mut entries: Vec<_> = match std::fs::read_dir(&backups_dir) {
+        Ok(rd) => rd
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                e.file_name()
+                    .to_string_lossy()
+                    .starts_with("capi-studio.")
+            })
+            .collect(),
+        Err(_) => return, // não consegui listar — desisto da rotação, não é fatal
+    };
+    entries.sort_by_key(|e| {
+        std::cmp::Reverse(
+            e.metadata()
+                .and_then(|m| m.modified())
+                .unwrap_or(UNIX_EPOCH),
+        )
+    });
+    for old in entries.iter().skip(MAX_BACKUPS) {
+        let _ = std::fs::remove_file(old.path());
+    }
+}
 
 /// Hardening Onda 11.security — valida que `path` está sob um dos diretórios
 /// permitidos (assets do usuário em appData OU resources bundled). Recusa
@@ -246,6 +313,15 @@ pub fn run() {
     ];
 
     tauri::Builder::default()
+        // Onda 25 Fase G — single-instance lock. Quando o usuário tenta abrir
+        // o exe uma 2ª vez, o callback roda no processo ORIGINAL e foca a
+        // janela existente. A 2ª instância termina sem nunca tocar o DB.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_opener::init())
         // Onda 9.F — plugins necessários pro fluxo de export PNG:
         //   dialog: usuário escolhe pasta de destino (Tauri file picker)
@@ -259,6 +335,14 @@ pub fn run() {
                 .add_migrations("sqlite:capi-studio.db", migrations)
                 .build(),
         )
+        // Onda 25 Fase H — backup do DB no boot. Roda ANTES do JS chamar
+        // Database.load(...), garantindo que se a migration nova corromper
+        // algo, o operador tem o estado anterior em $APPDATA/backups/.
+        // Falhas no backup são não-fatais (loga em stderr, app segue).
+        .setup(|app| {
+            backup_db_if_exists(&app.handle());
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             save_applique_file,
             delete_applique_file,

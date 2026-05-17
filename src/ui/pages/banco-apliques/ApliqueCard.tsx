@@ -10,6 +10,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/ui/components/dropdown-menu';
+import { Skeleton } from '@/ui/components/skeleton';
 
 interface Props {
   applique: Applique;
@@ -24,14 +25,7 @@ export function ApliqueCard({ applique, onRename, onDelete }: Props) {
     let cancelled = false;
     resolveDisplayUrl(applique.filePath)
       .then((url) => {
-        if (!cancelled) {
-          console.log('[ApliqueCard] resolved', {
-            id: applique.id,
-            filePath: applique.filePath,
-            displayUrl: url,
-          });
-          setDisplayUrl(url);
-        }
+        if (!cancelled) setDisplayUrl(url);
       })
       .catch((err) =>
         console.error('[ApliqueCard] resolveDisplayUrl FAILED', {
@@ -49,15 +43,14 @@ export function ApliqueCard({ applique, onRename, onDelete }: Props) {
   const hMm = applique.heightMm?.toFixed(1) ?? '—';
 
   return (
-    <div className="group relative flex flex-col rounded-md border border-ink-700 bg-ink-900 transition-all duration-150 ease-out hover:border-ink-600">
-      {/* Kebab menu */}
+    <div className="group relative flex flex-col rounded-md border border-border bg-card transition-colors duration-150 ease-out hover:border-primary/40">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button
-            className="absolute right-1.5 top-1.5 z-10 flex h-6 w-6 items-center justify-center rounded opacity-0 transition-opacity hover:bg-ink-700 group-hover:opacity-100 focus:opacity-100"
+            className="absolute right-1.5 top-1.5 z-10 flex h-6 w-6 items-center justify-center rounded opacity-0 transition-opacity hover:bg-secondary group-hover:opacity-100 focus:opacity-100"
             aria-label="Opções"
           >
-            <MoreHorizontal size={14} className="text-ink-400" />
+            <MoreHorizontal size={14} className="text-muted-foreground" />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="min-w-[140px]">
@@ -68,7 +61,7 @@ export function ApliqueCard({ applique, onRename, onDelete }: Props) {
           <DropdownMenuSeparator />
           <DropdownMenuItem
             onClick={() => onDelete(applique.id)}
-            className="gap-2 text-xs text-danger focus:text-danger"
+            className="gap-2 text-xs text-destructive focus:text-destructive"
           >
             <Trash2 size={12} />
             Remover
@@ -76,7 +69,7 @@ export function ApliqueCard({ applique, onRename, onDelete }: Props) {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Thumbnail area — light bg so dark SVG strokes are visible */}
+      {/* Thumbnail area — light bg pra apliques de stroke preto ficarem visíveis */}
       <div className="flex h-40 items-center justify-center rounded-t-md bg-ink-100 p-3">
         {displayUrl ? (
           <img
@@ -86,14 +79,13 @@ export function ApliqueCard({ applique, onRename, onDelete }: Props) {
             draggable={false}
           />
         ) : (
-          <div className="h-full w-full animate-pulse rounded bg-ink-200" />
+          <Skeleton className="h-full w-full" />
         )}
       </div>
 
-      {/* Info */}
       <div className="px-3 py-2">
-        <p className="truncate font-body text-xs font-medium text-ink-100">{applique.name}</p>
-        <p className="mt-0.5 font-mono tabular-nums text-[10px] text-ink-500">
+        <p className="truncate text-xs font-medium text-foreground">{applique.name}</p>
+        <p className="mt-0.5 font-mono text-[10px] tabular-nums text-muted-foreground">
           {wMm} × {hMm} mm
         </p>
       </div>

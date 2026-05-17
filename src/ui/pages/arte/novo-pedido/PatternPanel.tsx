@@ -26,6 +26,7 @@ import {
   resolveAssetUrl,
   getById as getMaterialById,
 } from '@/data/repositories/materialRepository';
+import { Skeleton } from '@/ui/components/skeleton';
 
 interface Props {
   engineRef: RefObject<CanvasEngine | null>;
@@ -127,8 +128,10 @@ export function PatternPanel({
 
   if (loading) {
     return (
-      <div className={`flex items-center justify-center ${emptyPadding}`}>
-        <p className="animate-pulse text-xs text-muted-foreground">Carregando…</p>
+      <div className={`grid grid-cols-2 gap-2 ${emptyPadding}`}>
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-[72px] rounded-md" />
+        ))}
       </div>
     );
   }

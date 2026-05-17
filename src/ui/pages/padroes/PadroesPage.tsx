@@ -36,6 +36,7 @@ import {
 } from '@/ui/components/dropdown-menu';
 import AppLayout from '@/ui/layout/AppLayout';
 import { EmptyState } from '@/ui/components/empty-state';
+import { Skeleton } from '@/ui/components/skeleton';
 
 export default function PadroesPage() {
   const navigate = useNavigate();
@@ -128,7 +129,7 @@ export default function PadroesPage() {
     <AppLayout breadcrumb={[{ label: 'Padrões' }]}>
       <div className="flex h-full flex-col p-6">
         <div className="mb-4 flex items-center justify-between">
-          <h1 className="font-display text-lg font-medium text-foreground">Padrões</h1>
+          <h1 className="font-display text-display-md text-foreground">Padrões</h1>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="default" size="sm" className="gap-2">
@@ -151,7 +152,11 @@ export default function PadroesPage() {
         </div>
 
         {loading ? (
-          <p className="text-xs text-muted-foreground">Carregando…</p>
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <Skeleton key={i} className="h-[140px] rounded-md" />
+            ))}
+          </div>
         ) : patterns.length === 0 ? (
           <EmptyState
             icon={Layers}

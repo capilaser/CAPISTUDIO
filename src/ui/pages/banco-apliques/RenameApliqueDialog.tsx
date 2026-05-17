@@ -30,40 +30,31 @@ export function RenameApliqueDialog({ open, currentName, onConfirm, onClose }: P
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="border-ink-700 bg-ink-900 text-ink-100 sm:max-w-sm">
+      <DialogContent className="sm:max-w-sm">
         <DialogHeader>
-          <DialogTitle className="font-display text-sm font-medium text-ink-100">
-            Renomear aplique
-          </DialogTitle>
+          <DialogTitle>Renomear aplique</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="rename-input" className="text-xs text-ink-400">
+            <Label htmlFor="rename-input" className="text-xs text-muted-foreground">
               Nome
             </Label>
             <Input
               id="rename-input"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="border-ink-700 bg-ink-800 text-ink-100 focus-visible:ring-laser-muted"
               autoFocus
             />
           </div>
           <DialogFooter>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={onClose}
-              className="text-ink-400 hover:text-ink-100"
-            >
+            <Button type="button" variant="ghost" size="sm" onClick={onClose}>
               Cancelar
             </Button>
             <Button
               type="submit"
+              variant="default"
               size="sm"
               disabled={!name.trim() || name.trim() === currentName}
-              className="bg-ink-700 text-ink-100 hover:bg-ink-600"
             >
               Salvar
             </Button>

@@ -23,6 +23,7 @@ import { getAllProducts, type Product } from '@/data/repositories/productReposit
 import { getAllMaterials, type Material } from '@/data/repositories/materialRepository';
 import { listFamilies, type MaterialFamily } from '@/data/repositories/materialFamilyRepository';
 import { Button } from '@/ui/components/button';
+import { Skeleton } from '@/ui/components/skeleton';
 import {
   Dialog,
   DialogContent,
@@ -521,8 +522,11 @@ function ProductCascadeForm({
 
   if (products === null || families === null || materials === null) {
     return (
-      <div className="p-4">
-        <p className="text-xs text-muted-foreground">Carregando…</p>
+      <div className="flex flex-col gap-3 p-4">
+        <Skeleton className="h-3 w-20" />
+        <Skeleton className="h-9 w-full" />
+        <Skeleton className="h-9 w-full" />
+        <Skeleton className="h-9 w-4/5" />
       </div>
     );
   }

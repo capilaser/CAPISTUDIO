@@ -58,7 +58,7 @@ export default function ArteHubPage() {
 
   return (
     <AppLayout breadcrumb={[{ label: 'Arte' }]}>
-      <div className="mx-auto flex h-full max-w-5xl flex-col gap-8 p-8">
+      <div className="mx-auto flex h-full max-w-[1600px] flex-col gap-8 p-8">
         <header className="flex flex-col gap-2">
           <h1 className="font-display text-lg font-medium tracking-wider text-foreground">Arte</h1>
           <p className="text-xs text-muted-foreground">Editor de pedidos e padrões.</p>

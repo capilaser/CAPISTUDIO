@@ -96,32 +96,30 @@ export function UploadApliqueDialog({ open, onClose, onSaved }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
-      <DialogContent className="border-ink-700 bg-ink-900 text-ink-100 sm:max-w-md">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="font-display text-sm font-medium text-ink-100">
-            Adicionar aplique
-          </DialogTitle>
+          <DialogTitle>Adicionar aplique</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
           {/* File picker — always visible */}
           <div className="space-y-1.5">
-            <Label className="text-xs text-ink-400">Arquivo SVG</Label>
+            <Label className="text-xs text-muted-foreground">Arquivo SVG</Label>
             <input
               ref={fileInputRef}
               type="file"
               accept=".svg"
               onChange={handleFileChange}
-              className="block w-full cursor-pointer rounded-md border border-ink-700 bg-ink-800 px-3 py-2 text-sm text-ink-200 file:mr-3 file:cursor-pointer file:rounded file:border-0 file:bg-ink-700 file:px-2 file:py-1 file:text-xs file:text-ink-100 hover:border-ink-600"
+              className="block w-full cursor-pointer rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground file:mr-3 file:cursor-pointer file:rounded file:border-0 file:bg-secondary file:px-2 file:py-1 file:text-xs file:text-foreground hover:border-primary/40"
             />
           </div>
 
           {/* Error message — Onda 23: título destacado + descrição opcional. */}
           {error && (
-            <div className="rounded-md border border-danger/30 bg-danger/10 px-3 py-2">
-              <p className="text-xs font-medium text-danger">{error.title}</p>
+            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2">
+              <p className="text-xs font-medium text-destructive">{error.title}</p>
               {error.description && (
-                <p className="mt-1 text-[11px] text-danger/80">{error.description}</p>
+                <p className="mt-1 text-[11px] text-destructive/80">{error.description}</p>
               )}
             </div>
           )}
@@ -129,15 +127,15 @@ export function UploadApliqueDialog({ open, onClose, onSaved }: Props) {
           {/* Step 2: dimensions preview + name input */}
           {step === 'name' && meta && (
             <>
-              <div className="rounded-md border border-ink-700 bg-ink-800 px-3 py-2">
-                <span className="text-xs text-ink-400">Dimensões detectadas: </span>
-                <span className="font-mono tabular-nums text-xs text-ink-100">
+              <div className="rounded-md border border-border bg-background px-3 py-2">
+                <span className="text-xs text-muted-foreground">Dimensões detectadas: </span>
+                <span className="font-mono text-xs tabular-nums text-foreground">
                   {meta.widthMm.toFixed(1)} × {meta.heightMm.toFixed(1)} mm
                 </span>
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="applique-name" className="text-xs text-ink-400">
+                <Label htmlFor="applique-name" className="text-xs text-muted-foreground">
                   Nome
                 </Label>
                 <Input
@@ -145,7 +143,6 @@ export function UploadApliqueDialog({ open, onClose, onSaved }: Props) {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Ex: Aplique Formato D"
-                  className="border-ink-700 bg-ink-800 text-ink-100 focus-visible:ring-laser-muted"
                   autoFocus
                 />
               </div>
@@ -154,20 +151,15 @@ export function UploadApliqueDialog({ open, onClose, onSaved }: Props) {
         </div>
 
         <DialogFooter>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleClose}
-            className="text-ink-400 hover:text-ink-100"
-          >
+          <Button variant="ghost" size="sm" onClick={handleClose}>
             Cancelar
           </Button>
           {step === 'name' && (
             <Button
+              variant="default"
               size="sm"
               onClick={handleSave}
               disabled={!name.trim() || saving}
-              className="bg-ink-700 text-ink-100 hover:bg-ink-600"
             >
               {saving ? 'Salvando…' : 'Salvar'}
             </Button>

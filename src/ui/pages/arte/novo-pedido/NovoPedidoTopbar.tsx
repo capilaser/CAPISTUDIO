@@ -1,17 +1,37 @@
 /**
- * NovoPedidoTopbar — barra superior do editor (Onda 13.5).
+ * NovoPedidoTopbar — barra superior do editor.
  *
- * Esquerda: rótulo "PEDIDO" + input editável inline com nome auto-incrementado.
- * Direita: 4 botões — Aprovar / SVG / PNG / Salvar.
+ * Onda 25 Fase E: reorganizada em 3 zonas com hierarquia visual clara:
+ *   Zona 1 (ghost):     Revisões (ícone só)
+ *   Zona 2 (outline):   Exportar ▾ (split-button → SVG / PNG)
+ *   Zona 3 (primária):  Aprovar (outline) + Salvar (default violeta)
  *
- * F4.3: input controlado externamente (state vive na NovoPedidoPage).
- * Onda 13.5: Salvar agora chama callback real (createWithItems / saveRevision).
- * Aprovar / SVG / PNG continuam mostrando "Em breve" — não foram conectados.
+ * Botões sem handler ficam disabled + Tooltip explicando — substitui o
+ * anti-pattern de toast.info("Em breve") on-click.
  */
-import { Check, Download, FileImage, History, Loader2, Save } from 'lucide-react';
-import { toast } from 'sonner';
+import {
+  Check,
+  ChevronDown,
+  Download,
+  FileImage,
+  History,
+  Loader2,
+  Save,
+} from 'lucide-react';
 
 import { Button } from '@/ui/components/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/ui/components/dropdown-menu';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/ui/components/tooltip';
 
 interface Props {
   pedidoLabel: string;
@@ -35,11 +55,7 @@ export function NovoPedidoTopbar({
   onApprove,
   onRevisions,
 }: Props) {
-  function notReady(label: string) {
-    toast.info('Em breve', {
-      description: `${label} — chega numa próxima onda.`,
-    });
-  }
+  const hasExport = Boolean(onSvg || onPng);
 
   return (
     <div className="flex items-center justify-between border-b border-border bg-card px-4 py-2">
@@ -54,74 +70,104 @@ export function NovoPedidoTopbar({
         />
       </div>
 
-      <div className="flex items-center gap-2">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="gap-1.5"
-          onClick={() => {
-            if (onRevisions) onRevisions();
-            else notReady('Revisões');
-          }}
-          title="Histórico de revisões"
-        >
-          <History className="h-3.5 w-3.5" />
-          Revisões
-        </Button>
-        <Button
-          variant="approveSubtle"
-          size="sm"
-          className="gap-1.5"
-          onClick={() => {
-            if (onApprove) void onApprove();
-            else notReady('Aprovar');
-          }}
-        >
-          <Check className="h-3.5 w-3.5 text-success" />
-          Aprovar
-        </Button>
-        <Button
-          variant="svg"
-          size="sm"
-          className="gap-1.5"
-          onClick={() => {
-            if (onSvg) onSvg();
-            else notReady('Gerar SVG');
-          }}
-        >
-          <Download className="h-3.5 w-3.5" />
-          SVG
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          className="gap-1.5"
-          onClick={() => {
-            if (onPng) onPng();
-            else notReady('PNG');
-          }}
-        >
-          <FileImage className="h-3.5 w-3.5" />
-          PNG
-        </Button>
-        <Button
-          variant="default"
-          size="sm"
-          className="gap-1.5"
-          onClick={() => {
-            if (onSave) void onSave();
-            else notReady('Salvar Pedido');
-          }}
-          disabled={saving}
-        >
-          {saving ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <Save className="h-3.5 w-3.5" />
+      <TooltipProvider delayDuration={200}>
+        <div className="flex items-center gap-2">
+          {/* Zona 1 — Revisões (ghost, ícone só) */}
+          {onRevisions && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onRevisions}
+                  aria-label="Histórico de revisões"
+                >
+                  <History className="h-3.5 w-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Histórico de revisões</TooltipContent>
+            </Tooltip>
           )}
-          Salvar
-        </Button>
-      </div>
+
+          <div className="h-4 w-px bg-border" />
+
+          {/* Zona 2 — Exportar (split-button) */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span tabIndex={hasExport ? -1 : 0}>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5"
+                      disabled={!hasExport}
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      Exportar
+                      <ChevronDown className="h-3 w-3 opacity-50" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={onSvg} disabled={!onSvg} className="gap-2">
+                      <Download className="h-3.5 w-3.5" />
+                      SVG (produção)
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={onPng} disabled={!onPng} className="gap-2">
+                      <FileImage className="h-3.5 w-3.5" />
+                      PNG (preview)
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </span>
+            </TooltipTrigger>
+            {!hasExport && <TooltipContent>Em breve — próxima onda</TooltipContent>}
+          </Tooltip>
+
+          <div className="h-4 w-px bg-border" />
+
+          {/* Zona 3 — Aprovar + Salvar */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span tabIndex={onApprove ? -1 : 0}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={onApprove ? () => void onApprove() : undefined}
+                  disabled={!onApprove}
+                >
+                  <Check className="h-3.5 w-3.5" />
+                  Aprovar
+                </Button>
+              </span>
+            </TooltipTrigger>
+            {!onApprove && <TooltipContent>Em breve — próxima onda</TooltipContent>}
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span tabIndex={onSave ? -1 : 0}>
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={onSave ? () => void onSave() : undefined}
+                  disabled={!onSave || saving}
+                >
+                  {saving ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Save className="h-3.5 w-3.5" />
+                  )}
+                  Salvar
+                </Button>
+              </span>
+            </TooltipTrigger>
+            {!onSave && <TooltipContent>Em breve — próxima onda</TooltipContent>}
+          </Tooltip>
+        </div>
+      </TooltipProvider>
     </div>
   );
 }

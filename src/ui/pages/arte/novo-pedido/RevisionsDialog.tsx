@@ -14,6 +14,7 @@ import { useEffect, useState } from 'react';
 import { listByOrder, type OrderRevision } from '@/data/repositories/revisionRepository';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/ui/components/dialog';
 import { Badge } from '@/ui/components/badge';
+import { Skeleton } from '@/ui/components/skeleton';
 
 interface Props {
   open: boolean;
@@ -95,7 +96,13 @@ function RevisionsBody({
   }
 
   if (revisions === null) {
-    return <p className="text-xs text-muted-foreground">Carregando…</p>;
+    return (
+      <div className="flex flex-col gap-2">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <Skeleton key={i} className="h-12 rounded-md" />
+        ))}
+      </div>
+    );
   }
 
   if (revisions.length === 0) {

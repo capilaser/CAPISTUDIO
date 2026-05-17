@@ -31,6 +31,20 @@ npm run format
 
 Ver `CLAUDE.md` (seção "Extensões v2 → Estrutura de pastas") e `../03-CLAUDE-CODE-KICKOFF.md` para o roadmap das 13 ondas.
 
+## Recuperar pedido após corrupção do DB
+
+A cada boot, o app salva um snapshot do SQLite em `backups/` antes que qualquer migration nova rode. Os 10 backups mais recentes são mantidos (rolling).
+
+Pasta:
+
+- Windows: `%APPDATA%\com.capilaser.studio\backups\`
+
+Pra restaurar:
+
+1. Feche o app completamente.
+2. Copie o backup desejado sobre `capi-studio.db` (mesma pasta).
+3. Reabra o app.
+
 ## Regras
 
 `CLAUDE.md` é a fonte de verdade. Em conflito com qualquer outro doc, CLAUDE.md vence.
