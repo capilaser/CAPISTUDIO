@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { BrowserRouter } from 'react-router-dom';
 
 import { seedDatabase } from '@/data/seeds';
+import { CheatsheetProvider } from '@/ui/components/cheatsheet-provider';
 import { FontLoader } from '@/ui/components/FontLoader';
 import { Toaster } from '@/ui/components/sonner';
 
@@ -35,9 +36,11 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <FontLoader />
-      <Toaster />
-      <RouterContent />
+      <CheatsheetProvider>
+        <FontLoader />
+        <Toaster />
+        <RouterContent />
+      </CheatsheetProvider>
     </BrowserRouter>
   );
 }

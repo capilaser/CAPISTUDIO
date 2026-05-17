@@ -14,7 +14,7 @@
  * se reconstrói via o mesmo listener. Loop completo, zero estado
  * duplicado no React.
  */
-import { useEffect, useState, type RefObject } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useState, type RefObject } from 'react';
 import { Layers } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -22,6 +22,21 @@ import { CanvasEngine, isBaseObject, type LayerNode } from '@/core/canvas/canvas
 import { getCapiId } from '@/core/canvas/capi-id';
 import { LayerRow } from './layer-panel/LayerRow';
 import { DeleteLayerDialog } from './layer-panel/DeleteLayerDialog';
+
+/**
+ * Onda 20.C — handle imperativo exposto via forwardRef. NovoPedidoPage
+ * mantém um ref pro LayerPanel pra que a tecla Delete (atalho global do
+ * canvas) consiga disparar o mesmo dialog de confirmação que o painel
+ * usa internamente.
+ */
+export interface LayerPanelHandle {
+  /**
+   * Abre o dialog de confirmação pro id passado. Resolve o node na
+   * hierarquia atual; se não achar (id inválido, layer sumiu), faz no-op
+   * silencioso — não trava UI.
+   */
+  requestDeleteByCanvasId: (id: string) => void;
+}
 
 interface Props {
   engineRef: RefObject<CanvasEngine | null>;
@@ -61,12 +76,10 @@ interface DeleteTarget {
   cascadeChildren: string[];
 }
 
-export function LayerPanel({
-  engineRef,
-  engineReady = true,
-  engineVersion = 0,
-  showTitle = true,
-}: Props): React.ReactElement {
+export const LayerPanel = forwardRef<LayerPanelHandle, Props>(function LayerPanel(
+  { engineRef, engineReady = true, engineVersion = 0, showTitle = true },
+  ref
+): React.ReactElement {
   const [hierarchy, setHierarchy] = useState<LayerNode[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -237,6 +250,28 @@ export function LayerPanel({
     engineRef.current?.reparentLayer(id, newParentId);
   }
 
+  // Onda 20.C — expõe entrada externa pro atalho Delete global. O caller
+  // (NovoPedidoPage) segura um ref pro LayerPanel e chama
+  // requestDeleteByCanvasId(id) quando a tecla Delete é pressionada com
+  // um objeto ativo no canvas.
+  useImperativeHandle(ref, () => ({
+    requestDeleteByCanvasId(id: string) {
+      function findInTree(nodes: LayerNode[]): LayerNode | null {
+        for (const n of nodes) {
+          if (n.id === id) return n;
+          if (n.kind === 'principal') {
+            const inner = findInTree(n.children);
+            if (inner) return inner;
+          }
+        }
+        return null;
+      }
+      const node = findInTree(hierarchy);
+      if (!node) return;
+      handleDeleteRequest(node);
+    },
+  }));
+
   // ─── Render ──────────────────────────────────────────────────────────────
 
   if (flat.length === 0) {
@@ -301,4 +336,5 @@ export function LayerPanel({
       />
     </>
   );
-}
+});
+LayerPanel.displayName = 'LayerPanel';

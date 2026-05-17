@@ -1,11 +1,11 @@
 import * as fabric from 'fabric';
 
-import type { LayerMeta, PrincipalLayerMeta, VisualLayerMeta } from '@/data/schema';
+import type { CanvasItem, LayerMeta, PrincipalLayerMeta, VisualLayerMeta } from '@/data/schema';
 import { buildMaterialPattern, loadImage } from './material-applier';
 import type { CorelSvgMeta } from './corel-svg-parser';
 import { isOperationLayer } from './layer-meta';
 import { extractClipShapes, parseAndStripRootDimensions, type ParsedViewBox } from './svg-utils';
-import { SlotManager } from './slot-manager';
+import { SlotManager, getCapiSlot, setCapiSlot } from './slot-manager';
 import type { SlotMeta, SlotType } from './types';
 import { mmToPx, pxToMm } from './units';
 import { computeSnapCandidates, applySnapResult } from './alignment/snap-engine';
@@ -29,8 +29,27 @@ export interface EngineConfig {
  *  - capiSlot  : SlotMeta (Onda 4+) — type/maxArea/auto* for slot-typed objects
  *
  * Add to this list when introducing new Capi-specific object metadata.
- * NOTE: materialId is NOT listed here — it lives in capi.layers (LayerMeta),
- * not as a per-Fabric-object property (ADR 008).
+ *
+ * NOT listed here (intentional):
+ *  - materialId        : lives in capi.layers (LayerMeta), not per-object (ADR 008).
+ *  - __capiBase        : base do produto. Sempre tem `excludeFromExport: true`,
+ *                        então o OBJETO INTEIRO não vai pro toJSON — flag não
+ *                        precisa sobreviver porque o objeto é recriado pelo
+ *                        boot (addAppliqueSvg) e não pelo deserialize.
+ *  - __capiMaterialRect: rect de textura aplicado em applyMaterialToBase. Mesma
+ *                        razão — `excludeFromExport: true`. Pra multi-broche
+ *                        (Onda 13+), material vai DIRETO no aplique como fill,
+ *                        sem __capiMaterialRect.
+ *  - __capiOverlay     : slot overlay tracejado vermelho + board item highlight
+ *                        azul. Mesma razão — `excludeFromExport: true`,
+ *                        decoração do editor, recriada quando necessário.
+ *
+ * Investigação Onda 18: o "débito CAPI_CUSTOM_PROPS incompleto" anotado no
+ * STATUS-ONDA-17 estava mal-diagnosticado. As flags somem do canvasJson
+ * porque o objeto inteiro não é serializado (intencional via excludeFromExport),
+ * não porque a lista de custom-props está incompleta. Adicionar essas flags
+ * aqui seria no-op: Fabric filtra `_objects.filter(t => !t.excludeFromExport)`
+ * ANTES de aplicar CAPI_CUSTOM_PROPS. Débito retirado.
  */
 export const CAPI_CUSTOM_PROPS = ['id', 'capiSlot'] as const;
 
@@ -49,23 +68,40 @@ export type LayerNode =
       children: LayerNode[];
     }
   | {
-      kind: 'visual' | 'operation';
+      kind: 'visual';
       id: string;
       name: string;
       visible: boolean;
       locked: boolean;
       parentId: string | null;
+    }
+  | {
+      kind: 'operation';
+      id: string;
+      name: string;
+      visible: boolean;
+      locked: boolean;
+      parentId: string | null;
+      /** Onda 15 — operação do banco (corte, gravacao, marcacao, …). */
+      operation: string;
+      /** Onda 15 — ids de máquinas (MB/FB/DL). 1–3 elementos. */
+      machines: string[];
     };
 
 export interface SerializedCanvas {
   version: string;
   objects: Array<Record<string, unknown>>;
   capi: {
-    productId: string;
+    /**
+     * Onda 13 (schemaVersion=3): items da prancha. Pelo menos 1 item.
+     * Padrão master sempre tem 1 item, offsets zerados.
+     */
+    items: CanvasItem[];
     units: 'mm';
     /**
-     * Schema version for LayerMeta format (mirrors FabricCanvasJson.capi.schemaVersion).
-     *   2 = discriminated union (ADR 010 §1, Fase C+). Absent/1 = flat (pre-Fase C).
+     * Schema version for the envelope.
+     *   2 = pre-Onda 13 (envelope tinha capi.productId direto, ADR 010 §1)
+     *   3 = Onda 13 multi-broche (envelope troca productId por items[])
      */
     schemaVersion: number;
     /** LayerMeta array — one entry per user object. Onda 5+. */
@@ -134,8 +170,13 @@ export class CanvasEngine {
    * Per-session HTMLImageElement cache, keyed by materialId.
    * Avoids repeated network / IPC round-trips when the same material is
    * applied to multiple layers or re-applied after removal.
+   *
+   * Onda 15.fix — armazena Promise (não Image resolvido) pra in-flight dedupe:
+   * se 3 layers chamam applyMaterialToLayer com mesmo materialId em paralelo,
+   * só 1 loadImage dispara — os 3 esperam a mesma Promise. Sem isso, race
+   * desperdiça IPC e cria 3 HTMLImageElement temporários.
    */
-  private readonly materialImageCache = new Map<string, HTMLImageElement>();
+  private readonly materialImageCache = new Map<string, Promise<HTMLImageElement>>();
 
   /**
    * Runtime snap options supplied by useSnapToCanvas hook.
@@ -206,8 +247,31 @@ export class CanvasEngine {
   /** Rect de pontos da grade. Null quando grade está oculta. */
   private gridDotsRect: fabric.Rect | null = null;
 
+  /**
+   * Onda 16 — Rect de highlight do broche selecionado na prancha multi-broche.
+   * Outline visual em volta do broche ativo pra operador identificar qual
+   * está editando. Null quando nenhum broche está em foco (pattern editor
+   * single-broche, prancha vazia, etc).
+   * Marca __capiOverlay + excludeFromExport = não vai pro serialize/PNG/SVG.
+   */
+  private boardItemHighlight: fabric.Rect | null = null;
+
   /** Optional callback — set from outside to receive slot selection changes. */
   onSlotSelectionChange?: (id: string | null) => void;
+
+  /**
+   * Optional callback — disparado quando o usuário modifica um slot (drag/scale)
+   * via mouse. Pra UIs que precisam refletir geometria nova sem re-selecionar.
+   * Onda 14c.
+   */
+  onSlotModified?: (id: string) => void;
+
+  /**
+   * Onda 14c — disparado quando qualquer objeto user (não-slot, não-base) é
+   * modificado via mouse. Complementa onSlotModified pro painel de propriedades
+   * funcionar tanto em slots quanto em retângulos decorativos (borda, traços).
+   */
+  onObjectModified?: (id: string) => void;
 
   /**
    * Optional callback — fires whenever the active Fabric selection changes.
@@ -234,7 +298,10 @@ export class CanvasEngine {
     this.slotManager = new SlotManager(
       this.canvas,
       { productWidthMm: config.productWidthMm, productHeightMm: config.productHeightMm },
-      { onSelectionChange: (id) => this.onSlotSelectionChange?.(id) }
+      {
+        onSelectionChange: (id) => this.onSlotSelectionChange?.(id),
+        onSlotModified: (id) => this.onSlotModified?.(id),
+      }
     );
 
     this.centerProductInViewport();
@@ -343,6 +410,15 @@ export class CanvasEngine {
       const id = getCapiId(obj as unknown as Record<string, unknown>);
       if (!id) return;
       const meta = this.layerMeta.get(id);
+
+      // Onda 14c — dispara onObjectModified pra qualquer objeto user que NÃO
+      // seja slot (slots já têm onSlotModified próprio via slot-manager).
+      // Slots têm capiSlot setado no body, então filtramos por isso.
+      const hasCapiSlot = (obj as unknown as Record<string, unknown>).capiSlot !== undefined;
+      if (!hasCapiSlot) {
+        this.onObjectModified?.(id);
+      }
+
       if (!meta || meta.kind !== 'principal') return;
 
       const widthPx = (obj.width ?? 0) * (obj.scaleX ?? 1);
@@ -723,6 +799,76 @@ export class CanvasEngine {
     return new Map(this.layerMeta);
   }
 
+  /**
+   * Onda 15 — encontra o layerId de um aplique principal pelo seu appliqueId
+   * (string opaca passada em addAppliqueSvg, tipicamente `board-item:<itemId>`).
+   * Usado pelo PatternBar pra parentar slots do pattern ao broche correto.
+   */
+  findPrincipalByAppliqueId(appliqueId: string): string | null {
+    for (const [id, meta] of this.layerMeta) {
+      if (meta.kind === 'principal' && meta.appliqueId === appliqueId) {
+        return id;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Onda 16 — desenha (ou move) um outline ao redor do broche ativo na prancha.
+   * Não-selecionável, não-exportável. Passar null remove o highlight.
+   *
+   * @param region  retângulo em mm (origem top-left + size). null = remover.
+   */
+  setActiveBoardHighlight(
+    region: { leftMm: number; topMm: number; widthMm: number; heightMm: number } | null
+  ): void {
+    if (region === null) {
+      if (this.boardItemHighlight) {
+        this.canvas.remove(this.boardItemHighlight);
+        this.boardItemHighlight = null;
+        this.canvas.requestRenderAll();
+      }
+      return;
+    }
+
+    const padPx = mmToPx(0.8); // pequeno offset pra não tampar a borda do broche
+    const left = mmToPx(region.leftMm) - padPx;
+    const top = mmToPx(region.topMm) - padPx;
+    const width = mmToPx(region.widthMm) + padPx * 2;
+    const height = mmToPx(region.heightMm) + padPx * 2;
+
+    if (this.boardItemHighlight) {
+      this.boardItemHighlight.set({ left, top, width, height });
+      this.boardItemHighlight.setCoords();
+      this.canvas.bringObjectToFront(this.boardItemHighlight);
+      this.canvas.requestRenderAll();
+      return;
+    }
+
+    const rect = new fabric.Rect({
+      left,
+      top,
+      width,
+      height,
+      originX: 'left',
+      originY: 'top',
+      fill: 'transparent',
+      stroke: '#7aa2f7', // laser-muted (mesmo tom do focus ring do design system)
+      strokeWidth: 1.5,
+      strokeUniform: true,
+      strokeDashArray: [4, 3],
+      selectable: false,
+      evented: false,
+      hoverCursor: 'default',
+      excludeFromExport: true,
+    });
+    (rect as unknown as Record<string, unknown>).__capiOverlay = true;
+    this.boardItemHighlight = rect;
+    this.canvas.add(rect);
+    this.canvas.bringObjectToFront(rect);
+    this.canvas.requestRenderAll();
+  }
+
   // ─── Layer operations (Onda 7 — painel de camadas) ────────────────────────
 
   /**
@@ -1002,14 +1148,26 @@ export class CanvasEngine {
     // Segundo passe: distribui filhos pros pais ou pra órfãos.
     for (const meta of this.layerMeta.values()) {
       if (meta.kind === 'principal') continue;
-      const node: LeafNode = {
-        kind: meta.kind,
-        id: meta.id,
-        name: meta.name,
-        visible: meta.visible,
-        locked: meta.locked,
-        parentId: meta.parentLayerId ?? null,
-      };
+      const node: LeafNode =
+        meta.kind === 'operation'
+          ? {
+              kind: 'operation',
+              id: meta.id,
+              name: meta.name,
+              visible: meta.visible,
+              locked: meta.locked,
+              parentId: meta.parentLayerId ?? null,
+              operation: meta.operation,
+              machines: meta.machines,
+            }
+          : {
+              kind: 'visual',
+              id: meta.id,
+              name: meta.name,
+              visible: meta.visible,
+              locked: meta.locked,
+              parentId: meta.parentLayerId ?? null,
+            };
       const parent = meta.parentLayerId ? principalById.get(meta.parentLayerId) : undefined;
       if (parent) {
         parent.children.push(node);
@@ -1020,7 +1178,11 @@ export class CanvasEngine {
 
     // Ordena por z-index do canvas (topo do array = z mais alto).
     const byZ = (a: LayerNode, b: LayerNode): number => indexOf(b.id) - indexOf(a.id);
-    principals.sort(byZ);
+    // Onda 15 — principals (broches) usam ordem INVERSA: broche 1 em cima,
+    // broche N embaixo. Operador associa ordem do painel com a ordem da
+    // sidebar esquerda. Children e órfãos mantêm z-order natural (Photoshop).
+    const byZAsc = (a: LayerNode, b: LayerNode): number => indexOf(a.id) - indexOf(b.id);
+    principals.sort(byZAsc);
     for (const p of principals) p.children.sort(byZ);
     orphans.sort(byZ);
 
@@ -1049,15 +1211,31 @@ export class CanvasEngine {
     const w = obj.width ?? 0;
     const h = obj.height ?? 0;
 
+    // DEBUG Onda 18 — bug material dourado→prata.
+    // Log estruturado: entrada da função + estado do cache no momento.
+    // Remove quando bug for resolvido (memory: debt_material_dourado_prata).
+    const cacheHadKey = this.materialImageCache.has(materialId);
+    console.log(
+      `[DEBUG-mat] applyMaterialToLayer(layerId="${layerId}", materialId="${materialId}", ` +
+        `urlTail="${assetUrl.split('/').slice(-2).join('/')}", cacheHit=${cacheHadKey}, ` +
+        `cacheKeys=[${Array.from(this.materialImageCache.keys()).join(',')}])`
+    );
+
     // Cached loader: reuse the HTMLImageElement for the same materialId
     // across calls within a session (avoids repeated IPC / network round-trips).
     // Cache key is materialId — stable across Tauri asset-URL regeneration.
-    const cachedLoader = async (url: string): Promise<HTMLImageElement> => {
+    // Onda 15.fix — dedupe in-flight: cache armazena Promise, não Image.
+    // Chamadas paralelas pro mesmo materialId compartilham a mesma load.
+    const cachedLoader = (url: string): Promise<HTMLImageElement> => {
       const hit = this.materialImageCache.get(materialId);
       if (hit) return hit;
-      const img = await loadImage(url);
-      this.materialImageCache.set(materialId, img);
-      return img;
+      const promise = loadImage(url).catch((err) => {
+        // Se o load falhar, remove do cache — próxima tentativa pode succeder.
+        this.materialImageCache.delete(materialId);
+        throw err;
+      });
+      this.materialImageCache.set(materialId, promise);
+      return promise;
     };
 
     const pattern = await buildMaterialPattern(assetUrl, w, h, cachedLoader);
@@ -1097,12 +1275,18 @@ export class CanvasEngine {
     const w = mmToPx(this.config.productWidthMm);
     const h = mmToPx(this.config.productHeightMm);
 
-    const cachedLoader = async (url: string): Promise<HTMLImageElement> => {
+    // Onda 15.fix — dedupe in-flight: cache armazena Promise, não Image.
+    // Chamadas paralelas pro mesmo materialId compartilham a mesma load.
+    const cachedLoader = (url: string): Promise<HTMLImageElement> => {
       const hit = this.materialImageCache.get(materialId);
       if (hit) return hit;
-      const img = await loadImage(url);
-      this.materialImageCache.set(materialId, img);
-      return img;
+      const promise = loadImage(url).catch((err) => {
+        // Se o load falhar, remove do cache — próxima tentativa pode succeder.
+        this.materialImageCache.delete(materialId);
+        throw err;
+      });
+      this.materialImageCache.set(materialId, promise);
+      return promise;
     };
 
     const pattern = await buildMaterialPattern(assetUrl, w, h, cachedLoader);
@@ -1202,19 +1386,23 @@ export class CanvasEngine {
    * @param entries  Array of { id: materialId, url: resolved asset URL }
    */
   async preloadMaterials(entries: Array<{ id: string; url: string }>): Promise<void> {
-    await Promise.all(
-      entries.map(async ({ id, url }) => {
-        if (this.materialImageCache.has(id)) return; // already cached
-        try {
-          const img = await loadImage(url);
-          this.materialImageCache.set(id, img);
-        } catch (err) {
-          if (import.meta.env.DEV) {
-            console.warn(`[canvas-engine] preloadMaterials: failed to load "${id}":`, err);
-          }
+    // Onda 15.fix — cache armazena Promise pra in-flight dedupe; preload registra
+    // a promise direto e await coletivo no final.
+    const promises: Array<Promise<HTMLImageElement | null>> = entries.map(({ id, url }) => {
+      if (this.materialImageCache.has(id)) {
+        return this.materialImageCache.get(id)!.catch(() => null);
+      }
+      const p = loadImage(url).catch((err) => {
+        if (import.meta.env.DEV) {
+          console.warn(`[canvas-engine] preloadMaterials: failed to load "${id}":`, err);
         }
-      })
-    );
+        this.materialImageCache.delete(id);
+        throw err;
+      });
+      this.materialImageCache.set(id, p);
+      return p.catch(() => null);
+    });
+    await Promise.all(promises);
   }
 
   /**
@@ -1381,12 +1569,24 @@ export class CanvasEngine {
    * If the applique is larger than the product, left/top go negative — this is
    * intentional (applique extravasates the product boundary by design).
    *
+   * Onda 13.6: aceita `position` opcional pra colocar o aplique em coordenada
+   * absoluta (em mm). Usado pelo editor multi-broche: cada broche entra
+   * empilhado no offset Y certo, ignorando centragem. Quando `position` é
+   * omitido, mantém comportamento clássico (centra no produto).
+   *
    * @param meta       Parsed CorelSvgMeta (from parseCorelSvg)
    * @param name       Human-readable layer name shown in the layers panel
    * @param appliqueId FK → appliques.id in the local database
+   * @param position   Onda 13.6 — quando informado, pula centragem e usa
+   *                   (leftMm, topMm) absolutos no canvas.
    * @returns          Stable capi id of the created layer
    */
-  async addAppliqueSvg(meta: CorelSvgMeta, name: string, appliqueId: string): Promise<string> {
+  async addAppliqueSvg(
+    meta: CorelSvgMeta,
+    name: string,
+    appliqueId: string,
+    position?: { leftMm: number; topMm: number }
+  ): Promise<string> {
     const { objects } = await fabric.loadSVGFromString(meta.svgStripped);
     const validObjects = objects.filter((o): o is fabric.FabricObject => o !== null);
     if (validObjects.length === 0) {
@@ -1405,9 +1605,11 @@ export class CanvasEngine {
     const scaleX = meta.scaleFactor;
     const scaleY = mmToPx(meta.heightMm) / meta.viewBoxH;
 
-    // R3: literal centering — applique may extravasate when larger than product.
-    const left = mmToPx((this.config.productWidthMm - meta.widthMm) / 2);
-    const top = mmToPx((this.config.productHeightMm - meta.heightMm) / 2);
+    // Onda 13.6 — quando `position` é passado, pula centragem.
+    const leftMm = position ? position.leftMm : (this.config.productWidthMm - meta.widthMm) / 2;
+    const topMm = position ? position.topMm : (this.config.productHeightMm - meta.heightMm) / 2;
+    const left = mmToPx(leftMm);
+    const top = mmToPx(topMm);
 
     group.set({ left, top, originX: 'left', originY: 'top', scaleX, scaleY });
 
@@ -1428,12 +1630,9 @@ export class CanvasEngine {
       materialId: null,
       appliqueId,
       // Mini-Onda 8.6: bounds autoritativos do viewBox SVG (ADR 005).
-      // left/top vêm do cálculo de centragem (em mm, sem passar pelo Fabric).
-      // width/height vêm direto de meta.widthMm/heightMm do parseCorelSvg
-      // (que lê do header width="Xmm" do SVG). Sem erro de margem.
       originalBounds: {
-        left: (this.config.productWidthMm - meta.widthMm) / 2,
-        top: (this.config.productHeightMm - meta.heightMm) / 2,
+        left: leftMm,
+        top: topMm,
         width: meta.widthMm,
         height: meta.heightMm,
       },
@@ -1699,6 +1898,109 @@ export class CanvasEngine {
     return this.slotManager.getSlotsByType(type);
   }
 
+  /** Returns all SlotMeta objects (any type, read-only snapshot). Onda 14c. */
+  listAllSlots(): SlotMeta[] {
+    return this.slotManager.listSlots();
+  }
+
+  /** Returns the SlotMeta for the given id, or undefined. Onda 14c. */
+  getSlot(id: string): SlotMeta | undefined {
+    return this.slotManager.getSlot(id);
+  }
+
+  /**
+   * Onda 20.C — seleciona um objeto no canvas pelo id capi. Usado pelos
+   * atalhos de canvas (Tab/Shift+Tab) pra focar o próximo slot do broche
+   * ativo. Usa `findByCapiId` (não `findById`) pra resolver slots cujo id
+   * mora em `capiSlot.id`, não em `obj.id`. Retorna true se achou.
+   */
+  selectById(id: string): boolean {
+    const obj = this.findByCapiId(id);
+    if (!obj) return false;
+    this.canvas.setActiveObject(obj);
+    this.canvas.requestRenderAll();
+    return true;
+  }
+
+  /**
+   * Updates a slot's geometry/meta. Patch is partial — only the keys present
+   * are applied. Onda 14c — usado pelo painel de propriedades.
+   */
+  updateSlot(id: string, patch: Partial<Omit<SlotMeta, 'id' | 'type'>>): SlotMeta {
+    return this.slotManager.updateSlot(id, patch);
+  }
+
+  /**
+   * Onda 14c — geometria em mm pra qualquer objeto user (slot OU rect decorativo).
+   * Retorna null se objeto não encontrado.
+   */
+  getObjectGeometryMm(id: string): { x: number; y: number; width: number; height: number } | null {
+    // Slot tem geometria autoritativa no SlotMeta — usa isso pra precisão.
+    const slot = this.slotManager.getSlot(id);
+    if (slot) {
+      return { x: slot.x, y: slot.y, width: slot.maxWidth, height: slot.maxHeight };
+    }
+    // Objetos genéricos: lê direto do fabric object.
+    const obj = this.canvas.getObjects().find((o) => {
+      if (isBaseObject(o)) return false;
+      return (o as unknown as Record<string, unknown>).id === id;
+    });
+    if (!obj) return null;
+    return {
+      x: pxToMm(obj.left ?? 0),
+      y: pxToMm(obj.top ?? 0),
+      width: pxToMm((obj.width ?? 0) * (obj.scaleX ?? 1)),
+      height: pxToMm((obj.height ?? 0) * (obj.scaleY ?? 1)),
+    };
+  }
+
+  /**
+   * Onda 14c — escreve geometria em mm pra qualquer objeto user.
+   * Patch parcial; mantém escala em 1 (mexe direto em width/height).
+   */
+  setObjectGeometryMm(
+    id: string,
+    patch: { x?: number; y?: number; width?: number; height?: number }
+  ): void {
+    // Se é slot, delega.
+    if (this.slotManager.getSlot(id)) {
+      const slotPatch: Partial<SlotMeta> = {};
+      if (patch.x !== undefined) slotPatch.x = patch.x;
+      if (patch.y !== undefined) slotPatch.y = patch.y;
+      if (patch.width !== undefined) slotPatch.maxWidth = patch.width;
+      if (patch.height !== undefined) slotPatch.maxHeight = patch.height;
+      this.slotManager.updateSlot(id, slotPatch);
+      return;
+    }
+    const obj = this.canvas.getObjects().find((o) => {
+      if (isBaseObject(o)) return false;
+      return (o as unknown as Record<string, unknown>).id === id;
+    });
+    if (!obj) return;
+    const update: Partial<{
+      left: number;
+      top: number;
+      width: number;
+      height: number;
+      scaleX: number;
+      scaleY: number;
+    }> = {};
+    if (patch.x !== undefined) update.left = mmToPx(patch.x);
+    if (patch.y !== undefined) update.top = mmToPx(patch.y);
+    if (patch.width !== undefined) {
+      update.width = mmToPx(patch.width);
+      update.scaleX = 1;
+    }
+    if (patch.height !== undefined) {
+      update.height = mmToPx(patch.height);
+      update.scaleY = 1;
+    }
+    obj.set(update);
+    obj.setCoords();
+    this.canvas.requestRenderAll();
+    this.onObjectModified?.(id);
+  }
+
   /**
    * Lê texto atual de um slot. Delegação pro SlotManager.getSlotText.
    * Onda 9.F (auto-fill dialog export PNG) + reuso futuro pela Onda 11.
@@ -1720,11 +2022,14 @@ export class CanvasEngine {
   /**
    * Loads an SVG string into the first logo slot, scaled and centred.
    * No-op if no logo slot exists.
+   *
+   * @param logoId Onda 14b — id do banco `logos` quando o SVG vem de upload
+   *               persistido. Guardado no capiSlot pra reabertura.
    */
-  async fillLogoSlot(svgString: string): Promise<void> {
+  async fillLogoSlot(svgString: string, logoId?: string): Promise<void> {
     const slots = this.slotManager.getSlotsByType('logo');
     if (slots.length === 0) return;
-    await this.slotManager.addLogo(slots[0].id, svgString);
+    await this.slotManager.addLogo(slots[0].id, svgString, logoId);
   }
 
   /**
@@ -2103,7 +2408,12 @@ export class CanvasEngine {
    * Both are restored on the live canvas immediately after the snapshot, so
    * `serialize()` has zero side-effects on the visible canvas state.
    */
-  serialize(productId: string): SerializedCanvas {
+  /**
+   * Onda 13: assinatura mudou de `serialize(productId)` para `serialize(items)`.
+   * Caller passa o array completo de items da prancha (cada um com productId +
+   * offsetX/offsetY). Padrão (master) sempre passa 1 item com offsets zerados.
+   */
+  serialize(items: CanvasItem[]): SerializedCanvas {
     // Ensure user objects have ids.
     // Fase C: pula `excludeFromExport: true` (snap guides, slot overlays sem id)
     // — eles não vão pro toJSON e não devem receber id parasita aqui.
@@ -2164,12 +2474,318 @@ export class CanvasEngine {
       version: json.version,
       objects: json.objects,
       capi: {
-        productId,
+        items,
         units: 'mm',
-        schemaVersion: 2,
+        schemaVersion: 3,
         layers,
       },
     };
+  }
+
+  /**
+   * Onda 14 — remove todos os objetos dentro da região de um broche, EXCETO o
+   * próprio aplique base (board-item:*). Usado pra "limpar o broche" antes de
+   * aplicar um pattern novo (caso contrário o novo pattern empilharia sobre o
+   * antigo).
+   *
+   * Critério de inclusão: o centro do objeto Fabric cai dentro do retângulo
+   * (offsetX, offsetY, offsetX + sizeWidth, offsetY + sizeHeight) em mm.
+   *
+   * @param keepAppliqueId  appliqueId do aplique base do broche que NÃO deve
+   *                        ser removido (tipicamente `board-item:<itemId>`).
+   * @param offsetMm        canto superior-esquerdo do broche na prancha (mm)
+   * @param sizeMm          tamanho do broche (mm)
+   * @returns               quantidade de objetos removidos
+   */
+  removeItemContents(
+    keepAppliqueId: string,
+    offsetMm: { leftMm: number; topMm: number },
+    sizeMm: { widthMm: number; heightMm: number }
+  ): number {
+    const left = mmToPx(offsetMm.leftMm);
+    const top = mmToPx(offsetMm.topMm);
+    const right = mmToPx(offsetMm.leftMm + sizeMm.widthMm);
+    const bottom = mmToPx(offsetMm.topMm + sizeMm.heightMm);
+
+    const toRemove: fabric.FabricObject[] = [];
+    const idsToRemove: string[] = [];
+
+    for (const obj of this.canvas.getObjects()) {
+      if (isBaseObject(obj)) continue;
+      const rec = obj as unknown as Record<string, unknown>;
+      const objId = typeof rec.id === 'string' ? rec.id : null;
+
+      // Não remove o aplique base do broche. (só checado quando o objeto tem id)
+      if (objId) {
+        const meta = this.layerMeta.get(objId);
+        if (meta && meta.kind === 'principal' && meta.appliqueId === keepAppliqueId) continue;
+      }
+
+      // Centro do objeto em px (left+width/2, top+height/2 já em coords absolutas).
+      // Objetos sem id (slot content de texto/logo criado pelo SlotManager) também
+      // são removidos — eles ficam órfãos quando o slot pai é apagado.
+      const objLeft = Number(obj.left ?? 0);
+      const objTop = Number(obj.top ?? 0);
+      const objW = Number(obj.width ?? 0) * Number(obj.scaleX ?? 1);
+      const objH = Number(obj.height ?? 0) * Number(obj.scaleY ?? 1);
+      const cx = objLeft + objW / 2;
+      const cy = objTop + objH / 2;
+
+      if (cx >= left && cx <= right && cy >= top && cy <= bottom) {
+        toRemove.push(obj);
+        if (objId) idsToRemove.push(objId);
+      }
+    }
+
+    for (const obj of toRemove) this.canvas.remove(obj);
+    for (const id of idsToRemove) this.layerMeta.delete(id);
+
+    // Slot manager precisa atualizar sua estrutura interna (slots removidos).
+    this.slotManager.loadSlotsFromCanvas();
+    this.canvas.requestRenderAll();
+    return toRemove.length;
+  }
+
+  /**
+   * Onda 13.9 — aplica o conteúdo de um Pattern em cima de um broche da prancha.
+   *
+   * Diferente de `deserialize`, NÃO limpa o canvas. Pega os objetos do pattern
+   * (serializado como um canvas single-product) e ADICIONA ao canvas atual,
+   * deslocados por `offsetMm` (em mm) — coordenadas locais do pattern viram
+   * absolutas na prancha.
+   *
+   * IDs dos objetos são regenerados pra evitar colisão com layers existentes.
+   * LayerMeta correspondente também é registrado.
+   *
+   * Materiais aplicados aos objetos do pattern são re-aplicados via resolveUrl
+   * (mesmo contrato de `deserialize`).
+   *
+   * @param data       Pattern canvasJson parseado (`{version, objects, capi}`)
+   * @param offsetMm   Deslocamento (em mm) aplicado a cada objeto enlivenado.
+   *                   Tipicamente o offset do broche ativo na prancha.
+   * @param resolveUrl Async resolver materialId → URL (igual ao de deserialize).
+   * @param parentLayerId  Onda 15 — quando informado, layers do pattern que
+   *                   vinham com parentLayerId=null serão re-parented pra este
+   *                   id. Tipicamente o layerId do aplique base do broche
+   *                   (board-item:<id>) — agrupa os slots dentro do broche
+   *                   no painel de camadas, em vez de deixá-los soltos.
+   * @param clampToRegion  Onda 16 — quando informado, **filtra fora** objetos
+   *                   cujo centro cai fora deste retângulo (mm) e clampa
+   *                   coords dos que entraram. Anti-vazamento em multi-broche:
+   *                   garante que slots do pattern nunca apareçam no broche
+   *                   vizinho por bug de offset/coordenada.
+   * @returns          Array de ids capi dos objetos adicionados.
+   */
+  async applyPatternObjects(
+    data: SerializedCanvas,
+    offsetMm: { leftMm: number; topMm: number },
+    resolveUrl?: (materialId: string) => Promise<string>,
+    parentLayerId?: string,
+    clampToRegion?: { leftMm: number; topMm: number; widthMm: number; heightMm: number }
+  ): Promise<string[]> {
+    if (!data.objects || data.objects.length === 0) return [];
+
+    const enlivened = await fabric.util.enlivenObjects<fabric.FabricObject>(data.objects);
+    const offsetLeftPx = mmToPx(offsetMm.leftMm);
+    const offsetTopPx = mmToPx(offsetMm.topMm);
+
+    // Onda 15.fix — pré-mapeia layerId → LayerMeta do pattern, ignorando principal
+    // (esse é o "broche" do editor de padrões; no destino o broche real já existe).
+    // Tudo que NÃO está nesse mapa é considerado "órfão" — vamos criar LayerMeta
+    // default visual pra cada um, garantindo que toda peça seja gerenciável no
+    // painel de camadas (princípio: nada existe no canvas sem entry em layerMeta).
+    const patternLayerById = new Map<string, LayerMeta>();
+    // Onda 16.fix — também rastreamos os IDs dos layers principal do pattern
+    // que foram pulados. Slots cujo parentLayerId original aponta pra um
+    // desses precisam ser RE-PARENTED pro parentLayerId externo (broche-alvo),
+    // não pro newId mapeado (que não tem LayerMeta correspondente → órfão).
+    const patternPrincipalIds = new Set<string>();
+    for (const layer of data.capi?.layers ?? []) {
+      if (layer.kind === 'principal') {
+        patternPrincipalIds.add(layer.id);
+        continue;
+      }
+      patternLayerById.set(layer.id, layer);
+    }
+
+    // Mapa oldId → newId pra restaurar LayerMeta com referência correta.
+    const idMap = new Map<string, string>();
+    const newIds: string[] = [];
+
+    // Onda 16 — região-alvo em PX absolutas pra clamping.
+    // Se clampToRegion informado: objetos com centro fora da região são
+    // DESCARTADOS (não adicionados ao canvas). Anti-vazamento em multi-broche.
+    const region = clampToRegion
+      ? {
+          left: mmToPx(clampToRegion.leftMm),
+          top: mmToPx(clampToRegion.topMm),
+          right: mmToPx(clampToRegion.leftMm + clampToRegion.widthMm),
+          bottom: mmToPx(clampToRegion.topMm + clampToRegion.heightMm),
+        }
+      : null;
+
+    let droppedCount = 0;
+    for (let i = 0; i < enlivened.length; i++) {
+      const obj = enlivened[i];
+      const rec = obj as unknown as Record<string, unknown>;
+      const oldId = typeof rec.id === 'string' ? rec.id : null;
+
+      // Onda 16.fix — pula objeto cujo id corresponde a um PRINCIPAL do pattern.
+      // Esse "objeto principal" é o aplique base do broche dentro do editor de
+      // padrões. No destino (broche da prancha), já existe um aplique base
+      // próprio — adicionar mais um seria duplicação visual + órfão no painel.
+      if (oldId && patternPrincipalIds.has(oldId)) {
+        continue;
+      }
+
+      const newId = generateObjectId();
+      rec.id = newId;
+
+      // Calcula posição final em px (com offset aplicado).
+      const finalLeft = (obj.left ?? 0) + offsetLeftPx;
+      const finalTop = (obj.top ?? 0) + offsetTopPx;
+
+      // Onda 16 — Filtro de região: se centro do objeto não cai dentro da
+      // região-alvo, **descarta** o objeto (não adiciona ao canvas, não
+      // cria LayerMeta, não conta como newId). Evita slots vazarem pro
+      // broche vizinho quando o pattern tem objetos extrapolando 60×25.
+      if (region) {
+        const objW = (obj.width ?? 0) * (obj.scaleX ?? 1);
+        const objH = (obj.height ?? 0) * (obj.scaleY ?? 1);
+        const cx = finalLeft + objW / 2;
+        const cy = finalTop + objH / 2;
+        const outOfRegion =
+          cx < region.left || cx > region.right || cy < region.top || cy > region.bottom;
+        if (outOfRegion) {
+          droppedCount++;
+          if (import.meta.env.DEV) {
+            console.warn(
+              `[canvas-engine] applyPatternObjects: objeto descartado (fora da região-alvo)`,
+              {
+                oldId,
+                cx,
+                cy,
+                region,
+              }
+            );
+          }
+          continue;
+        }
+      }
+
+      if (oldId) idMap.set(oldId, newId);
+      newIds.push(newId);
+
+      obj.set({ left: finalLeft, top: finalTop });
+
+      // Onda 16.fix — CRÍTICO: se o objeto carrega capiSlot, atualizar x/y
+      // pra refletir a posição absoluta (em mm) após o offset.
+      // Sem isso, o overlay tracejado criado depois por loadSlotsFromCanvas
+      // usa meta.x/y antigas (coord local do pattern) e fica no broche errado
+      // — caso clássico de "slot apareceu no broche 1 mesmo aplicando no 2".
+      const slotMeta = getCapiSlot(obj);
+      if (slotMeta) {
+        const updatedMeta: SlotMeta = {
+          ...slotMeta,
+          // ⚠️ ID precisa também ser atualizado pra o newId (capiSlot.id é
+          // usado por loadSlotsFromCanvas pra mapear body → slot interno).
+          id: newId,
+          x: pxToMm(finalLeft),
+          y: pxToMm(finalTop),
+          maxWidth: pxToMm((obj.width ?? 0) * (obj.scaleX ?? 1)),
+          maxHeight: pxToMm((obj.height ?? 0) * (obj.scaleY ?? 1)),
+        };
+        setCapiSlot(obj, updatedMeta);
+      }
+
+      this.canvas.add(obj);
+    }
+    if (region && droppedCount > 0 && import.meta.env.DEV) {
+      console.warn(
+        `[canvas-engine] applyPatternObjects: ${droppedCount} objetos descartados por estarem fora da região-alvo`
+      );
+    }
+
+    // Importa LayerMeta correspondentes (pulando principal — já filtrado acima).
+    for (const layer of patternLayerById.values()) {
+      const newId = idMap.get(layer.id);
+      if (!newId) continue;
+      const newLayer: LayerMeta = { ...layer, id: newId };
+
+      // Onda 16.fix — Resolve parentLayerId em ordem de prioridade:
+      // 1. Se layer.parentLayerId apontava pra um PRINCIPAL DO PATTERN (que foi
+      //    pulado), re-parent pro parentLayerId externo (broche-alvo na prancha).
+      //    SEM ISSO: parentLayerId aponta pra um id sem LayerMeta → slot vira
+      //    órfão no painel (caso que vc viu: slots fora do agrupamento do broche).
+      // 2. Se layer.parentLayerId apontava pra OUTRO LAYER NÃO-PRINCIPAL do
+      //    pattern (grupo aninhado), remapeia pro newId mapeado.
+      // 3. Se layer.parentLayerId era null (slot solto no pattern), usa
+      //    parentLayerId externo se informado.
+      // 4. Fallback: limpa pra null.
+      if (layer.parentLayerId && patternPrincipalIds.has(layer.parentLayerId)) {
+        (newLayer as unknown as { parentLayerId: string | null }).parentLayerId =
+          parentLayerId ?? null;
+      } else if (layer.parentLayerId && idMap.has(layer.parentLayerId)) {
+        (newLayer as unknown as { parentLayerId: string }).parentLayerId = idMap.get(
+          layer.parentLayerId
+        )!;
+      } else if (parentLayerId) {
+        (newLayer as unknown as { parentLayerId: string | null }).parentLayerId = parentLayerId;
+      } else if (layer.parentLayerId) {
+        (newLayer as unknown as { parentLayerId: string | null }).parentLayerId = null;
+      }
+      this.layerMeta.set(newId, newLayer);
+    }
+
+    // Onda 15.fix — pra cada object adicionado SEM LayerMeta correspondente
+    // (órfão: estava no canvasJson mas faltava entry em capi.layers), criamos
+    // VisualLayerMeta default. Garante invariante: todo objeto user visível
+    // no canvas tem entry em layerMeta → aparece no painel, é gerenciável,
+    // não desaparece no próximo serialize.
+    for (const newId of newIds) {
+      if (this.layerMeta.has(newId)) continue;
+      const orphanMeta: VisualLayerMeta = {
+        id: newId,
+        parentLayerId: parentLayerId ?? null,
+        name: 'Forma',
+        zIndex: this.canvas.getObjects().length - 1,
+        visible: true,
+        locked: false,
+        kind: 'visual',
+        materialId: null,
+      };
+      this.layerMeta.set(newId, orphanMeta);
+    }
+
+    this.slotManager.loadSlotsFromCanvas();
+
+    // Re-aplica materiais.
+    if (resolveUrl) {
+      await Promise.all(
+        Array.from(this.layerMeta.entries())
+          .filter(([id]) => newIds.includes(id))
+          .filter(
+            ([, meta]) => !isOperationLayer(meta) && (meta as VisualLayerMeta).materialId !== null
+          )
+          .map(async ([id, meta]) => {
+            const materialId = (meta as VisualLayerMeta).materialId!;
+            try {
+              const url = await resolveUrl(materialId);
+              await this.applyMaterialToLayer(id, materialId, url);
+            } catch (err) {
+              if (import.meta.env.DEV) {
+                console.warn(
+                  `[canvas-engine] applyPatternObjects: failed to apply material ${materialId}:`,
+                  err
+                );
+              }
+            }
+          })
+      );
+    }
+
+    this.canvas.requestRenderAll();
+    return newIds;
   }
 
   /**
@@ -2240,6 +2856,22 @@ export class CanvasEngine {
     // Sem isso, animation frames pendentes podem disparar callbacks em um canvas
     // já disposed (acessando this.canvas.remove / renderAll com state inválido).
     this.cancelFadeAnimations();
+
+    // Onda 15.fix — limpa estado interno antes de descartar o canvas.
+    //  - Callbacks externos: zera pra quebrar referência a closures de componentes
+    //    React desmontados (evita GC retido).
+    //  - SlotManager: remove seus listeners do canvas.
+    //  - materialImageCache: HTMLImageElements ocupam memória; clear permite GC.
+    //  - layerMeta: snapshot de estado, sem necessidade após dispose.
+    this.onSlotSelectionChange = undefined;
+    this.onSlotModified = undefined;
+    this.onObjectModified = undefined;
+    this.onLayerSelectionChange = undefined;
+    this.slotManager.dispose();
+    this.materialImageCache.clear();
+    this.layerMeta.clear();
+    this.snapOptions = null;
+
     void this.canvas.dispose();
   }
 
