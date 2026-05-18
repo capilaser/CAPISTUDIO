@@ -39,6 +39,7 @@ import { approveLatestRevision } from '@/data/repositories/revisionRepository';
 import { useCanvasStore } from '@/stores/canvas-store';
 import { getProductById } from '@/data/repositories/productRepository';
 import { computeChapas } from '@/hooks/useBoardEngine';
+import { buildChapaExportInfos } from '@/core/export/chapa-export-info';
 import { useOrderShortcuts } from '@/hooks/useOrderShortcuts';
 import { useCanvasShortcuts } from '@/hooks/useCanvasShortcuts';
 import AppLayout from '@/ui/layout/AppLayout';
@@ -105,19 +106,25 @@ export default function NovoPedidoPage() {
 
   // Onda 14 — cache de dims dos produtos pra calcular offset do broche ativo.
   const [productDims, setProductDims] = useState<
-    Record<string, { widthMm: number; heightMm: number }>
+    Record<string, { widthMm: number; heightMm: number; label: string }>
   >({});
   useEffect(() => {
     let cancelled = false;
     async function loadDims() {
       const missing = boardItems.filter((it) => it.productId && !productDims[it.productId]);
       if (missing.length === 0) return;
-      const fresh: Record<string, { widthMm: number; heightMm: number }> = {};
+      const fresh: Record<string, { widthMm: number; heightMm: number; label: string }> = {};
       for (const it of missing) {
         try {
           const p = await getProductById(it.productId);
           if (cancelled) return;
-          if (p) fresh[it.productId] = { widthMm: p.canvasMm.width, heightMm: p.canvasMm.height };
+          if (p) {
+            fresh[it.productId] = {
+              widthMm: p.canvasMm.width,
+              heightMm: p.canvasMm.height,
+              label: p.label || p.id,
+            };
+          }
         } catch {
           /* ignora — offset cai pra (0,0) */
         }
@@ -183,6 +190,26 @@ export default function NovoPedidoPage() {
       rightPx: maxRightMm * MM_TO_PX,
       bottomPx: maxBottomMm * MM_TO_PX,
     };
+  }, [boardItems, productDims]);
+
+  // Onda 27 (Fase C) — descritores de export por chapa. Quando 2+ chapas,
+  // os dialogs de export iteram e geram 1 arquivo por chapa.
+  // Quando 1 chapa, infos.length === 1 — dialog detecta como single-chapa e
+  // mantém comportamento legado (1 arquivo, sem token de chapa no filename).
+  const chapaInfos = useMemo(() => {
+    if (boardItems.length === 0) return [];
+    const allDimsReady = boardItems.every((it) => productDims[it.productId]);
+    if (!allDimsReady) return [];
+    const itemsForChapas = boardItems.map((it) => {
+      const d = productDims[it.productId]!;
+      return { productId: it.productId, widthMm: d.widthMm, heightMm: d.heightMm };
+    });
+    const layout = computeChapas(itemsForChapas);
+    const labelMap = new Map<string, string>();
+    for (const [pid, d] of Object.entries(productDims)) {
+      labelMap.set(pid, d.label);
+    }
+    return buildChapaExportInfos(layout, labelMap);
   }, [boardItems, productDims]);
 
   // Sidebar esquerda → broche ativo. Onda 26c: o aplique-base do broche é
@@ -701,6 +728,7 @@ export default function NovoPedidoPage() {
         getEngine={() => engineRef.current}
         boardBounds={boardBoundsPx}
         boardItemCount={boardItems.length}
+        chapaInfos={chapaInfos}
         onClose={() => setPngDialogOpen(false)}
       />
 

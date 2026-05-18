@@ -18,6 +18,7 @@ import { open as openFolderPicker } from '@tauri-apps/plugin-dialog';
 import { toast } from 'sonner';
 
 import type { CanvasEngine } from '@/core/canvas/canvas-engine';
+import type { ChapaExportInfo } from '@/core/export/chapa-export-info';
 import { exportPngMockup, type PngBoundingBoxPx } from '@/core/export/png-exporter';
 import { buildPngFilename, getDefaultExportFolder, savePng } from '@/services/png-export-service';
 import { makeTauriIO } from '@/services/tauri-io';
@@ -63,6 +64,12 @@ interface ExportPngDialogProps {
    * prefixo `lote_Nx_`. Default 1.
    */
   boardItemCount?: number;
+  /**
+   * Onda 27 (Fase C) — chapas do pedido. Quando 2+, o dialog gera N PNGs
+   * (um por chapa), cada um com filename ganhando o token da chapa. Quando
+   * 0 ou 1, comportamento legado: 1 arquivo único (`boardBounds` clipa).
+   */
+  chapaInfos?: ChapaExportInfo[];
 }
 
 /** Lê o texto do PRIMEIRO slot do tipo dado. Retorna '' se não houver. */
@@ -84,15 +91,21 @@ export function ExportPngDialog({
   onClose,
   boardBounds = null,
   boardItemCount = 1,
+  chapaInfos = [],
 }: ExportPngDialogProps) {
+  // Onda 27 — se há 2+ chapas, exportamos por chapa. Senão, comportamento
+  // legado (1 arquivo único com clientBounds = boardBounds).
+  const multiChapa = chapaInfos.length >= 2;
   const [cliente, setCliente] = useState('');
   const [profissao, setProfissao] = useState('');
   const [folder, setFolder] = useState('');
   const [exporting, setExporting] = useState(false);
 
   // Onda 17 — preview do mockup.
+  // Onda 27 — em multi-chapa, mantemos N preview URLs (paralelo a chapaInfos).
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewUrls, setPreviewUrls] = useState<Array<string | null>>([]);
 
   // io é estável durante o ciclo de vida do dialog. useRef evita criar
   // adapter novo em todo render.
@@ -126,9 +139,25 @@ export function ExportPngDialog({
 
   // Nome do arquivo gerado em tempo real conforme digita.
   // Onda 17 — inclui data (now) + prefixo lote_Nx_ quando aplicável.
+  // Onda 27 — em multi-chapa: gera 1 nome por chapa com chapaToken no infixo.
   const filename = useMemo(
     () => buildPngFilename({ cliente, profissao, boardItemCount }),
     [cliente, profissao, boardItemCount]
+  );
+  const filenamesByChapa = useMemo(
+    () =>
+      multiChapa
+        ? chapaInfos.map((c) => ({
+            chapa: c,
+            filename: buildPngFilename({
+              cliente,
+              profissao,
+              boardItemCount,
+              chapaToken: c.filenameToken,
+            }),
+          }))
+        : [],
+    [multiChapa, chapaInfos, cliente, profissao, boardItemCount]
   );
 
   // ── Onda 17 — Preview thumbnail ─────────────────────────────────────────
@@ -145,12 +174,15 @@ export function ExportPngDialog({
           if (prev) URL.revokeObjectURL(prev);
           return null;
         });
+        setPreviewUrls((prev) => {
+          for (const u of prev) if (u) URL.revokeObjectURL(u);
+          return [];
+        });
       });
       return;
     }
 
     let cancelled = false;
-    let currentBlobUrl: string | null = null;
 
     const timer = setTimeout(() => {
       if (cancelled) return;
@@ -162,22 +194,48 @@ export function ExportPngDialog({
         try {
           const layers = Array.from(engine.getAllLayerMetas().values());
           const marginPx = mmToCanvasPx(MOCKUP_MARGIN_MM);
-          const bytes = await exportPngMockup(engine.canvas, {
-            layers,
-            dpi: PREVIEW_DPI,
-            backgroundColor: MOCKUP_BACKGROUND,
-            shadow: true,
-            marginPx,
-            clientBounds: boardBounds ?? undefined,
-          });
-          if (cancelled) return;
-          const blob = new Blob([bytes], { type: 'image/png' });
-          const url = URL.createObjectURL(blob);
-          currentBlobUrl = url;
-          setPreviewUrl((prev) => {
-            if (prev) URL.revokeObjectURL(prev);
-            return url;
-          });
+
+          if (multiChapa) {
+            // Onda 27 — gera 1 preview por chapa (clientBounds da chapa).
+            const urls: Array<string | null> = [];
+            for (const info of chapaInfos) {
+              try {
+                const bytes = await exportPngMockup(engine.canvas, {
+                  layers,
+                  dpi: PREVIEW_DPI,
+                  backgroundColor: MOCKUP_BACKGROUND,
+                  shadow: true,
+                  marginPx,
+                  clientBounds: info.bboxPx,
+                });
+                if (cancelled) return;
+                const blob = new Blob([bytes], { type: 'image/png' });
+                urls.push(URL.createObjectURL(blob));
+              } catch {
+                urls.push(null);
+              }
+            }
+            setPreviewUrls((prev) => {
+              for (const u of prev) if (u) URL.revokeObjectURL(u);
+              return urls;
+            });
+          } else {
+            const bytes = await exportPngMockup(engine.canvas, {
+              layers,
+              dpi: PREVIEW_DPI,
+              backgroundColor: MOCKUP_BACKGROUND,
+              shadow: true,
+              marginPx,
+              clientBounds: boardBounds ?? undefined,
+            });
+            if (cancelled) return;
+            const blob = new Blob([bytes], { type: 'image/png' });
+            const url = URL.createObjectURL(blob);
+            setPreviewUrl((prev) => {
+              if (prev) URL.revokeObjectURL(prev);
+              return url;
+            });
+          }
         } catch (err) {
           if (!cancelled && import.meta.env.DEV) {
             console.warn('[ExportPngDialog] preview falhou:', err);
@@ -191,12 +249,8 @@ export function ExportPngDialog({
     return () => {
       cancelled = true;
       clearTimeout(timer);
-      // Não revoga `currentBlobUrl` aqui — o setPreviewUrl substitui e
-      // revoga o anterior; revogar aqui causaria flash no <img> que
-      // ainda referencia o URL.
-      void currentBlobUrl;
     };
-  }, [open, getEngine, boardBounds]);
+  }, [open, getEngine, boardBounds, multiChapa, chapaInfos]);
 
   function handleClose() {
     if (exporting) return;
@@ -227,23 +281,44 @@ export function ExportPngDialog({
     try {
       const layers = Array.from(engine.getAllLayerMetas().values());
       const marginPx = mmToCanvasPx(MOCKUP_MARGIN_MM);
-      const bytes = await exportPngMockup(engine.canvas, {
-        layers,
-        dpi: EXPORT_DPI,
-        backgroundColor: MOCKUP_BACKGROUND,
-        shadow: true,
-        marginPx,
-        clientBounds: boardBounds ?? undefined,
-      });
 
-      const result = await savePng(ioRef.current, {
-        bytes,
-        folder,
-        filename,
-      });
+      if (multiChapa) {
+        // Onda 27 — exporta N PNGs, um por chapa. openFolder só na ÚLTIMA
+        // chamada pra evitar abrir N Explorers. lastFolder persiste só na
+        // primeira (idempotente, mas só uma escrita é suficiente).
+        for (let i = 0; i < filenamesByChapa.length; i++) {
+          const { chapa, filename: chapaFilename } = filenamesByChapa[i];
+          const bytes = await exportPngMockup(engine.canvas, {
+            layers,
+            dpi: EXPORT_DPI,
+            backgroundColor: MOCKUP_BACKGROUND,
+            shadow: true,
+            marginPx,
+            clientBounds: chapa.bboxPx,
+          });
+          await savePng(ioRef.current, {
+            bytes,
+            folder,
+            filename: chapaFilename,
+            openFolderAfter: i === filenamesByChapa.length - 1,
+            rememberFolder: i === 0,
+          });
+        }
+        toast.success(`${filenamesByChapa.length} PNGs salvos em ${folder}`);
+      } else {
+        const bytes = await exportPngMockup(engine.canvas, {
+          layers,
+          dpi: EXPORT_DPI,
+          backgroundColor: MOCKUP_BACKGROUND,
+          shadow: true,
+          marginPx,
+          clientBounds: boardBounds ?? undefined,
+        });
+        const result = await savePng(ioRef.current, { bytes, folder, filename });
+        toast.success(`PNG salvo: ${filename}`);
+        if (import.meta.env.DEV) console.info('[ExportPngDialog] saved at', result.path);
+      }
 
-      toast.success(`PNG salvo: ${filename}`);
-      if (import.meta.env.DEV) console.info('[ExportPngDialog] saved at', result.path);
       onClose();
     } catch (err) {
       console.error('[ExportPngDialog] export error:', err);
@@ -255,7 +330,9 @@ export function ExportPngDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
-      <DialogContent className="border-ink-700 bg-ink-900 text-ink-100 sm:max-w-md">
+      <DialogContent
+        className={`border-ink-700 bg-ink-900 text-ink-100 ${multiChapa ? 'sm:max-w-2xl' : 'sm:max-w-md'}`}
+      >
         <DialogHeader>
           <DialogTitle className="font-display text-sm font-medium text-ink-100">
             Exportar PNG mockup
@@ -293,10 +370,39 @@ export function ExportPngDialog({
           </div>
 
           {/* Onda 17 — Preview thumbnail (~300px wide, altura flexível). */}
+          {/* Onda 27 — multi-chapa: N previews lado-a-lado. */}
           <div className="space-y-1.5">
-            <Label className="text-xs text-ink-400">Preview</Label>
-            <div className="flex h-[180px] items-center justify-center overflow-hidden rounded border border-ink-700 bg-ink-950">
-              {previewLoading && !previewUrl ? (
+            <Label className="text-xs text-ink-400">
+              {multiChapa ? `Previews (${chapaInfos.length} chapas)` : 'Preview'}
+            </Label>
+            <div className="flex h-[180px] items-center justify-center gap-2 overflow-hidden rounded border border-ink-700 bg-ink-950 p-2">
+              {multiChapa ? (
+                previewLoading && previewUrls.length === 0 ? (
+                  <p className="animate-pulse text-[10px] text-ink-500">Gerando previews…</p>
+                ) : previewUrls.length > 0 ? (
+                  previewUrls.map((url, i) => (
+                    <div
+                      key={chapaInfos[i]?.productId ?? i}
+                      className="flex h-full flex-1 flex-col items-center justify-center gap-1"
+                    >
+                      {url ? (
+                        <img
+                          src={url}
+                          alt={`Preview ${chapaInfos[i]?.displayLabel ?? i}`}
+                          className="max-h-[140px] max-w-full object-contain"
+                        />
+                      ) : (
+                        <p className="text-[10px] text-ink-500">— erro —</p>
+                      )}
+                      <span className="truncate text-[9px] text-ink-400">
+                        {chapaInfos[i]?.displayLabel ?? ''}
+                      </span>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-[10px] text-ink-500">— sem preview —</p>
+                )
+              ) : previewLoading && !previewUrl ? (
                 <p className="animate-pulse text-[10px] text-ink-500">Gerando preview…</p>
               ) : previewUrl ? (
                 <img
@@ -311,8 +417,23 @@ export function ExportPngDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-xs text-ink-400">Arquivo</Label>
-            <p className="font-mono text-[11px] text-ink-200 break-all">{filename}</p>
+            <Label className="text-xs text-ink-400">
+              {multiChapa ? `Arquivos (${filenamesByChapa.length})` : 'Arquivo'}
+            </Label>
+            {multiChapa ? (
+              <ul className="space-y-0.5">
+                {filenamesByChapa.map(({ chapa, filename: fname }) => (
+                  <li
+                    key={chapa.productId}
+                    className="font-mono text-[11px] text-ink-200 break-all"
+                  >
+                    {fname}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="font-mono text-[11px] text-ink-200 break-all">{filename}</p>
+            )}
           </div>
 
           <div className="space-y-1.5">
@@ -350,7 +471,11 @@ export function ExportPngDialog({
             disabled={!folder || exporting}
             className="bg-ink-700 text-ink-100 hover:bg-ink-600"
           >
-            {exporting ? 'Exportando…' : 'Exportar'}
+            {exporting
+              ? 'Exportando…'
+              : multiChapa
+                ? `Exportar ${filenamesByChapa.length} PNGs`
+                : 'Exportar'}
           </Button>
         </DialogFooter>
       </DialogContent>

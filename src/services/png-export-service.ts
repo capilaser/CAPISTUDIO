@@ -52,6 +52,12 @@ export interface BuildFilenameOptions {
    * prefixo `lote_Nx_`. Default 1 (single broche, sem prefixo).
    */
   boardItemCount?: number;
+  /**
+   * Onda 27 (Fase C) — token da chapa (ex: "broche_60x25"). Inserido entre
+   * stem e data quando 2+ chapas no pedido. Single-chapa não usa (filename
+   * legado preservado). Já vem sanitizado por `sanitizeForFilename`.
+   */
+  chapaToken?: string;
 }
 
 /**
@@ -87,6 +93,7 @@ export function buildPngFilename(opts: BuildFilenameOptions): string {
   const profissao = opts.profissao.trim();
   const date = opts.date ?? new Date();
   const count = opts.boardItemCount ?? 1;
+  const chapaToken = opts.chapaToken?.trim() ?? '';
 
   const dateStr = isoDate(date);
 
@@ -100,7 +107,8 @@ export function buildPngFilename(opts: BuildFilenameOptions): string {
   }
 
   const prefix = count > 1 ? `lote_${count}x_` : '';
-  return `${prefix}${stem}_${dateStr}.png`;
+  const chapaInfix = chapaToken.length > 0 ? `_${chapaToken}` : '';
+  return `${prefix}${stem}${chapaInfix}_${dateStr}.png`;
 }
 
 /**
