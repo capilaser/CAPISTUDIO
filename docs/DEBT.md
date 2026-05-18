@@ -1,7 +1,7 @@
 # Dívidas Técnicas Conhecidas
 
-> **Última atualização:** 2026-05-10 (Onda 7.5 fechada — bugs #3 e #4 do slot-manager resolvidos).
-> **Próxima varredura sugerida:** ao iniciar a próxima onda relevante (Onda 7 painel de camadas, ou Onda 8.5 gravações).
+> **Última atualização:** 2026-05-18 (Onda 29 — adicionado débito #7 backup SQLite).
+> **Próxima varredura sugerida:** ao iniciar a próxima onda relevante.
 
 ---
 
@@ -56,6 +56,18 @@ Movida para `## Resolvidas` (Onda 7.5).
 ### 6. 🟢 ~~`coverage/` versionado acidentalmente~~ — RESOLVIDA
 
 Movida para `## Resolvidas` (Fase G).
+
+### 7. 🔴 Sem backup automático do SQLite
+
+- **Origem:** identificada na auditoria arquitetural Onda 29 (`AUDIT_TEMPLATES_SPEC.md` §3.2 e §10.1.5 do `REPORT_FOR_ANALYSIS.md`).
+- **Descrição:** todo estado do app vive em SQLite local (orders, order_items, order_revisions, patterns, assets). Não há cópia automática para Documents/CapiBackup/ nem export periódico. Se o operador formatar a máquina, apagar acidentalmente o arquivo `.db`, ou se uma migration destrutiva (3 swaps existentes — migrations 0008/0009/0012) falhar no meio, **perda total dos dados**.
+- **Severidade 🔴:** risco existencial. Custo de recovery = recriar todos os pedidos+padrões manualmente. Custo de fix = 30 min a 2 h dependendo da estratégia.
+- **Estratégias avaliadas (Onda 29):**
+  1. **Cron diário Tauri** (Rust) — copia `app_data/capi.db` para `Documents/CapiBackup-YYYY-MM-DD.db`, mantém N dias rolando. Envolve Rust scheduler ou trigger no startup.
+  2. **Botão "Exportar banco" na UI** — operador aciona quando quiser. Zero Rust, 5 min de código. Menos defensivo mas zero risco de quebrar.
+  3. **Hook no `executeTransaction`** — após N transações, copia o `.db`. Mais inteligente, mais código.
+- **Quando resolver:** **adiada explicitamente pela decisão da Onda 29** — foco é template-first (Ondas 29→32→...→45). Reabrir após Onda 32 (cleanup) ou como onda paralela (32.5) sem bloquear progresso. **Não é bloqueante para a evolução da spec, mas é o primeiro problema a atacar antes de instalar em máquina de produção real.**
+- **Pré-requisitos:** nenhum. Pode ser implementado a qualquer momento.
 
 ---
 

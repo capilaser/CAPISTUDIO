@@ -499,7 +499,7 @@ Atual: dispersa em 4+ superfícies:
 - `PatternPanel.tsx` (197 linhas) — não importado pelo `BancoDrawer` (que importa só Aplique/Engraving/Marking/Fonts). **Órfão.**
 - `BancoPage.tsx` — stub vazio
 - `computeItemPositions` em useBoardEngine — marcada `@DEPRECATED Onda 26e`
-- `mode: CanvasMode` na store — sem consumer condicionando UI
+- ~~`mode: CanvasMode` na store — sem consumer condicionando UI~~ **[CORRIGIDO Onda 29]** — vivo: propagado em `useBoardEngine.ts:693` e `useCanvasEngine.ts:291` → `engine.setMode()` → `slotManager.setMode()`. 18 testes cobrindo. Toggle UI em `/dev/canvas-test/ModeToggle.tsx`. Ver `docs/DEPENDENCY_MAP.md`.
 - Pastas `src/core/{patterns,orders,products,validation}/` — todas vazias
 
 #### Acoplamento dev↔prod
@@ -625,7 +625,7 @@ Catalogados pra que ondas futuras saibam que existem.
 - **`order_overrides`** (tabela) — declarada e nunca usada. Remover.
 - **`PatternPanel.tsx`** — órfão.
 - **`BancoPage.tsx`** — stub vazio (substituir por página real ou remover rota).
-- **`mode: CanvasMode`** na store — sem consumer.
+- ~~**`mode: CanvasMode`** na store — sem consumer.~~ **[CORRIGIDO Onda 29: vivo, ver DEPENDENCY_MAP.md]**
 - **`computeItemPositions`** — deprecated, remover quando consumidores saírem.
 - **Pastas vazias `src/core/{patterns,orders,products,validation}/`** — decidir: usar ou remover.
 - **`BoardItemDraft.canvasJson`** — cache dormente, remover ou implementar.
@@ -714,7 +714,7 @@ Cada onda tem objetivo único, critério de saída claro, e ordem desenhada pra 
 - Decidir e remover `pattern_layers` (ou começar a usar)
 - Deletar `PatternPanel.tsx` órfão
 - Deletar `BancoPage.tsx` stub vazio (ou criar a página real — antecipa Onda 36)
-- Remover `mode: CanvasMode` da store
+- ~~Remover `mode: CanvasMode` da store~~ **[NÃO REMOVER — corrigido Onda 29: é vivo]**
 - Remover `BoardItemDraft.canvasJson` dormente
 - Remover `computeItemPositions` deprecated
 - Decidir pastas vazias `src/core/{patterns,orders,products,validation}/`
@@ -1066,7 +1066,7 @@ Onda 29  →  Onda 30  →  Onda 31  →  Onda 32
 
 ### Stores e hooks
 
-- `src/stores/canvas-store.ts` (231) — `mode: CanvasMode` morto
+- `src/stores/canvas-store.ts` (231) — ~~`mode: CanvasMode` morto~~ **[CORRIGIDO Onda 29: vivo]**
 - `src/hooks/useBoardEngine.ts` (767) — 7 responsabilidades
 - `src/hooks/useCanvasEngine.ts` (305) — só dev/canvas-test
 
