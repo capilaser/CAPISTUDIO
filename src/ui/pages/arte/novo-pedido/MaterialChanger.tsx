@@ -15,7 +15,7 @@
  * lógica do ProductCascadeForm).
  */
 import { useEffect, useState } from 'react';
-import { ChevronDown, Pencil } from 'lucide-react';
+import { ChevronDown, Loader2, Pencil } from 'lucide-react';
 
 import {
   getAllMaterials,
@@ -35,7 +35,7 @@ interface Props {
   productId: string;
   familyId: string;
   materialId: string;
-  onChange: (familyId: string, materialId: string) => void;
+  onChange: (familyId: string, materialId: string) => void | Promise<void>;
 }
 
 export function MaterialChanger({ productId, familyId, materialId, onChange }: Props) {
@@ -45,6 +45,7 @@ export function MaterialChanger({ productId, familyId, materialId, onChange }: P
   const [currentMaterial, setCurrentMaterial] = useState<Material | null>(null);
   const [selectedFamilyId, setSelectedFamilyId] = useState(familyId);
   const [open, setOpen] = useState(false);
+  const [pendingMatId, setPendingMatId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -109,9 +110,15 @@ export function MaterialChanger({ productId, familyId, materialId, onChange }: P
     return inFamily.filter((m) => allowed.has(m.id));
   })();
 
-  function handlePickColor(matId: string) {
-    onChange(selectedFamilyId, matId);
-    setOpen(false);
+  async function handlePickColor(matId: string) {
+    if (pendingMatId) return;
+    setPendingMatId(matId);
+    try {
+      await Promise.resolve(onChange(selectedFamilyId, matId));
+    } finally {
+      setPendingMatId(null);
+      setOpen(false);
+    }
   }
 
   return (
@@ -171,21 +178,32 @@ export function MaterialChanger({ productId, familyId, materialId, onChange }: P
                 <p className="text-[11px] text-muted-foreground">Sem cores nessa variação.</p>
               ) : (
                 <div className="flex flex-wrap gap-1.5">
-                  {colorsForFamily.map((m) => (
-                    <button
-                      key={m.id}
-                      type="button"
-                      onClick={() => handlePickColor(m.id)}
-                      title={m.label}
-                      className={cn(
-                        'h-6 w-6 rounded-full border-2 transition-all',
-                        m.id === materialId
-                          ? 'scale-110 border-primary shadow-sm'
-                          : 'border-border hover:scale-105 hover:border-primary/50'
-                      )}
-                      style={{ backgroundColor: m.swatch }}
-                    />
-                  ))}
+                  {colorsForFamily.map((m) => {
+                    const isPending = pendingMatId === m.id;
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => void handlePickColor(m.id)}
+                        disabled={pendingMatId !== null}
+                        title={m.label}
+                        className={cn(
+                          'relative flex h-6 w-6 items-center justify-center rounded-full border-2 transition-all',
+                          isPending
+                            ? 'cursor-wait border-primary'
+                            : m.id === materialId
+                              ? 'scale-110 border-primary shadow-sm'
+                              : 'border-border hover:scale-105 hover:border-primary/50',
+                          pendingMatId !== null && !isPending && 'opacity-40'
+                        )}
+                        style={{ backgroundColor: m.swatch }}
+                      >
+                        {isPending && (
+                          <Loader2 className="absolute h-3 w-3 animate-spin text-foreground drop-shadow-sm" />
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>

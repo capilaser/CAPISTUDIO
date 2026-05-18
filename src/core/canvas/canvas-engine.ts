@@ -2405,6 +2405,39 @@ export class CanvasEngine {
   }
 
   /**
+   * Onda 27 (Fase C+) — enquadra uma região da prancha em mm (uma chapa
+   * específica) no viewport. Usado pelas "abas" da sidebar: ao trocar de
+   * broche ativo numa prancha multi-chapa, focamos só a chapa daquele
+   * broche, sem mexer no conteúdo do canvas. Mesma matemática do
+   * fitBoardToViewport, mas com bbox arbitrário.
+   */
+  fitRegionToViewport(
+    bboxMm: { leftMm: number; topMm: number; widthMm: number; heightMm: number },
+    margin = 0.15
+  ): void {
+    const regionPxW = mmToPx(bboxMm.widthMm);
+    const regionPxH = mmToPx(bboxMm.heightMm);
+    if (regionPxW <= 0 || regionPxH <= 0) return;
+
+    const availableW = this.config.viewportWidthPx * (1 - 2 * margin);
+    const availableH = this.config.viewportHeightPx * (1 - 2 * margin);
+    const scale = Math.min(availableW / regionPxW, availableH / regionPxH);
+    const zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, scale));
+
+    const scaledW = regionPxW * zoom;
+    const scaledH = regionPxH * zoom;
+    // Desconta o offset da chapa em px do canvas — assim a origem da chapa
+    // vai cair no canto superior-esquerdo do retângulo centralizado.
+    const offsetPxX = mmToPx(bboxMm.leftMm) * zoom;
+    const offsetPxY = mmToPx(bboxMm.topMm) * zoom;
+    const tx = (this.config.viewportWidthPx - scaledW) / 2 - offsetPxX;
+    const ty = (this.config.viewportHeightPx - scaledH) / 2 - offsetPxY;
+
+    this.canvas.setViewportTransform([zoom, 0, 0, zoom, tx, ty]);
+    this.canvas.requestRenderAll();
+  }
+
+  /**
    * Onda 26d — atualiza dimensões internas do viewport e re-encaixa a prancha.
    * Chamado pelo ResizeObserver do container quando a janela muda.
    * Sem isso, redimensionar reduz a área de desenho mas o conteúdo continua

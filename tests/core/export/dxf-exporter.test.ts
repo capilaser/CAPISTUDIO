@@ -28,6 +28,7 @@ import {
   exportDxfByMachineAndOperation,
   makeDxfBucketKey,
   parseDxfBucketKey,
+  transformPxToMmInFrame,
 } from '@/core/export/dxf-exporter';
 
 const FIXTURES_DIR = join(dirname(fileURLToPath(import.meta.url)), '../../fixtures');
@@ -293,6 +294,155 @@ describe('dxf-exporter (Onda 18 Fase C)', () => {
         expect(y).toBeGreaterThan(-5);
         expect(y).toBeLessThan(baseConfig.productHeightMm + 5);
       }
+    });
+  });
+
+  // ── Onda 27 (Fase C.4) — recorte por chapa via clipBoundsMm ────────────────
+
+  describe('transformPxToMmInFrame (helper puro)', () => {
+    it('frame default (offset 0, height da prancha) reproduz px→mm + flipY clássico', () => {
+      // 1 mm = 4 px. Y-flip pela altura. heightMm=25 → y=10mm vira (25-10)=15mm.
+      const out = transformPxToMmInFrame(40, 40, {
+        offsetXmm: 0,
+        offsetYmm: 0,
+        heightMm: 25,
+      });
+      // 40 px = 10 mm. y: flipY(10, 25) = 15.
+      expect(out.x).toBeCloseTo(10, 6);
+      expect(out.y).toBeCloseTo(15, 6);
+    });
+
+    it('frame com offset desloca origem da chapa pra (0,0)', () => {
+      // Chapa começa em (70mm, 0mm) com altura 40mm. Ponto px (280, 0)
+      // == (70mm, 0mm) na prancha → deve virar (0mm, 40mm) no DXF da chapa.
+      const out = transformPxToMmInFrame(280, 0, {
+        offsetXmm: 70,
+        offsetYmm: 0,
+        heightMm: 40,
+      });
+      expect(out.x).toBeCloseTo(0, 6);
+      expect(out.y).toBeCloseTo(40, 6); // flipY(0, 40) = 40 (topo da chapa)
+    });
+
+    it('frame com offset Y aplica flipY pela altura da chapa, não da prancha', () => {
+      // Chapa em (0, 50mm), altura 40mm. Ponto px (0, 200) == (0, 50mm) na
+      // prancha → (0, 0mm) relativo à chapa pré-flip → flipY(0, 40) = 40.
+      const out = transformPxToMmInFrame(0, 200, {
+        offsetXmm: 0,
+        offsetYmm: 50,
+        heightMm: 40,
+      });
+      expect(out.x).toBeCloseTo(0, 6);
+      expect(out.y).toBeCloseTo(40, 6);
+    });
+  });
+
+  describe('clipBoundsMm — recorte por chapa', () => {
+    it('clipBoundsMm sem objetos dentro da região → Map vazio', async () => {
+      // Aplique posicionado em (0,0)–(60mm,25mm). Chapa em (200mm,0).
+      const svg = await loadFixture('apliques/aplique-1-formato-d.svg');
+      const meta = parseCorelSvg(svg);
+      await engine.addAppliqueSvg(meta, 'Aplique 1', 'aplique-1-formato-d');
+
+      const out = await exportDxfByMachineAndOperation(engine.canvas, {
+        productWidthMm: 400,
+        productHeightMm: 100,
+        layers: layersSnapshot(),
+        assetLookup: makeLookup({
+          'aplique-1-formato-d': { operation: 'corte', machines: ['fiber-laser'] },
+        }),
+        clipBoundsMm: { leftMm: 200, topMm: 0, widthMm: 100, heightMm: 40 },
+      });
+
+      expect(out.size).toBe(0);
+    });
+
+    it('clipBoundsMm com objeto dentro → DXF gerado', async () => {
+      // Aplique posicionado nas coords padrão (em torno do centro do canvas).
+      // Chapa cobre TODO o canvas → aplique passa.
+      const svg = await loadFixture('apliques/aplique-1-formato-d.svg');
+      const meta = parseCorelSvg(svg);
+      await engine.addAppliqueSvg(meta, 'Aplique 1', 'aplique-1-formato-d');
+
+      const out = await exportDxfByMachineAndOperation(engine.canvas, {
+        productWidthMm: 400,
+        productHeightMm: 100,
+        layers: layersSnapshot(),
+        assetLookup: makeLookup({
+          'aplique-1-formato-d': { operation: 'corte', machines: ['fiber-laser'] },
+        }),
+        clipBoundsMm: { leftMm: 0, topMm: 0, widthMm: 400, heightMm: 100 },
+      });
+
+      // Aplique caiu dentro → bucket fiber-laser|corte presente.
+      expect(out.has('fiber-laser|corte')).toBe(true);
+    });
+
+    it('clipBoundsMm com offset desloca coordenadas X por -leftMm vs sem clip', async () => {
+      const svg = await loadFixture('apliques/aplique-1-formato-d.svg');
+      const meta = parseCorelSvg(svg);
+      await engine.addAppliqueSvg(meta, 'Aplique 1', 'aplique-1-formato-d');
+
+      function collectXs(d: string): number[] {
+        const lines = d.split('\r\n');
+        const vals: number[] = [];
+        for (let i = 0; i < lines.length - 1; i++) {
+          if (lines[i]?.trim() === '10') {
+            const v = parseFloat(lines[i + 1]!);
+            if (!Number.isNaN(v)) vals.push(v);
+          }
+        }
+        return vals;
+      }
+
+      // 1) Export sem clip = baseline.
+      const outNoClip = await exportDxfByMachineAndOperation(engine.canvas, {
+        productWidthMm: 400,
+        productHeightMm: 100,
+        layers: layersSnapshot(),
+        assetLookup: makeLookup({
+          'aplique-1-formato-d': { operation: 'corte', machines: ['fiber-laser'] },
+        }),
+      });
+      const xsNoClip = collectXs(outNoClip.get('fiber-laser|corte')!);
+      expect(xsNoClip.length).toBeGreaterThan(0);
+
+      // 2) Export com clip que cobre TODA a prancha mas com origem em
+      // (offset=50, 0). Aplique passa pelo filtro (chapa engloba canvas).
+      // Coords X deslocadas por -50mm.
+      const outWithClip = await exportDxfByMachineAndOperation(engine.canvas, {
+        productWidthMm: 400,
+        productHeightMm: 100,
+        layers: layersSnapshot(),
+        assetLookup: makeLookup({
+          'aplique-1-formato-d': { operation: 'corte', machines: ['fiber-laser'] },
+        }),
+        clipBoundsMm: { leftMm: 50, topMm: 0, widthMm: 350, heightMm: 100 },
+      });
+      const dxfClipped = outWithClip.get('fiber-laser|corte');
+      expect(dxfClipped).toBeDefined();
+      const xsWithClip = collectXs(dxfClipped!);
+      expect(xsWithClip.length).toBe(xsNoClip.length);
+
+      // O DxfBuilder emite cabeçalho de POLYLINE com um group-10 = 0
+      // (X do header da entity, não coord real). Os vértices reais começam
+      // no índice 1+. Skipamos o header e validamos os vértices.
+      // Cada vértice Xi com clip ≡ Xi sem clip − 50, em par.
+      for (let i = 1; i < xsNoClip.length; i++) {
+        expect(xsWithClip[i]).toBeCloseTo(xsNoClip[i]! - 50, 4);
+      }
+    });
+
+    it('clipBoundsMm com width inválido lança', async () => {
+      await expect(
+        exportDxfByMachineAndOperation(engine.canvas, {
+          productWidthMm: 400,
+          productHeightMm: 100,
+          layers: [],
+          assetLookup: makeLookup({}),
+          clipBoundsMm: { leftMm: 0, topMm: 0, widthMm: 0, heightMm: 40 },
+        })
+      ).rejects.toThrow(/clipBoundsMm.*inválidos/);
     });
   });
 });

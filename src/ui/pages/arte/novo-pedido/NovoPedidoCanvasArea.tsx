@@ -18,6 +18,7 @@
  * fluxo de "selecionar broche ativo" for repensado.
  */
 import { useEffect, useRef, type RefObject } from 'react';
+import { Loader2 } from 'lucide-react';
 
 import type { CanvasEngine } from '@/core/canvas/canvas-engine';
 import { useBoardEngine } from '@/hooks/useBoardEngine';
@@ -192,6 +193,14 @@ function BoardHost({
         className="relative flex flex-1 items-center justify-center overflow-hidden"
       >
         <canvas ref={canvasRef} width={VIEWPORT.widthPx} height={VIEWPORT.heightPx} />
+        {!ready && !error && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-background/40 backdrop-blur-[1px]">
+            <div className="flex flex-col items-center gap-2 text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              <span className="text-[10px] uppercase tracking-wider">Montando canvas…</span>
+            </div>
+          </div>
+        )}
         <button
           type="button"
           onClick={() => externalEngineRef.current?.fitBoardToViewport()}

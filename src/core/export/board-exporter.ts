@@ -35,6 +35,11 @@ import type * as fabric from 'fabric';
 
 import type { LayerMeta } from '@/data/schema';
 
+import {
+  exportDxfByMachineAndOperation,
+  parseDxfBucketKey,
+  type DxfBucketKey,
+} from './dxf-exporter';
 import { exportSvgByMachine, type AssetLookupFn, type SvgExportOptions } from './svg-exporter';
 import type { FontBufferLoader } from './svg-text-converter';
 
@@ -209,3 +214,218 @@ export function wrapAsBoardSvg(
 
 // Re-export utilitário pro caller que quiser raciocinar em px.
 export { PX_PER_MM };
+
+// ── Onda 27 (Fase C.3) — Export SVG por chapa ────────────────────────────────
+//
+// Diferente do exportBoardSvg (acima), que assume N canvases (1 por broche)
+// e empilha tudo num único SVG por máquina, esta variante trabalha sobre o
+// **canvas único** da prancha (NovoPedidoPage tem 1 engine só, com todos os
+// broches já posicionados em coords da prancha inteira). Pra dividir em N
+// SVGs (1 por chapa) sem mexer no svg-exporter, a tática é:
+//
+//   1. Chamar exportSvgByMachine() UMA vez no canvas inteiro, com viewBox
+//      da prancha completa.
+//   2. Pra cada chapa: extrair o inner-scaled-group, envolver num
+//      <g transform="translate(-leftMm -topMm)"> pra deslocar o conteúdo da
+//      chapa pra origem, e empacotar num SVG novo com viewBox da chapa.
+//
+// Conteúdo de outras chapas fica fora do viewBox da chapa atual. RDWorks/
+// LaserCAD respeitam viewBox como recorte de renderização. Se algum software
+// ler tudo, o pior caso é geometria invisível extra — não corta/grava nada
+// fora do viewBox.
+
+/** Descritor de chapa pro export por chapa (forma reduzida de ChapaExportInfo). */
+export interface BoardChapaDescriptor {
+  /** ID lógico (productId, normalmente). Vai no retorno pra caller mapear. */
+  chapaId: string;
+  /** Token de filename já sanitizado (ex: "broche_60x25"). */
+  filenameToken: string;
+  /** Bbox da chapa em mm — origem (left,top) e tamanho. */
+  bboxMm: { leftMm: number; topMm: number; widthMm: number; heightMm: number };
+}
+
+export interface BoardSvgByChapaOptions {
+  /** Canvas único da prancha (1 engine com todos os broches posicionados). */
+  canvas: fabric.Canvas;
+  /** Layers do canvas. */
+  layers: LayerMeta[];
+  /** Dimensões da PRANCHA inteira em mm — vira viewBox da chamada interna. */
+  boardWidthMm: number;
+  boardHeightMm: number;
+  /** Chapas a extrair. 1 chapa = 1 SVG por máquina envolvida. */
+  chapas: BoardChapaDescriptor[];
+  assetLookup: AssetLookupFn;
+  fontBufferLoader?: FontBufferLoader;
+  textRouting?: SvgExportOptions['textRouting'];
+  onTextConversionError?: SvgExportOptions['onTextConversionError'];
+}
+
+/** 1 arquivo a salvar — paralelo à granularidade chapa×máquina. */
+export interface BoardChapaSvgResult {
+  chapaId: string;
+  /** Token da chapa (idêntico ao input). Caller usa pra montar filename. */
+  filenameToken: string;
+  /** ID da máquina (`fiber-laser`, `master-biro`, …). */
+  machineId: string;
+  /** Conteúdo SVG completo, viewBox da chapa em mm. */
+  svg: string;
+}
+
+/**
+ * Gera 1 SVG por (chapa × máquina) a partir do canvas único da prancha.
+ *
+ * Retorna lista achatada — caller itera plano pra salvar arquivos. Lista vazia
+ * quando o canvas não tem nada exportável (sem apliques, gravações, marcações).
+ */
+export async function exportBoardSvgByChapa(
+  options: BoardSvgByChapaOptions
+): Promise<BoardChapaSvgResult[]> {
+  const {
+    canvas,
+    layers,
+    boardWidthMm,
+    boardHeightMm,
+    chapas,
+    assetLookup,
+    fontBufferLoader,
+    textRouting,
+    onTextConversionError,
+  } = options;
+
+  if (chapas.length === 0) return [];
+
+  // 1. Export único do canvas inteiro — viewBox da prancha completa.
+  const byMachine = await exportSvgByMachine(canvas, {
+    productWidthMm: boardWidthMm,
+    productHeightMm: boardHeightMm,
+    layers,
+    assetLookup,
+    fontBufferLoader,
+    textRouting,
+    onTextConversionError,
+  });
+
+  if (byMachine.size === 0) return [];
+
+  // 2. Pra cada (chapa × máquina), recorta via translate negativo.
+  const results: BoardChapaSvgResult[] = [];
+  for (const chapa of chapas) {
+    for (const [machineId, fullSvg] of byMachine) {
+      const inner = extractInnerScaledGroup(fullSvg);
+      if (!inner) continue;
+
+      // Translate negativo desloca conteúdo da prancha pra origem da chapa.
+      // O inner já tem `<g transform="scale(0.25)">` interno (px→mm); o wrapper
+      // translate fica em mm puros pq atua sobre o resultado da scale.
+      const shifted =
+        `<g transform="translate(${-chapa.bboxMm.leftMm} ${-chapa.bboxMm.topMm})">\n` +
+        `${inner}\n` +
+        `</g>`;
+
+      const svg = wrapAsBoardSvg(shifted, {
+        widthMm: chapa.bboxMm.widthMm,
+        heightMm: chapa.bboxMm.heightMm,
+      });
+
+      results.push({
+        chapaId: chapa.chapaId,
+        filenameToken: chapa.filenameToken,
+        machineId,
+        svg,
+      });
+    }
+  }
+
+  return results;
+}
+
+// ── Onda 27 (Fase C.4) — Export DXF por chapa ────────────────────────────────
+//
+// Diferente do SVG (que faz transform externo via translate+viewBox), o DXF
+// não tem viewBox — coords são absolutas no arquivo. Então delegamos pro
+// motor `exportDxfByMachineAndOperation` 1x POR CHAPA, com `clipBoundsMm`
+// setado pra cada uma. O motor:
+//   1. Filtra objetos fora do bbox da chapa.
+//   2. Aplica offset → origem da chapa fica em (0,0) no DXF.
+//   3. Usa altura da chapa pro flipY.
+//
+// Cada chamada do motor retorna Map<bucketKey, dxfString> daquela chapa.
+// Achatamos como `Array<{chapaId, filenameToken, machineId, operation, dxf}>`.
+
+export interface BoardDxfByChapaOptions {
+  canvas: fabric.Canvas;
+  layers: LayerMeta[];
+  /** Dimensões da PRANCHA inteira em mm — passadas ao motor pra coords absolutas. */
+  boardWidthMm: number;
+  boardHeightMm: number;
+  chapas: BoardChapaDescriptor[];
+  assetLookup: AssetLookupFn;
+  fontBufferLoader?: FontBufferLoader;
+  textRouting?: SvgExportOptions['textRouting'];
+}
+
+export interface BoardChapaDxfResult {
+  chapaId: string;
+  filenameToken: string;
+  machineId: string;
+  /** 'corte' | 'gravacao' | 'marcacao'. */
+  operation: string;
+  /** Conteúdo DXF completo (R12), origem em (0,0) da chapa. */
+  dxf: string;
+}
+
+/**
+ * Gera 1 DXF por (chapa × máquina × operação) usando recorte do motor.
+ *
+ * Lista vazia quando nenhuma chapa tem conteúdo exportável. Quando UMA chapa
+ * fica sem buckets (operador colocou apenas decoração de outra chapa naquele
+ * espaço), ela simplesmente não contribui — sem erro.
+ */
+export async function exportBoardDxfByChapa(
+  options: BoardDxfByChapaOptions
+): Promise<BoardChapaDxfResult[]> {
+  const {
+    canvas,
+    layers,
+    boardWidthMm,
+    boardHeightMm,
+    chapas,
+    assetLookup,
+    fontBufferLoader,
+    textRouting,
+  } = options;
+
+  if (chapas.length === 0) return [];
+
+  const results: BoardChapaDxfResult[] = [];
+
+  for (const chapa of chapas) {
+    let byBucket: Map<DxfBucketKey, string>;
+    try {
+      byBucket = await exportDxfByMachineAndOperation(canvas, {
+        productWidthMm: boardWidthMm,
+        productHeightMm: boardHeightMm,
+        layers,
+        assetLookup,
+        fontBufferLoader,
+        textRouting,
+        clipBoundsMm: chapa.bboxMm,
+      });
+    } catch (err) {
+      throw new Error(`[board-exporter] DXF chapa "${chapa.chapaId}": ${String(err)}`);
+    }
+
+    for (const [bucketKey, dxfString] of byBucket) {
+      const { machineId, operation } = parseDxfBucketKey(bucketKey);
+      results.push({
+        chapaId: chapa.chapaId,
+        filenameToken: chapa.filenameToken,
+        machineId,
+        operation,
+        dxf: dxfString,
+      });
+    }
+  }
+
+  return results;
+}

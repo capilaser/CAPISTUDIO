@@ -58,6 +58,23 @@ export interface DxfExportOptions {
   textRouting?: Map<string, { operation: Operation; machines?: string[] }>;
   /** Tolerância de flatten em mm. Default 0.1. */
   toleranceMm?: number;
+  /**
+   * Onda 27 (Fase C.4) — recorte por chapa. Quando informado:
+   *   1. Objetos cujo CENTRO de bbox está fora desta região (em mm do canvas
+   *      da prancha) são descartados.
+   *   2. Todas as coords mm emitidas são DESLOCADAS por (-leftMm, -topMm)
+   *      antes do flipY, colocando a chapa em origem (0,0) no arquivo DXF.
+   *   3. O flipY usa `clipBoundsMm.heightMm` (não `productHeightMm`) pra que
+   *      o canto inferior-esquerdo da chapa fique em y=0 do DXF.
+   *
+   * Quando omitido (single-chapa), comportamento legado: nenhum filtro,
+   * usa `productHeightMm` pro flipY.
+   *
+   * Convenção: `productWidthMm`/`productHeightMm` continuam representando a
+   * PRANCHA inteira (motor precisa pra coords absolutas do canvas). Os
+   * arquivos DXF resultantes têm extent = `clipBoundsMm` quando informado.
+   */
+  clipBoundsMm?: { leftMm: number; topMm: number; widthMm: number; heightMm: number };
 }
 
 /** Chave de agrupamento: `${machineId}|${operation}` — 1 arquivo cada. */
@@ -88,6 +105,7 @@ export async function exportDxfByMachineAndOperation(
     fontBufferLoader,
     textRouting,
     toleranceMm = FLATTEN_TOLERANCE_MM,
+    clipBoundsMm,
   } = options;
 
   // Defensivo: prancha sem dimensões reais é caller mal-formado.
@@ -96,6 +114,22 @@ export async function exportDxfByMachineAndOperation(
       `[dxf-exporter] productWidthMm/productHeightMm inválidos: ${productWidthMm}x${productHeightMm}`
     );
   }
+  if (clipBoundsMm && (clipBoundsMm.widthMm <= 0 || clipBoundsMm.heightMm <= 0)) {
+    throw new Error(
+      `[dxf-exporter] clipBoundsMm com width/height inválidos: ` +
+        `${clipBoundsMm.widthMm}x${clipBoundsMm.heightMm}`
+    );
+  }
+
+  // Frame de referência pra emissão de coords. Sem clipBoundsMm = prancha.
+  // Com clipBoundsMm = chapa: subtrai offset e usa altura da chapa pro flipY.
+  const frame: PointFrame = clipBoundsMm
+    ? {
+        offsetXmm: clipBoundsMm.leftMm,
+        offsetYmm: clipBoundsMm.topMm,
+        heightMm: clipBoundsMm.heightMm,
+      }
+    : { offsetXmm: 0, offsetYmm: 0, heightMm: productHeightMm };
 
   const layerById = new Map<string, LayerMeta>();
   for (const l of layers) layerById.set(l.id, l);
@@ -135,6 +169,12 @@ export async function exportDxfByMachineAndOperation(
       continue;
     }
     if (!layerMeta.visible) continue;
+
+    // Onda 27 (Fase C.4) — filtro por chapa: descarta objetos cujo CENTRO de
+    // bbox em mm está fora do bbox da chapa. Aceitamos o centro por ser uma
+    // heurística pragmática: objeto cruzando borda raramente é desejado em
+    // chapa diferente, e checar interseção exata custa caro pra cada path.
+    if (clipBoundsMm && !objectCenterInsideClip(obj, clipBoundsMm)) continue;
 
     // Texto: converte via opentype → flatten cada path resultante.
     if (obj.type === 'text' || obj.type === 'i-text' || obj.type === 'textbox') {
@@ -185,8 +225,8 @@ export async function exportDxfByMachineAndOperation(
       const dStr = extractPathD(conversion.svg);
       if (!dStr) continue;
       const polylines = flattenSvgPath(dStr, { toleranceMm });
-      // Converte px → mm + Y-flip pra DXF.
-      const dxfPolylines = polylines.map((p) => pointsToMm(p, productHeightMm));
+      // Converte px → mm + Y-flip pra DXF (no frame da chapa quando aplicável).
+      const dxfPolylines = polylines.map((p) => pointsToMm(p, frame));
       resolved.push({ kind: 'text', polylines: dxfPolylines, routing });
       continue;
     }
@@ -242,7 +282,7 @@ export async function exportDxfByMachineAndOperation(
           builder.polyline(poly.points, poly.closed);
         }
       } else {
-        const polylines = extractGeometryAsMm(r.fabricObj, productHeightMm, toleranceMm);
+        const polylines = extractGeometryAsMm(r.fabricObj, frame, toleranceMm);
         for (const poly of polylines) {
           builder.polyline(poly.points, poly.closed);
         }
@@ -290,15 +330,64 @@ function extractPathD(svg: string): string | null {
   return m ? m[1]! : null;
 }
 
-/** Converte polyline px → mm com Y-flip aplicado. */
-function pointsToMm(poly: FlatPolyline, productHeightMm: number): FlatPolyline {
+/**
+ * Frame de referência pra emissão de coords DXF. Captura origem e altura
+ * do output (prancha ou chapa) — single ponto de configuração pra que toda
+ * a transformação px→mm com offset de chapa + flipY fique consistente.
+ */
+interface PointFrame {
+  /** Offset em mm a subtrair do X (chapa.leftMm). 0 quando single. */
+  offsetXmm: number;
+  /** Offset em mm a subtrair do Y antes do flipY (chapa.topMm). 0 quando single. */
+  offsetYmm: number;
+  /** Altura do output em mm (chapa.heightMm ou productHeightMm). */
+  heightMm: number;
+}
+
+/**
+ * Transforma 1 ponto px (canvas Fabric) em ponto mm (sistema DXF), aplicando:
+ *   1. px → mm via PX_TO_MM
+ *   2. translação por offset da chapa (origem do output em (0,0))
+ *   3. flipY pela altura do output (Y+ baixo → Y+ cima)
+ *
+ * Exportada pra teste unitário.
+ */
+export function transformPxToMmInFrame(
+  xPx: number,
+  yPx: number,
+  frame: PointFrame
+): { x: number; y: number } {
+  const xMm = xPx * PX_TO_MM - frame.offsetXmm;
+  const yMmPreFlip = yPx * PX_TO_MM - frame.offsetYmm;
+  return { x: xMm, y: flipY(yMmPreFlip, frame.heightMm) };
+}
+
+/** Converte polyline px → mm com Y-flip + offset de chapa aplicados. */
+function pointsToMm(poly: FlatPolyline, frame: PointFrame): FlatPolyline {
   return {
-    points: poly.points.map((p) => ({
-      x: p.x * PX_TO_MM,
-      y: flipY(p.y * PX_TO_MM, productHeightMm),
-    })),
+    points: poly.points.map((p) => transformPxToMmInFrame(p.x, p.y, frame)),
     closed: poly.closed,
   };
+}
+
+/**
+ * Onda 27 (Fase C.4) — checa se o centro do bbox do objeto (em mm do canvas
+ * da prancha) está dentro do bbox da chapa. Heurística pragmática — ver
+ * comentário no loop principal.
+ */
+function objectCenterInsideClip(
+  obj: fabric.FabricObject,
+  clip: { leftMm: number; topMm: number; widthMm: number; heightMm: number }
+): boolean {
+  const bb = obj.getBoundingRect();
+  const centerXmm = (bb.left + bb.width / 2) * PX_TO_MM;
+  const centerYmm = (bb.top + bb.height / 2) * PX_TO_MM;
+  return (
+    centerXmm >= clip.leftMm &&
+    centerXmm <= clip.leftMm + clip.widthMm &&
+    centerYmm >= clip.topMm &&
+    centerYmm <= clip.topMm + clip.heightMm
+  );
 }
 
 /**
@@ -313,19 +402,19 @@ function pointsToMm(poly: FlatPolyline, productHeightMm: number): FlatPolyline {
  */
 function extractGeometryAsMm(
   obj: fabric.FabricObject,
-  productHeightMm: number,
+  frame: PointFrame,
   toleranceMm: number
 ): FlatPolyline[] {
   const type = obj.type;
 
   if (type === 'rect') {
-    return [rectAsPolyline(obj, productHeightMm)];
+    return [rectAsPolyline(obj, frame)];
   }
   if (type === 'circle') {
-    return [circleAsPolyline(obj, productHeightMm, toleranceMm)];
+    return [circleAsPolyline(obj, frame, toleranceMm)];
   }
   if (type === 'path') {
-    return pathAsPolylines(obj, productHeightMm, toleranceMm);
+    return pathAsPolylines(obj, frame, toleranceMm);
   }
   if (type === 'group') {
     // Recursivo: cada filho herda o transform do grupo no calcTransformMatrix.
@@ -333,23 +422,20 @@ function extractGeometryAsMm(
     const children = group._objects ?? [];
     const out: FlatPolyline[] = [];
     for (const child of children) {
-      out.push(...extractGeometryAsMm(child, productHeightMm, toleranceMm));
+      out.push(...extractGeometryAsMm(child, frame, toleranceMm));
     }
     return out;
   }
   // Fallback: bbox como retângulo.
-  return [rectAsPolyline(obj, productHeightMm)];
+  return [rectAsPolyline(obj, frame)];
 }
 
-function rectAsPolyline(obj: fabric.FabricObject, productHeightMm: number): FlatPolyline {
+function rectAsPolyline(obj: fabric.FabricObject, frame: PointFrame): FlatPolyline {
   // aCoords: 4 cantos absolutos (tl, tr, br, bl) — já com transform aplicado.
   const c = (obj as unknown as { aCoords?: Record<string, { x: number; y: number }> }).aCoords;
   if (c?.tl && c?.tr && c?.br && c?.bl) {
     return {
-      points: [c.tl, c.tr, c.br, c.bl].map((p) => ({
-        x: p.x * PX_TO_MM,
-        y: flipY(p.y * PX_TO_MM, productHeightMm),
-      })),
+      points: [c.tl, c.tr, c.br, c.bl].map((p) => transformPxToMmInFrame(p.x, p.y, frame)),
       closed: true,
     };
   }
@@ -361,14 +447,14 @@ function rectAsPolyline(obj: fabric.FabricObject, productHeightMm: number): Flat
       { x: bb.left + bb.width, y: bb.top },
       { x: bb.left + bb.width, y: bb.top + bb.height },
       { x: bb.left, y: bb.top + bb.height },
-    ].map((p) => ({ x: p.x * PX_TO_MM, y: flipY(p.y * PX_TO_MM, productHeightMm) })),
+    ].map((p) => transformPxToMmInFrame(p.x, p.y, frame)),
     closed: true,
   };
 }
 
 function circleAsPolyline(
   obj: fabric.FabricObject,
-  productHeightMm: number,
+  frame: PointFrame,
   toleranceMm: number
 ): FlatPolyline {
   const c = obj as unknown as {
@@ -391,7 +477,7 @@ function circleAsPolyline(
     const t = (2 * Math.PI * i) / N;
     const px = cx + r * Math.cos(t);
     const py = cy + r * Math.sin(t);
-    points.push({ x: px * PX_TO_MM, y: flipY(py * PX_TO_MM, productHeightMm) });
+    points.push(transformPxToMmInFrame(px, py, frame));
   }
   // Fecha repetindo o primeiro
   points.push({ ...points[0]! });
@@ -400,7 +486,7 @@ function circleAsPolyline(
 
 function pathAsPolylines(
   obj: fabric.FabricObject,
-  productHeightMm: number,
+  frame: PointFrame,
   toleranceMm: number
 ): FlatPolyline[] {
   const p = obj as unknown as {
@@ -419,7 +505,7 @@ function pathAsPolylines(
   // Aplica transform absoluto em cada ponto.
   const matrix = p.calcTransformMatrix?.();
   if (!matrix) {
-    return polylines.map((poly) => pointsToMm(poly, productHeightMm));
+    return polylines.map((poly) => pointsToMm(poly, frame));
   }
   // Manualmente: [a, b, c, d, e, f] → (x', y') = (a*x + c*y + e, b*x + d*y + f)
   const [a, b, c, d, e, f] = matrix as [number, number, number, number, number, number];
@@ -427,7 +513,7 @@ function pathAsPolylines(
     points: poly.points.map((pt) => {
       const ax = a * pt.x + c * pt.y + e;
       const ay = b * pt.x + d * pt.y + f;
-      return { x: ax * PX_TO_MM, y: flipY(ay * PX_TO_MM, productHeightMm) };
+      return transformPxToMmInFrame(ax, ay, frame);
     }),
     closed: poly.closed,
   }));

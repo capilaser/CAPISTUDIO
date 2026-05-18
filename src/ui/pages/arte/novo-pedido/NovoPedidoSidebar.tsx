@@ -538,10 +538,15 @@ function ProductCascadeForm({
     );
   }
 
+  const step1Done = categoryType !== '';
+  const step2Done = familyId !== '';
+  const step3Done = materialId !== '';
+
   return (
     <div className="flex flex-col gap-4 p-4">
       <div className="flex flex-col gap-1.5">
-        <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+        <Label className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+          <StepBadge n={1} active={!step1Done} done={step1Done} />
           Produto
         </Label>
         <Select value={categoryType} onValueChange={handleCategoryClick}>
@@ -559,7 +564,8 @@ function ProductCascadeForm({
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+        <Label className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+          <StepBadge n={2} active={step1Done && !step2Done} done={step2Done} />
           Variação
         </Label>
         <Select
@@ -589,7 +595,10 @@ function ProductCascadeForm({
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Cor</Label>
+        <Label className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+          <StepBadge n={3} active={step2Done && !step3Done} done={step3Done} />
+          Cor
+        </Label>
         <Select
           value={materialId}
           onValueChange={setMaterialId}
@@ -652,6 +661,24 @@ function ProductCascadeForm({
         )}
       </div>
     </div>
+  );
+}
+
+function StepBadge({ n, active, done }: { n: number; active: boolean; done: boolean }) {
+  return (
+    <span
+      className={cn(
+        'flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full text-[8px] font-medium tabular-nums',
+        done
+          ? 'bg-primary text-primary-foreground'
+          : active
+            ? 'bg-primary/20 text-primary ring-1 ring-primary/40'
+            : 'bg-muted text-muted-foreground/60'
+      )}
+      aria-hidden
+    >
+      {n}
+    </span>
   );
 }
 

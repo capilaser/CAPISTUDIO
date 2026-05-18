@@ -5,6 +5,7 @@
  * Ctrl+E → Exportar SVG corte
  * Ctrl+P → Exportar PNG mockup (preventDefault no Tauri WebView)
  * Ctrl+D → Duplicar broche selecionado
+ * Ctrl+B → Abrir Banco de Dados (apliques / gravações / marcações)
  *
  * Os atalhos disparam handlers passados pelo caller. Não há lógica de
  * domínio aqui — o hook só faz o binding teclado→handler.
@@ -19,6 +20,7 @@ interface UseOrderShortcutsProps {
   onExportSvg: () => void;
   onExportPng: () => void;
   onDuplicateActive: () => void;
+  onToggleBanco?: () => void;
   /** Se false, atalhos ficam desativados (ex: durante saving). */
   enabled?: boolean;
 }
@@ -28,6 +30,7 @@ export function useOrderShortcuts({
   onExportSvg,
   onExportPng,
   onDuplicateActive,
+  onToggleBanco,
   enabled = true,
 }: UseOrderShortcutsProps): void {
   useHotkeys(
@@ -61,5 +64,13 @@ export function useOrderShortcuts({
       onDuplicateActive();
     },
     { enabled }
+  );
+  useHotkeys(
+    'mod+b',
+    (e) => {
+      e.preventDefault();
+      onToggleBanco?.();
+    },
+    { enabled: enabled && Boolean(onToggleBanco) }
   );
 }

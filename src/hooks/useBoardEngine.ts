@@ -390,20 +390,9 @@ export function useBoardEngine(options: UseBoardEngineOptions): UseBoardEngineRe
         setBoardDims(board);
         setChapasLayout(layout);
 
-        // Onda 26e — mapeia productId → label legível pra labels visuais.
-        // Reusa nome do produto se vier do banco; fallback pro id se vazio.
-        const productLabelById = new Map<string, string>();
-        for (let i = 0; i < products.length; i++) {
-          const p = products[i];
-          if (!productLabelById.has(p.id)) {
-            productLabelById.set(p.id, p.label || p.id);
-          }
-        }
-        const chapaLabelEntries = layout.chapas.map((c) => ({
-          leftMm: c.bbox.leftMm,
-          topMm: c.bbox.topMm,
-          text: `${productLabelById.get(c.productId) ?? c.productId} (${c.itemCount})`,
-        }));
+        // Onda 27.x — labels visuais em cima das chapas foram removidos por
+        // pedido do operador (UX). Os 8mm reservados em CHAPA_LABEL_HEIGHT_MM
+        // continuam no layout pra preservar offsets de pedidos salvos.
 
         // 3. Instancia engine com tamanho da prancha.
         const engine = new CanvasEngine(canvasRef.current!, {
@@ -460,7 +449,7 @@ export function useBoardEngine(options: UseBoardEngineOptions): UseBoardEngineRe
             };
             engine.setSnapOptions({ isAltDown: () => altKeyRef.current });
             engine.enableWheelZoom();
-            engine.renderChapaLabels(chapaLabelEntries);
+            engine.renderChapaLabels([]);
             engine.fitBoardToViewport();
             engineRef.current = engine;
             // Onda 15.fix — sinaliza LayerPanel pra re-anexar listeners no canvas novo.
@@ -650,7 +639,7 @@ export function useBoardEngine(options: UseBoardEngineOptions): UseBoardEngineRe
         };
         engine.setSnapOptions({ isAltDown: () => altKeyRef.current });
         engine.enableWheelZoom();
-        engine.renderChapaLabels(chapaLabelEntries);
+        engine.renderChapaLabels([]);
         engine.fitBoardToViewport();
         engineRef.current = engine;
         // Onda 15.fix — sinaliza LayerPanel pra re-anexar listeners no canvas novo.

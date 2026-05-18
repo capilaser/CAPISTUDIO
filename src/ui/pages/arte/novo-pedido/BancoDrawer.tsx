@@ -1,8 +1,13 @@
 /**
- * BancoDrawer — painel grande que abre sobre o canvas (F5).
+ * BancoDrawer — painel lateral direito do canvas (Ctrl+B).
  *
  * 4 abas: Apliques / Gravações / Marcações / Fontes.
  * Reutiliza os painéis já existentes em canvas-test/.
+ *
+ * UX: drawer encostado na direita SEM overlay escurecendo o canvas — o
+ * operador precisa ver onde o aplique vai ser colocado enquanto escolhe.
+ * Click fora do painel fecha (área transparente captura o click), mas a
+ * visualização do canvas continua intacta atrás.
  *
  * Padrões NÃO ficam aqui — viraram secção dedicada na sidebar (Onda 13.9),
  * porque são pilar central do sistema (CLAUDE.md) e merecem destaque
@@ -25,8 +30,8 @@ interface Props {
 export function BancoDrawer({ engineRef, onClose }: Props) {
   return (
     <div className="absolute inset-0 z-20 flex items-stretch">
-      {/* Overlay clicável para fechar */}
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      {/* Área clicável transparente — fecha ao clicar fora SEM escurecer o canvas. */}
+      <div className="absolute inset-0" onClick={onClose} />
 
       {/* Painel */}
       <div className="relative z-10 ml-auto flex w-[520px] flex-col border-l border-border bg-card shadow-xl">

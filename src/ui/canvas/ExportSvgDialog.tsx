@@ -1,28 +1,40 @@
 /**
- * ExportSvgDialog — Onda 13.6
+ * ExportSvgDialog — Onda 13.6 + Onda 27 (Fase C.3 SVG por chapa, Fase C.4 DXF).
  *
- * Modal pra exportar SVG da prancha (1 arquivo por máquina) pra alimentar
- * o software de corte/gravação. Análogo ao ExportPngDialog, mas:
+ * Modal pra exportar SVG da prancha (1 arquivo por máquina envolvida) pra
+ * alimentar o software de corte/gravação. Análogo ao ExportPngDialog.
  *
- *   - Chama svg-exporter direto no canvas vivo (que já é a prancha inteira)
- *   - Salva N arquivos (1 por máquina envolvida)
- *   - Nome do arquivo: `${stem}_${machineId}.svg`
- *
- * Como o canvas-engine atual é UM canvas com todos os broches empilhados,
- * NÃO usamos o board-exporter (que orquestraria N canvases). O canvas já
- * tem tudo posicionado, então svg-exporter direto basta.
+ * Modos:
+ *   - **Single-chapa** (legado): canvas inteiro → 1 SVG por máquina.
+ *     Filename: `${stem}_${machineId}.svg`. DXF (opcional): por
+ *     `${machineId}_${operation}`.
+ *   - **Multi-chapa** (Onda 27): N SVGs por chapa, cada um com 1 arquivo
+ *     por máquina envolvida na chapa. Filename:
+ *     `${stem}_${chapaToken}_${machineId}.svg`. DXF (opcional): por
+ *     `${stem}_${chapaToken}_${machineId}_${operation}.dxf`.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { open as openFolderPicker } from '@tauri-apps/plugin-dialog';
 import { toast } from 'sonner';
 
 import type { CanvasEngine } from '@/core/canvas/canvas-engine';
+import {
+  type BoardChapaDescriptor,
+  exportBoardDxfByChapa,
+  exportBoardSvgByChapa,
+} from '@/core/export/board-exporter';
+import type { ChapaExportInfo } from '@/core/export/chapa-export-info';
 import { exportDxfByMachineAndOperation } from '@/core/export/dxf-exporter';
 import { exportSvgByMachine } from '@/core/export/svg-exporter';
+import { setSetting } from '@/data/repositories/settingsRepository';
 import { normalizeAssetName } from '@/lib/normalize-asset-name';
 import { makeAssetLookup } from '@/services/asset-lookup';
 import { saveDxfs } from '@/services/dxf-export-service';
-import { getDefaultSvgFolder, saveSvgs } from '@/services/svg-export-service';
+import {
+  SVG_EXPORT_LAST_FOLDER_KEY,
+  getDefaultSvgFolder,
+  saveSvgs,
+} from '@/services/svg-export-service';
 import { makeTauriIO } from '@/services/tauri-io';
 import { Button } from '@/ui/components/button';
 import {
@@ -43,6 +55,12 @@ interface ExportSvgDialogProps {
   boardDims: { widthMm: number; heightMm: number } | null;
   /** Stem default do nome do arquivo (ex: pedidoLabel). */
   defaultStem?: string;
+  /**
+   * Onda 27 (Fase C) — chapas do pedido. Quando 2+, o dialog gera N×M SVGs
+   * (N chapas × M máquinas envolvidas), cada filename ganhando o token da
+   * chapa. Quando 0 ou 1, comportamento legado (1 arquivo por máquina).
+   */
+  chapaInfos?: ChapaExportInfo[];
   onClose: () => void;
 }
 
@@ -57,15 +75,19 @@ export function ExportSvgDialog({
   getEngine,
   boardDims,
   defaultStem,
+  chapaInfos = [],
   onClose,
 }: ExportSvgDialogProps) {
+  // Onda 27 — multi-chapa quando 2+ chapas. Single-chapa preserva fluxo legado
+  // exato (1 SVG por máquina, sem token de chapa no filename).
+  const multiChapa = chapaInfos.length >= 2;
+
   const [nome, setNome] = useState('');
   const [folder, setFolder] = useState('');
   const [exporting, setExporting] = useState(false);
   // Onda 18: checkbox "Também exportar DXF" — default OFF.
-  // Quando ON, gera arquivos extras `${stem}_${machineId}_${op}.dxf` na mesma pasta.
-  // Pasta DXF tem setting própria (export.dxf.lastFolder); aqui priorizamos a
-  // mesma pasta do SVG pra simplificar o fluxo do operador.
+  // Onda 27 (Fase C.4): habilitado também em multi-chapa, gerando 1 DXF por
+  // (chapa × máquina × operação) via exportBoardDxfByChapa.
   const [exportDxf, setExportDxf] = useState(false);
 
   const ioRef = useRef(makeTauriIO());
@@ -90,6 +112,16 @@ export function ExportSvgDialog({
   }, [open, defaultStem]);
 
   const stem = useMemo(() => buildStem(nome), [nome]);
+
+  // Lista de filenames previstos pro UI mostrar antes do export. Em
+  // single-chapa, mostramos só o template (não sabemos machineIds antes de
+  // rodar o exporter). Em multi-chapa, também é template — chapas × <máquina>.
+  const filenameTemplates = useMemo(() => {
+    if (multiChapa) {
+      return chapaInfos.map((c) => `${stem || 'prancha'}_${c.filenameToken}_<máquina>.svg`);
+    }
+    return [`${stem || 'prancha'}_<máquina>.svg`];
+  }, [multiChapa, chapaInfos, stem]);
 
   function handleClose() {
     if (exporting) return;
@@ -123,6 +155,89 @@ export function ExportSvgDialog({
     setExporting(true);
     try {
       const layers = Array.from(engine.getAllLayerMetas().values());
+
+      if (multiChapa) {
+        // ── Fase C.3 — N SVGs por chapa ───────────────────────────────────
+        const chapasDescriptors: BoardChapaDescriptor[] = chapaInfos.map((c) => ({
+          chapaId: c.productId,
+          filenameToken: c.filenameToken,
+          bboxMm: c.bboxMm,
+        }));
+
+        const results = await exportBoardSvgByChapa({
+          canvas: engine.canvas,
+          layers,
+          boardWidthMm: boardDims.widthMm,
+          boardHeightMm: boardDims.heightMm,
+          chapas: chapasDescriptors,
+          assetLookup: makeAssetLookup(),
+        });
+
+        if (results.length === 0) {
+          toast.info('Nada pra exportar', {
+            description:
+              'A prancha não tem elementos exportáveis (sem apliques, gravações ou marcações).',
+          });
+          return;
+        }
+
+        // Grava cada arquivo. Persiste folder e abre Explorer só na última.
+        const savedFiles: string[] = [];
+        const encoder = new TextEncoder();
+        const io = ioRef.current;
+        for (let i = 0; i < results.length; i++) {
+          const r = results[i];
+          const filename = `${stem}_${r.filenameToken}_${r.machineId}.svg`;
+          const path = await io.joinPath(folder, filename);
+          await io.writeFile(path, encoder.encode(r.svg));
+          savedFiles.push(path);
+        }
+
+        // Fase C.4 — DXF por chapa (opcional).
+        let dxfCount = 0;
+        if (exportDxf) {
+          const dxfResults = await exportBoardDxfByChapa({
+            canvas: engine.canvas,
+            layers,
+            boardWidthMm: boardDims.widthMm,
+            boardHeightMm: boardDims.heightMm,
+            chapas: chapasDescriptors,
+            assetLookup: makeAssetLookup(),
+          });
+          for (const dr of dxfResults) {
+            const filename = `${stem}_${dr.filenameToken}_${dr.machineId}_${dr.operation}.dxf`;
+            const path = await io.joinPath(folder, filename);
+            await io.writeFile(path, encoder.encode(dr.dxf));
+            savedFiles.push(path);
+          }
+          dxfCount = dxfResults.length;
+        }
+
+        // Persiste última pasta (mesma chave que saveSvgs usa em single-chapa).
+        try {
+          await setSetting(SVG_EXPORT_LAST_FOLDER_KEY, folder);
+        } catch (err) {
+          console.warn(`[ExportSvgDialog] persist lastFolder falhou (não-fatal): ${String(err)}`);
+        }
+        // Abre Explorer só uma vez no final.
+        try {
+          await io.openFolder(folder);
+        } catch (err) {
+          console.warn(`[ExportSvgDialog] openFolder falhou (não-fatal): ${String(err)}`);
+        }
+
+        const svgCount = results.length;
+        const summary =
+          dxfCount > 0
+            ? `${svgCount} SVG${svgCount === 1 ? '' : 's'} + ${dxfCount} DXF${dxfCount === 1 ? '' : 's'} salvos`
+            : `${svgCount} SVG${svgCount === 1 ? '' : 's'} salvos`;
+        toast.success(summary, { description: `${chapaInfos.length} chapas` });
+        if (import.meta.env.DEV) console.info('[ExportSvgDialog] paths:', savedFiles);
+        onClose();
+        return;
+      }
+
+      // ── Single-chapa (legado) ───────────────────────────────────────────
       const byMachine = await exportSvgByMachine(engine.canvas, {
         productWidthMm: boardDims.widthMm,
         productHeightMm: boardDims.heightMm,
@@ -182,15 +297,16 @@ export function ExportSvgDialog({
     }
   }
 
-  // Preview do nome do primeiro arquivo (placeholder se sem stem).
-  const previewFilename = `${stem || 'prancha'}_<máquina>.svg`;
-
   return (
     <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
-      <DialogContent className="border-ink-700 bg-ink-900 text-ink-100 sm:max-w-md">
+      <DialogContent
+        className={`border-ink-700 bg-ink-900 text-ink-100 ${multiChapa ? 'sm:max-w-xl' : 'sm:max-w-md'}`}
+      >
         <DialogHeader>
           <DialogTitle className="font-display text-sm font-medium text-ink-100">
-            Exportar SVG da prancha
+            {multiChapa
+              ? `Exportar SVG por chapa (${chapaInfos.length} chapas)`
+              : 'Exportar SVG da prancha'}
           </DialogTitle>
         </DialogHeader>
 
@@ -208,12 +324,9 @@ export function ExportSvgDialog({
               autoFocus
               disabled={exporting}
             />
-            <p className="text-[10px] text-ink-500">
-              Será gerado: <span className="font-mono text-ink-300">{previewFilename}</span>
-            </p>
           </div>
 
-          {boardDims && (
+          {boardDims && !multiChapa && (
             <div className="space-y-1.5">
               <Label className="text-xs text-ink-400">Prancha</Label>
               <p className="font-mono text-[11px] tabular-nums text-ink-200">
@@ -221,6 +334,31 @@ export function ExportSvgDialog({
               </p>
             </div>
           )}
+
+          <div className="space-y-1.5">
+            <Label className="text-xs text-ink-400">
+              {multiChapa
+                ? `Arquivos previstos (${filenameTemplates.length} chapas × N máquinas)`
+                : 'Arquivo'}
+            </Label>
+            <ul className="space-y-0.5 rounded border border-ink-700 bg-ink-800/40 p-2">
+              {filenameTemplates.map((tpl, i) => (
+                <li
+                  key={multiChapa ? chapaInfos[i].productId : i}
+                  className="font-mono text-[11px] text-ink-200 break-all"
+                >
+                  {tpl}
+                </li>
+              ))}
+            </ul>
+            {multiChapa && (
+              <p className="text-[10px] text-ink-500">
+                &lt;máquina&gt; vira <span className="font-mono">fiber-laser</span>,{' '}
+                <span className="font-mono">master-biro</span>, etc — 1 arquivo por máquina
+                envolvida em cada chapa.
+              </p>
+            )}
+          </div>
 
           <div className="space-y-1.5">
             <Label className="text-xs text-ink-400">Pasta</Label>
@@ -253,7 +391,9 @@ export function ExportSvgDialog({
               <span className="block font-mono text-[10px] text-ink-500">
                 +{' '}
                 <span className="text-ink-300">
-                  {stem || 'prancha'}_&lt;máquina&gt;_&lt;operação&gt;.dxf
+                  {multiChapa
+                    ? `${stem || 'prancha'}_<chapa>_<máquina>_<operação>.dxf`
+                    : `${stem || 'prancha'}_<máquina>_<operação>.dxf`}
                 </span>{' '}
                 · R12 (RDWorks/LaserCAD)
               </span>
@@ -277,7 +417,11 @@ export function ExportSvgDialog({
             disabled={!folder || exporting || !boardDims}
             className="bg-ink-700 text-ink-100 hover:bg-ink-600"
           >
-            {exporting ? 'Exportando…' : 'Exportar'}
+            {exporting
+              ? 'Exportando…'
+              : multiChapa
+                ? `Exportar SVGs (${chapaInfos.length} chapas)`
+                : 'Exportar'}
           </Button>
         </DialogFooter>
       </DialogContent>

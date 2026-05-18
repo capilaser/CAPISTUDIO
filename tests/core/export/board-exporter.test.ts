@@ -31,16 +31,34 @@ vi.mock('@/core/export/svg-exporter', async () => {
   };
 });
 
+// Mock do dxf-exporter — só interceptamos exportDxfByMachineAndOperation.
+// makeDxfBucketKey/parseDxfBucketKey passam direto (precisamos do real
+// pro wrapper achatar buckets em (machineId, operation)).
+vi.mock('@/core/export/dxf-exporter', async () => {
+  const actual = await vi.importActual<typeof import('@/core/export/dxf-exporter')>(
+    '@/core/export/dxf-exporter'
+  );
+  return {
+    ...actual,
+    exportDxfByMachineAndOperation: vi.fn(),
+  };
+});
+
 import { exportSvgByMachine } from '@/core/export/svg-exporter';
+import { exportDxfByMachineAndOperation, makeDxfBucketKey } from '@/core/export/dxf-exporter';
 import {
   computeBoardBounds,
+  exportBoardDxfByChapa,
   exportBoardSvg,
+  exportBoardSvgByChapa,
   extractInnerScaledGroup,
   wrapAsBoardSvg,
+  type BoardChapaDescriptor,
   type BoardItemExport,
 } from '@/core/export/board-exporter';
 
 const mockExportSvgByMachine = exportSvgByMachine as unknown as ReturnType<typeof vi.fn>;
+const mockExportDxf = exportDxfByMachineAndOperation as unknown as ReturnType<typeof vi.fn>;
 
 // Helper: cria item de prancha com canvas fake (não importa, é mockado).
 function makeItem(overrides: Partial<BoardItemExport> = {}): BoardItemExport {
@@ -64,6 +82,7 @@ const noopLookup: AssetLookupFn = async () => null as AssetExportInfo | null;
 
 beforeEach(() => {
   mockExportSvgByMachine.mockReset();
+  mockExportDxf.mockReset();
 });
 
 // ── Helpers puros ────────────────────────────────────────────────────────────
@@ -289,5 +308,360 @@ describe('exportBoardSvg', () => {
       expect(opts.fontBufferLoader).toBe(loader);
       expect(opts.textRouting).toBe(routing);
     }
+  });
+});
+
+// ── Onda 27 (Fase C.3) — Export SVG por chapa ────────────────────────────────
+
+function makeChapa(
+  productId: string,
+  bbox: { leftMm: number; topMm: number; widthMm: number; heightMm: number },
+  filenameToken?: string
+): BoardChapaDescriptor {
+  return {
+    chapaId: productId,
+    filenameToken: filenameToken ?? productId.toLowerCase(),
+    bboxMm: bbox,
+  };
+}
+
+describe('exportBoardSvgByChapa', () => {
+  it('retorna lista vazia quando chapas é vazio (não chama exportSvgByMachine)', async () => {
+    const out = await exportBoardSvgByChapa({
+      canvas: {} as fabric.Canvas,
+      layers: [],
+      boardWidthMm: 100,
+      boardHeightMm: 50,
+      chapas: [],
+      assetLookup: noopLookup,
+    });
+    expect(out).toEqual([]);
+    expect(mockExportSvgByMachine).not.toHaveBeenCalled();
+  });
+
+  it('retorna lista vazia quando canvas não tem nada exportável', async () => {
+    mockExportSvgByMachine.mockResolvedValue(new Map());
+
+    const out = await exportBoardSvgByChapa({
+      canvas: {} as fabric.Canvas,
+      layers: [],
+      boardWidthMm: 100,
+      boardHeightMm: 50,
+      chapas: [makeChapa('broche', { leftMm: 0, topMm: 0, widthMm: 60, heightMm: 25 })],
+      assetLookup: noopLookup,
+    });
+    expect(out).toEqual([]);
+  });
+
+  it('chama exportSvgByMachine UMA vez no canvas inteiro (boardDims), não 1x por chapa', async () => {
+    mockExportSvgByMachine.mockResolvedValue(new Map());
+
+    await exportBoardSvgByChapa({
+      canvas: {} as fabric.Canvas,
+      layers: [],
+      boardWidthMm: 200,
+      boardHeightMm: 100,
+      chapas: [
+        makeChapa('broche', { leftMm: 0, topMm: 0, widthMm: 60, heightMm: 25 }),
+        makeChapa('placa', { leftMm: 70, topMm: 0, widthMm: 100, heightMm: 40 }),
+      ],
+      assetLookup: noopLookup,
+    });
+
+    expect(mockExportSvgByMachine).toHaveBeenCalledTimes(1);
+    const opts = mockExportSvgByMachine.mock.calls[0][1] as Record<string, unknown>;
+    expect(opts.productWidthMm).toBe(200);
+    expect(opts.productHeightMm).toBe(100);
+  });
+
+  it('2 chapas × 1 máquina → 2 SVGs com viewBox da chapa e translate negativo', async () => {
+    const fullSvg = fakeItemSvg('<rect x="0" y="0" width="10" height="5"/>', 200, 100);
+    mockExportSvgByMachine.mockResolvedValueOnce(new Map([['fiber-laser', fullSvg]]));
+
+    const out = await exportBoardSvgByChapa({
+      canvas: {} as fabric.Canvas,
+      layers: [],
+      boardWidthMm: 200,
+      boardHeightMm: 100,
+      chapas: [
+        makeChapa('broche', { leftMm: 0, topMm: 0, widthMm: 60, heightMm: 25 }, 'broche_60x25'),
+        makeChapa('placa', { leftMm: 70, topMm: 0, widthMm: 100, heightMm: 40 }, 'placa_100x40'),
+      ],
+      assetLookup: noopLookup,
+    });
+
+    expect(out).toHaveLength(2);
+
+    const brocheSvg = out.find((r) => r.chapaId === 'broche')!;
+    expect(brocheSvg.machineId).toBe('fiber-laser');
+    expect(brocheSvg.filenameToken).toBe('broche_60x25');
+    expect(brocheSvg.svg).toContain('viewBox="0 0 60 25"');
+    expect(brocheSvg.svg).toContain('<g transform="translate(0 0)">');
+
+    const placaSvg = out.find((r) => r.chapaId === 'placa')!;
+    expect(placaSvg.svg).toContain('viewBox="0 0 100 40"');
+    expect(placaSvg.svg).toContain('<g transform="translate(-70 0)">');
+  });
+
+  it('1 chapa × 2 máquinas → 2 SVGs distintos, ambos com viewBox da chapa', async () => {
+    mockExportSvgByMachine.mockResolvedValueOnce(
+      new Map([
+        ['fiber-laser', fakeItemSvg('<rect data-op="cut"/>', 200, 100)],
+        ['master-biro', fakeItemSvg('<rect data-op="mark"/>', 200, 100)],
+      ])
+    );
+
+    const out = await exportBoardSvgByChapa({
+      canvas: {} as fabric.Canvas,
+      layers: [],
+      boardWidthMm: 200,
+      boardHeightMm: 100,
+      chapas: [makeChapa('broche', { leftMm: 0, topMm: 0, widthMm: 60, heightMm: 25 })],
+      assetLookup: noopLookup,
+    });
+
+    expect(out).toHaveLength(2);
+    const machines = out.map((r) => r.machineId).sort();
+    expect(machines).toEqual(['fiber-laser', 'master-biro']);
+    for (const r of out) {
+      expect(r.chapaId).toBe('broche');
+      expect(r.svg).toContain('viewBox="0 0 60 25"');
+    }
+    expect(out.find((r) => r.machineId === 'fiber-laser')!.svg).toContain('data-op="cut"');
+    expect(out.find((r) => r.machineId === 'master-biro')!.svg).toContain('data-op="mark"');
+  });
+
+  it('2 chapas × 2 máquinas → 4 arquivos no resultado', async () => {
+    mockExportSvgByMachine.mockResolvedValueOnce(
+      new Map([
+        ['fiber-laser', fakeItemSvg('<rect data-op="cut"/>', 200, 100)],
+        ['master-biro', fakeItemSvg('<rect data-op="mark"/>', 200, 100)],
+      ])
+    );
+
+    const out = await exportBoardSvgByChapa({
+      canvas: {} as fabric.Canvas,
+      layers: [],
+      boardWidthMm: 200,
+      boardHeightMm: 100,
+      chapas: [
+        makeChapa('broche', { leftMm: 0, topMm: 0, widthMm: 60, heightMm: 25 }),
+        makeChapa('placa', { leftMm: 70, topMm: 0, widthMm: 100, heightMm: 40 }),
+      ],
+      assetLookup: noopLookup,
+    });
+
+    expect(out).toHaveLength(4); // 2 chapas × 2 máquinas
+    // Cada (chapa, máquina) único:
+    const keys = out.map((r) => `${r.chapaId}/${r.machineId}`).sort();
+    expect(keys).toEqual([
+      'broche/fiber-laser',
+      'broche/master-biro',
+      'placa/fiber-laser',
+      'placa/master-biro',
+    ]);
+  });
+
+  it('chapa em offset (não-origem) usa translate negativo correto', async () => {
+    mockExportSvgByMachine.mockResolvedValueOnce(
+      new Map([['fiber-laser', fakeItemSvg('<rect/>', 300, 150)]])
+    );
+
+    const out = await exportBoardSvgByChapa({
+      canvas: {} as fabric.Canvas,
+      layers: [],
+      boardWidthMm: 300,
+      boardHeightMm: 150,
+      chapas: [
+        // chapa começa em (150mm, 50mm), tamanho 80×40
+        makeChapa('placa', { leftMm: 150, topMm: 50, widthMm: 80, heightMm: 40 }),
+      ],
+      assetLookup: noopLookup,
+    });
+
+    expect(out).toHaveLength(1);
+    expect(out[0].svg).toContain('viewBox="0 0 80 40"');
+    expect(out[0].svg).toContain('<g transform="translate(-150 -50)">');
+  });
+
+  it('propaga assetLookup, fontBufferLoader e textRouting pra exportSvgByMachine', async () => {
+    mockExportSvgByMachine.mockResolvedValue(new Map());
+    const lookup = vi.fn();
+    const loader = vi.fn();
+    const routing = new Map();
+
+    await exportBoardSvgByChapa({
+      canvas: {} as fabric.Canvas,
+      layers: [],
+      boardWidthMm: 100,
+      boardHeightMm: 50,
+      chapas: [makeChapa('broche', { leftMm: 0, topMm: 0, widthMm: 60, heightMm: 25 })],
+      assetLookup: lookup as unknown as typeof noopLookup,
+      fontBufferLoader: loader as unknown as Parameters<
+        typeof exportBoardSvgByChapa
+      >[0]['fontBufferLoader'],
+      textRouting: routing,
+    });
+
+    const opts = mockExportSvgByMachine.mock.calls[0][1] as Record<string, unknown>;
+    expect(opts.assetLookup).toBe(lookup);
+    expect(opts.fontBufferLoader).toBe(loader);
+    expect(opts.textRouting).toBe(routing);
+  });
+});
+
+// ── Onda 27 (Fase C.4) — Export DXF por chapa ────────────────────────────────
+
+describe('exportBoardDxfByChapa', () => {
+  it('retorna lista vazia quando chapas é vazio (não chama exportDxf)', async () => {
+    const out = await exportBoardDxfByChapa({
+      canvas: {} as fabric.Canvas,
+      layers: [],
+      boardWidthMm: 200,
+      boardHeightMm: 100,
+      chapas: [],
+      assetLookup: noopLookup,
+    });
+    expect(out).toEqual([]);
+    expect(mockExportDxf).not.toHaveBeenCalled();
+  });
+
+  it('chama exportDxf 1x POR CHAPA (não 1x global)', async () => {
+    mockExportDxf.mockResolvedValue(new Map());
+
+    await exportBoardDxfByChapa({
+      canvas: {} as fabric.Canvas,
+      layers: [],
+      boardWidthMm: 200,
+      boardHeightMm: 100,
+      chapas: [
+        makeChapa('broche', { leftMm: 0, topMm: 0, widthMm: 60, heightMm: 25 }),
+        makeChapa('placa', { leftMm: 70, topMm: 0, widthMm: 100, heightMm: 40 }),
+      ],
+      assetLookup: noopLookup,
+    });
+
+    expect(mockExportDxf).toHaveBeenCalledTimes(2);
+  });
+
+  it('passa clipBoundsMm correto pra cada chamada', async () => {
+    mockExportDxf.mockResolvedValue(new Map());
+
+    await exportBoardDxfByChapa({
+      canvas: {} as fabric.Canvas,
+      layers: [],
+      boardWidthMm: 300,
+      boardHeightMm: 100,
+      chapas: [
+        makeChapa('broche', { leftMm: 0, topMm: 0, widthMm: 60, heightMm: 25 }),
+        makeChapa('placa', { leftMm: 70, topMm: 10, widthMm: 100, heightMm: 40 }),
+      ],
+      assetLookup: noopLookup,
+    });
+
+    const call0 = mockExportDxf.mock.calls[0][1] as Record<string, unknown>;
+    const call1 = mockExportDxf.mock.calls[1][1] as Record<string, unknown>;
+
+    expect(call0.clipBoundsMm).toEqual({
+      leftMm: 0,
+      topMm: 0,
+      widthMm: 60,
+      heightMm: 25,
+    });
+    expect(call1.clipBoundsMm).toEqual({
+      leftMm: 70,
+      topMm: 10,
+      widthMm: 100,
+      heightMm: 40,
+    });
+    // productWidthMm/heightMm sempre = prancha inteira (motor precisa do
+    // sistema de coords absolutas; clip é aplicado dentro).
+    expect(call0.productWidthMm).toBe(300);
+    expect(call0.productHeightMm).toBe(100);
+    expect(call1.productWidthMm).toBe(300);
+    expect(call1.productHeightMm).toBe(100);
+  });
+
+  it('achata Map<bucketKey, dxfString> em (chapaId, machineId, operation)', async () => {
+    // Chapa 1: 1 bucket (fiber|corte). Chapa 2: 2 buckets (fiber|corte e
+    // master-biro|marcacao).
+    mockExportDxf
+      .mockResolvedValueOnce(new Map([[makeDxfBucketKey('fiber-laser', 'corte'), 'DXF1']]))
+      .mockResolvedValueOnce(
+        new Map([
+          [makeDxfBucketKey('fiber-laser', 'corte'), 'DXF2'],
+          [makeDxfBucketKey('master-biro', 'marcacao'), 'DXF3'],
+        ])
+      );
+
+    const out = await exportBoardDxfByChapa({
+      canvas: {} as fabric.Canvas,
+      layers: [],
+      boardWidthMm: 200,
+      boardHeightMm: 100,
+      chapas: [
+        makeChapa('broche', { leftMm: 0, topMm: 0, widthMm: 60, heightMm: 25 }, 'broche_60x25'),
+        makeChapa('placa', { leftMm: 70, topMm: 0, widthMm: 100, heightMm: 40 }, 'placa_100x40'),
+      ],
+      assetLookup: noopLookup,
+    });
+
+    expect(out).toHaveLength(3);
+
+    const keys = out.map((r) => `${r.chapaId}/${r.machineId}/${r.operation}`).sort();
+    expect(keys).toEqual([
+      'broche/fiber-laser/corte',
+      'placa/fiber-laser/corte',
+      'placa/master-biro/marcacao',
+    ]);
+
+    // filenameToken preservado por resultado.
+    const broche = out.find((r) => r.chapaId === 'broche')!;
+    expect(broche.filenameToken).toBe('broche_60x25');
+    expect(broche.dxf).toBe('DXF1');
+    const placa = out.find((r) => r.chapaId === 'placa' && r.machineId === 'master-biro')!;
+    expect(placa.filenameToken).toBe('placa_100x40');
+    expect(placa.dxf).toBe('DXF3');
+  });
+
+  it('chapa sem buckets (operador deixou aquele espaço vazio) não contribui — sem erro', async () => {
+    mockExportDxf
+      .mockResolvedValueOnce(new Map([[makeDxfBucketKey('fiber-laser', 'corte'), 'DXF1']]))
+      .mockResolvedValueOnce(new Map()); // chapa 2 vazia
+
+    const out = await exportBoardDxfByChapa({
+      canvas: {} as fabric.Canvas,
+      layers: [],
+      boardWidthMm: 200,
+      boardHeightMm: 100,
+      chapas: [
+        makeChapa('broche', { leftMm: 0, topMm: 0, widthMm: 60, heightMm: 25 }),
+        makeChapa('placa', { leftMm: 70, topMm: 0, widthMm: 100, heightMm: 40 }),
+      ],
+      assetLookup: noopLookup,
+    });
+
+    expect(out).toHaveLength(1);
+    expect(out[0].chapaId).toBe('broche');
+  });
+
+  it('erro de uma chapa é propagado com prefixo do chapaId', async () => {
+    mockExportDxf
+      .mockResolvedValueOnce(new Map())
+      .mockRejectedValueOnce(new Error('asset não encontrado'));
+
+    await expect(
+      exportBoardDxfByChapa({
+        canvas: {} as fabric.Canvas,
+        layers: [],
+        boardWidthMm: 200,
+        boardHeightMm: 100,
+        chapas: [
+          makeChapa('broche', { leftMm: 0, topMm: 0, widthMm: 60, heightMm: 25 }),
+          makeChapa('placa', { leftMm: 70, topMm: 0, widthMm: 100, heightMm: 40 }),
+        ],
+        assetLookup: noopLookup,
+      })
+    ).rejects.toThrow(/\[board-exporter\] DXF chapa "placa".*asset não encontrado/);
   });
 });

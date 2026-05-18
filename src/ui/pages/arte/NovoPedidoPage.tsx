@@ -217,13 +217,25 @@ export default function NovoPedidoPage() {
   // ao trocar de broche ativo — só limpamos seleção residual de qualquer
   // filho que estivesse selecionado no broche anterior. O destaque visual
   // do broche ativo fica na sidebar + painel de camadas.
+  //
+  // Onda 27 (abas por chapa) — quando há 2+ chapas, ao trocar de broche
+  // ativo enquadramos a chapa correspondente no viewport. Tipo "abas do
+  // Chrome": o canvas continua único com todo o conteúdo, só muda o
+  // recorte visual. Single-chapa mantém fit da prancha inteira.
   useEffect(() => {
     const engine = engineRef.current;
     if (!engine || !engineReady) return;
     // Limpa overlay azul antigo (Onda 16) e qualquer seleção residual.
     engine.setActiveBoardHighlight(null);
     engine.clearSelection();
-  }, [activeItem, engineReady, engineVersion]);
+
+    if (chapaInfos.length >= 2 && activeItem) {
+      const chapa = chapaInfos.find((c) => c.productId === activeItem.productId);
+      if (chapa) engine.fitRegionToViewport(chapa.bboxMm);
+    } else {
+      engine.fitBoardToViewport();
+    }
+  }, [activeItem, engineReady, engineVersion, chapaInfos]);
 
   // ── Boot: pedido novo ou reabertura ──────────────────────────────────────
   useEffect(() => {
@@ -504,13 +516,23 @@ export default function NovoPedidoPage() {
   }
 
   // ── Aprovar — marca última revisão como aprovada ─────────────────────────
+  // Salvar+aprovar é atômico do ponto de vista do operador: 1 clique faz as
+  // 2 ações. Se o pedido nunca foi salvo, salva primeiro (createWithItems)
+  // e usa o id recém-criado. Se salvar falhar, não aprova.
   async function handleApprove() {
-    if (!orderIdFromUrl) {
-      toast.error('Salve o pedido antes de aprovar.');
+    if (boardItems.length === 0) {
+      toast.error('Adicione pelo menos um broche antes de aprovar.');
       return;
     }
+    let orderId = orderIdFromUrl;
+    if (!orderId) {
+      await handleSave();
+      // handleSave navega pra ?id= no sucesso. Releitura via URL.
+      orderId = new URLSearchParams(window.location.search).get('id');
+      if (!orderId) return; // save falhou — toast já foi mostrado
+    }
     try {
-      await approveLatestRevision(orderIdFromUrl);
+      await approveLatestRevision(orderId);
       toast.success('Revisão aprovada', { description: pedidoLabel || 'Sem nome' });
     } catch (err) {
       toast.error('Falha ao aprovar', { description: String(err) });
@@ -588,6 +610,13 @@ export default function NovoPedidoPage() {
     onDuplicateActive: () => {
       if (selectedIndex >= 0) handleDuplicateBoardItem(selectedIndex);
       else toast.info('Selecione um broche pra duplicar.');
+    },
+    onToggleBanco: () => {
+      if (!activeItem) {
+        toast.info('Selecione um broche antes de abrir o Banco.');
+        return;
+      }
+      setBancoOpen((v) => !v);
     },
     enabled: !saving,
   });
@@ -720,6 +749,7 @@ export default function NovoPedidoPage() {
         getEngine={() => engineRef.current}
         boardDims={boardDims}
         defaultStem={pedidoLabel}
+        chapaInfos={chapaInfos}
         onClose={() => setSvgDialogOpen(false)}
       />
 
