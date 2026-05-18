@@ -38,7 +38,7 @@ import {
 import { approveLatestRevision } from '@/data/repositories/revisionRepository';
 import { useCanvasStore } from '@/stores/canvas-store';
 import { getProductById } from '@/data/repositories/productRepository';
-import { computeItemPositions } from '@/hooks/useBoardEngine';
+import { computeChapas } from '@/hooks/useBoardEngine';
 import { useOrderShortcuts } from '@/hooks/useOrderShortcuts';
 import { useCanvasShortcuts } from '@/hooks/useCanvasShortcuts';
 import AppLayout from '@/ui/layout/AppLayout';
@@ -134,39 +134,47 @@ export default function NovoPedidoPage() {
 
   const activeOffsetMm = useMemo(() => {
     if (!activeItem) return { leftMm: 0, topMm: 0 };
-    const dimsArr = boardItems.map((it) => {
+    // Onda 26e — usa computeChapas: respeita offset de chapa pra produtos
+    // mistos (broche + placa). Pra prancha single-product retorna o mesmo
+    // que computeItemPositions retornava antes.
+    const itemsForChapas = boardItems.map((it) => {
       const d = productDims[it.productId];
-      return d ?? { widthMm: 60, heightMm: 25 };
+      return {
+        productId: it.productId,
+        widthMm: d?.widthMm ?? 60,
+        heightMm: d?.heightMm ?? 25,
+      };
     });
-    const positions = computeItemPositions(dimsArr);
-    const pos = positions[selectedIndex];
+    const layout = computeChapas(itemsForChapas);
+    const pos = layout.positions[selectedIndex];
     return pos ?? { leftMm: 0, topMm: 0 };
   }, [activeItem, boardItems, productDims, selectedIndex]);
 
   // Onda 17 — bbox dos broches em px do canvas pra recortar mockup PNG.
-  // União das regiões de cada broche (mesma matemática do
-  // computeItemPositions). MM_TO_PX = 4 px/mm (units.ts).
+  // Onda 26e — usa computeChapas pra cobrir chapas separadas (produto misto):
+  // o bbox vira a união das chapas, com gaps entre.
   const boardBoundsPx = useMemo(() => {
     if (boardItems.length === 0) return null;
-    const dimsArr = boardItems.map((it) => {
-      const d = productDims[it.productId];
-      return d ?? { widthMm: 60, heightMm: 25 };
-    });
     // Aguarda dims reais — sem isso, prancha de produtos não-60×25 fica errada.
     const allDimsReady = boardItems.every((it) => productDims[it.productId]);
     if (!allDimsReady) return null;
-    const positions = computeItemPositions(dimsArr);
+    const itemsForChapas = boardItems.map((it) => {
+      const d = productDims[it.productId]!;
+      return { productId: it.productId, widthMm: d.widthMm, heightMm: d.heightMm };
+    });
+    const layout = computeChapas(itemsForChapas);
     let minLeftMm = Infinity;
     let minTopMm = Infinity;
     let maxRightMm = -Infinity;
     let maxBottomMm = -Infinity;
     for (let i = 0; i < boardItems.length; i++) {
-      const pos = positions[i];
-      const d = dimsArr[i];
+      const pos = layout.positions[i];
+      const w = itemsForChapas[i].widthMm;
+      const h = itemsForChapas[i].heightMm;
       minLeftMm = Math.min(minLeftMm, pos.leftMm);
       minTopMm = Math.min(minTopMm, pos.topMm);
-      maxRightMm = Math.max(maxRightMm, pos.leftMm + d.widthMm);
-      maxBottomMm = Math.max(maxBottomMm, pos.topMm + d.heightMm);
+      maxRightMm = Math.max(maxRightMm, pos.leftMm + w);
+      maxBottomMm = Math.max(maxBottomMm, pos.topMm + h);
     }
     const MM_TO_PX = 4;
     return {
@@ -177,29 +185,18 @@ export default function NovoPedidoPage() {
     };
   }, [boardItems, productDims]);
 
-  // Onda 16 — desenha outline no broche selecionado.
-  // Quando muda selectedIndex / boardItems / productDims / engineReady,
-  // recalcula a região e chama engine.setActiveBoardHighlight.
-  // Quando não há item ativo ou engine não está pronto, remove.
+  // Sidebar esquerda → broche ativo. Onda 26c: o aplique-base do broche é
+  // travado (selectable: false), então não selecionamos nada no canvas
+  // ao trocar de broche ativo — só limpamos seleção residual de qualquer
+  // filho que estivesse selecionado no broche anterior. O destaque visual
+  // do broche ativo fica na sidebar + painel de camadas.
   useEffect(() => {
     const engine = engineRef.current;
     if (!engine || !engineReady) return;
-    if (!activeItem) {
-      engine.setActiveBoardHighlight(null);
-      return;
-    }
-    const dims = productDims[activeItem.productId];
-    if (!dims) {
-      engine.setActiveBoardHighlight(null);
-      return;
-    }
-    engine.setActiveBoardHighlight({
-      leftMm: activeOffsetMm.leftMm,
-      topMm: activeOffsetMm.topMm,
-      widthMm: dims.widthMm,
-      heightMm: dims.heightMm,
-    });
-  }, [activeItem, activeOffsetMm, productDims, engineReady, engineVersion]);
+    // Limpa overlay azul antigo (Onda 16) e qualquer seleção residual.
+    engine.setActiveBoardHighlight(null);
+    engine.clearSelection();
+  }, [activeItem, engineReady, engineVersion]);
 
   // ── Boot: pedido novo ou reabertura ──────────────────────────────────────
   useEffect(() => {

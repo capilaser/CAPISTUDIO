@@ -17,7 +17,7 @@
  * (Onda 13.5) está temporariamente sem uso aqui — vai voltar quando o
  * fluxo de "selecionar broche ativo" for repensado.
  */
-import { useEffect, type RefObject } from 'react';
+import { useEffect, useRef, type RefObject } from 'react';
 
 import type { CanvasEngine } from '@/core/canvas/canvas-engine';
 import { useBoardEngine } from '@/hooks/useBoardEngine';
@@ -25,7 +25,10 @@ import type { BoardItemDraft } from '@/stores/canvas-store';
 
 import { PatternBar } from './PatternBar';
 
-const VIEWPORT = { widthPx: 900, heightPx: 600 };
+// Tamanho inicial do canvas. ResizeObserver ajusta pra dimensão real do
+// container assim que o componente monta — esses valores só servem pro
+// primeiro tick antes do observer disparar.
+const VIEWPORT = { widthPx: 1800, heightPx: 1100 };
 
 interface Props {
   /** Items da prancha. Cada um vira um aplique posicionado no canvas. */
@@ -153,6 +156,27 @@ function BoardHost({
     onBoardDimsChange?.(boardDims);
   }, [boardDims, onBoardDimsChange]);
 
+  // Onda 26d — ResizeObserver no container: mede a área disponível e propaga
+  // pro engine pra redimensionar o canvas + re-encaixar a prancha. Dispara
+  // no mount (primeira medição), em resize de janela e em mudança de layout
+  // (ex: sidebar abrir/fechar no futuro).
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!ready) return;
+    const container = containerRef.current;
+    const engine = engineRef.current;
+    if (!container || !engine) return;
+
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        engine.resizeViewport(Math.floor(width), Math.floor(height));
+      }
+    });
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [ready, engineRef, engineVersion]);
+
   return (
     <div className="flex flex-1 flex-col overflow-hidden bg-background">
       <PatternBar
@@ -163,13 +187,19 @@ function BoardHost({
         activePatternId={activeItem?.patternId ?? null}
         onApplied={onPatternApplied}
       />
-      <div className="relative flex flex-1 items-center justify-center overflow-hidden p-6">
-        <canvas
-          ref={canvasRef}
-          width={VIEWPORT.widthPx}
-          height={VIEWPORT.heightPx}
-          className="rounded-sm border border-border shadow-md"
-        />
+      <div
+        ref={containerRef}
+        className="relative flex flex-1 items-center justify-center overflow-hidden"
+      >
+        <canvas ref={canvasRef} width={VIEWPORT.widthPx} height={VIEWPORT.heightPx} />
+        <button
+          type="button"
+          onClick={() => externalEngineRef.current?.fitBoardToViewport()}
+          className="pointer-events-auto absolute right-3 top-3 rounded-md border border-border bg-card/80 px-2.5 py-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground backdrop-blur transition-colors hover:border-primary/40 hover:text-foreground"
+          title="Enquadrar tudo no viewport"
+        >
+          Enquadrar
+        </button>
         {boardDims && (
           <div className="pointer-events-none absolute bottom-3 right-3 font-mono text-[10px] tabular-nums text-muted-foreground/70">
             {boardDims.widthMm.toFixed(0)}×{boardDims.heightMm.toFixed(0)}mm · {boardItems.length}{' '}

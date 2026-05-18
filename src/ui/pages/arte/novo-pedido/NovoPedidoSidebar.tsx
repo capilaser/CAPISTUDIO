@@ -16,7 +16,7 @@
  * Esta sidebar só lê do store e dispara handlers de UI.
  */
 import { useEffect, useState, type RefObject } from 'react';
-import { Plus, FileUp, Type, Database, ChevronRight, Trash2, Copy, Layers } from 'lucide-react';
+import { Plus, FileUp, Type, Database, Trash2, Copy, Layers } from 'lucide-react';
 
 import type { CanvasEngine } from '@/core/canvas/canvas-engine';
 import { getAllProducts, type Product } from '@/data/repositories/productRepository';
@@ -40,6 +40,13 @@ import {
 } from '@/ui/components/dropdown-menu';
 import { Input } from '@/ui/components/input';
 import { Label } from '@/ui/components/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/ui/components/select';
 import { cn } from '@/lib/cn';
 import type { BoardItemDraft } from '@/stores/canvas-store';
 
@@ -532,80 +539,105 @@ function ProductCascadeForm({
   }
 
   return (
-    <div className="flex flex-col gap-5 p-4">
-      <div className="flex flex-col gap-2">
-        <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-          Escolher produto
-        </span>
-        <div className="flex flex-col gap-1">
-          {categories.map((cat) => (
-            <CascadeRow
-              key={cat.type}
-              label={cat.label}
-              selected={categoryType === cat.type}
-              onClick={() => handleCategoryClick(cat.type)}
-            />
-          ))}
-        </div>
+    <div className="flex flex-col gap-4 p-4">
+      <div className="flex flex-col gap-1.5">
+        <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+          Produto
+        </Label>
+        <Select value={categoryType} onValueChange={handleCategoryClick}>
+          <SelectTrigger className="h-9 text-xs">
+            <SelectValue placeholder="Escolha o produto" />
+          </SelectTrigger>
+          <SelectContent>
+            {categories.map((cat) => (
+              <SelectItem key={cat.type} value={cat.type} className="text-xs">
+                {cat.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
-      {categoryType !== '' && (
-        <div className="flex flex-col gap-2 border-t border-border pt-4">
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-            Variação
-          </span>
-          {familiesForCategory.length === 0 ? (
-            <p className="text-[11px] text-muted-foreground">
-              Sem variações cadastradas pra esse produto.
-            </p>
-          ) : (
-            <div className="flex flex-col gap-1">
-              {familiesForCategory.map((f) => (
-                <CascadeRow
-                  key={f.id}
-                  label={f.label}
-                  selected={familyId === f.id}
-                  onClick={() => handleFamilyClick(f.id)}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+      <div className="flex flex-col gap-1.5">
+        <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+          Variação
+        </Label>
+        <Select
+          value={familyId}
+          onValueChange={handleFamilyClick}
+          disabled={categoryType === '' || familiesForCategory.length === 0}
+        >
+          <SelectTrigger className="h-9 text-xs">
+            <SelectValue
+              placeholder={
+                categoryType === ''
+                  ? 'Selecione o produto primeiro'
+                  : familiesForCategory.length === 0
+                    ? 'Sem variações cadastradas'
+                    : 'Escolha a variação'
+              }
+            />
+          </SelectTrigger>
+          <SelectContent>
+            {familiesForCategory.map((f) => (
+              <SelectItem key={f.id} value={f.id} className="text-xs">
+                {f.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
-      {familyId !== '' && (
-        <div className="flex flex-col gap-2 border-t border-border pt-4">
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Cor</span>
-          {colorsForFamily.length === 0 ? (
-            <p className="text-[11px] text-muted-foreground">Sem cores nessa variação.</p>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {colorsForFamily.map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => setMaterialId(m.id)}
-                  title={m.label}
-                  className={cn(
-                    'h-7 w-7 rounded-full border-2 transition-all',
-                    materialId === m.id
-                      ? 'scale-110 border-primary shadow-md'
-                      : 'border-border hover:scale-105 hover:border-primary/50'
-                  )}
-                  style={{ backgroundColor: m.swatch }}
-                />
-              ))}
-            </div>
-          )}
-          {materialId !== '' && (
-            <span className="text-[10px] text-muted-foreground">
-              {colorsForFamily.find((m) => m.id === materialId)?.label}
-            </span>
-          )}
-        </div>
-      )}
+      <div className="flex flex-col gap-1.5">
+        <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Cor</Label>
+        <Select
+          value={materialId}
+          onValueChange={setMaterialId}
+          disabled={familyId === '' || colorsForFamily.length === 0}
+        >
+          <SelectTrigger className="h-9 text-xs">
+            <SelectValue
+              placeholder={
+                familyId === ''
+                  ? 'Selecione a variação primeiro'
+                  : colorsForFamily.length === 0
+                    ? 'Sem cores nessa variação'
+                    : 'Escolha a cor'
+              }
+            >
+              {materialId !== '' &&
+                (() => {
+                  const m = colorsForFamily.find((mat) => mat.id === materialId);
+                  if (!m) return null;
+                  return (
+                    <span className="flex items-center gap-2">
+                      <span
+                        className="h-3.5 w-3.5 shrink-0 rounded-full border border-border"
+                        style={{ backgroundColor: m.swatch }}
+                      />
+                      <span>{m.label}</span>
+                    </span>
+                  );
+                })()}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {colorsForFamily.map((m) => (
+              <SelectItem key={m.id} value={m.id} className="text-xs">
+                <span className="flex items-center gap-2">
+                  <span
+                    className="h-3.5 w-3.5 shrink-0 rounded-full border border-border"
+                    style={{ backgroundColor: m.swatch }}
+                  />
+                  <span>{m.label}</span>
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-2 pt-1">
         <Button onClick={handleAdd} disabled={!isValid} className="w-full" variant="default">
           Adicionar
         </Button>
@@ -620,37 +652,6 @@ function ProductCascadeForm({
         )}
       </div>
     </div>
-  );
-}
-
-// ── Row da cascata (categoria/família) com chevron à direita ───────────────
-
-interface CascadeRowProps {
-  label: string;
-  selected: boolean;
-  onClick: () => void;
-}
-
-function CascadeRow({ label, selected, onClick }: CascadeRowProps) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        'flex items-center justify-between rounded-md border px-3 py-2 text-xs transition-colors',
-        selected
-          ? 'border-primary bg-primary/10 text-foreground'
-          : 'border-border bg-background/40 text-muted-foreground hover:border-primary/40 hover:text-foreground'
-      )}
-    >
-      <span className="line-clamp-1">{label}</span>
-      <ChevronRight
-        className={cn(
-          'h-3 w-3 shrink-0 transition-colors',
-          selected ? 'text-primary' : 'text-muted-foreground/50'
-        )}
-      />
-    </button>
   );
 }
 

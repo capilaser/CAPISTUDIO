@@ -194,8 +194,14 @@ export class SlotManager {
 
   // ─── Content management (stubs — implemented in Checkpoint C Phase 4) ────
 
-  /** Applies fitText and places a read-only fabric.Text centred inside the slot. */
-  addText(slotId: string, text: string, fontFamily: string): void {
+  /**
+   * Applies fitText and places a read-only fabric.Text centred inside the slot.
+   *
+   * `fontSizeDelta` (pt) é somado ao resultado do fitText pra ajuste fino manual
+   * via setas < > na sidebar. Clamp final em [6, 48]pt — fitText tem teto de 24
+   * mas o operador pode querer maior. Default 0 = comportamento original.
+   */
+  addText(slotId: string, text: string, fontFamily: string, fontSizeDelta = 0): void {
     const entry = this.slots.get(slotId);
     if (!entry) throw new Error(`[slot-manager] slot not found: ${slotId}`);
 
@@ -217,13 +223,15 @@ export class SlotManager {
       measureFn: fabricMeasure,
     });
 
+    const finalFontSizePt = Math.max(6, Math.min(48, result.fontSize + fontSizeDelta));
+
     const textObj = new fabric.Text(text, {
       left: mmToPx(entry.meta.x + entry.meta.maxWidth / 2),
       top: mmToPx(entry.meta.y + entry.meta.maxHeight / 2),
       originX: 'center',
       originY: 'center',
       fontFamily,
-      fontSize: result.fontSize * PT_TO_PX,
+      fontSize: finalFontSizePt * PT_TO_PX,
       selectable: false,
       evented: false,
       excludeFromExport: true,

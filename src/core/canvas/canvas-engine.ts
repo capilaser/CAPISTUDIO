@@ -65,6 +65,8 @@ export type LayerNode =
       name: string;
       visible: boolean;
       locked: boolean;
+      /** Onda 26 — 0..1. 1 quando o LayerMeta não traz opacity (retrocompat). */
+      opacity: number;
       children: LayerNode[];
     }
   | {
@@ -73,6 +75,7 @@ export type LayerNode =
       name: string;
       visible: boolean;
       locked: boolean;
+      opacity: number;
       parentId: string | null;
     }
   | {
@@ -81,6 +84,7 @@ export type LayerNode =
       name: string;
       visible: boolean;
       locked: boolean;
+      opacity: number;
       parentId: string | null;
       /** Onda 15 — operação do banco (corte, gravacao, marcacao, …). */
       operation: string;
@@ -256,6 +260,13 @@ export class CanvasEngine {
    */
   private boardItemHighlight: fabric.Rect | null = null;
 
+  /**
+   * Onda 26e — labels das chapas (Text objects) renderizados em cima de
+   * cada grupo de produtos. `excludeFromExport: true` pra não saírem em
+   * PNG/SVG. Recriados a cada chamada de `renderChapaLabels`.
+   */
+  private chapaLabels: fabric.Text[] = [];
+
   /** Optional callback — set from outside to receive slot selection changes. */
   onSlotSelectionChange?: (id: string | null) => void;
 
@@ -285,7 +296,12 @@ export class CanvasEngine {
     this.canvas = new fabric.Canvas(canvasEl, {
       width: config.viewportWidthPx,
       height: config.viewportHeightPx,
-      backgroundColor: '#0d1117',
+      // Fundo transparente — canvas vira parte contínua do espaço de trabalho,
+      // sem moldura/retângulo visível. A cor que aparece é do container pai
+      // (bg-background do tema dark). Export PNG sobrescreve `backgroundColor`
+      // via png-exporter.ts antes do toDataURL, então transparência aqui não
+      // afeta o PNG exportado (que pode definir fundo branco/transparente).
+      backgroundColor: 'transparent',
       preserveObjectStacking: true,
       selection: true,
     });
@@ -800,6 +816,15 @@ export class CanvasEngine {
   }
 
   /**
+   * Onda 26 — retorna o fabric object por capi id, ou null. Público pra que
+   * o painel de camadas possa renderizar thumbnails (obj.toDataURL) sem
+   * acoplar UI ao detalhe de filtragem de base objects.
+   */
+  getObjectById(id: string): fabric.FabricObject | null {
+    return this.findByCapiId(id) ?? null;
+  }
+
+  /**
    * Onda 15 — encontra o layerId de um aplique principal pelo seu appliqueId
    * (string opaca passada em addAppliqueSvg, tipicamente `board-item:<itemId>`).
    * Usado pelo PatternBar pra parentar slots do pattern ao broche correto.
@@ -962,6 +987,31 @@ export class CanvasEngine {
     // Fabric 6 não tem 'layer-meta-changed' no tipo CanvasEvents; uso `fire`
     // com cast (mesmo padrão usado em outras fases pra eventos sintéticos
     // que UI componentes consomem). Listener no painel também faz cast no on().
+    (this.canvas as unknown as { fire: (n: string, o: unknown) => void }).fire(
+      'layer-meta-changed',
+      { layerId: id, kind: meta.kind }
+    );
+    this.canvas.requestRenderAll();
+  }
+
+  /**
+   * Onda 26 — define opacidade (0..1) de uma camada. Valores fora do
+   * intervalo são clampeados. Persiste em LayerMeta.opacity e propaga
+   * pro fabric obj.opacity. Dispara 'layer-meta-changed' (mesmo padrão
+   * de setLayerVisibility/setLayerLocked).
+   */
+  setLayerOpacity(id: string, opacity: number): void {
+    const meta = this.layerMeta.get(id);
+    if (!meta) return;
+    const clamped = Math.max(0, Math.min(1, opacity));
+    meta.opacity = clamped;
+
+    const obj = this.findByCapiId(id);
+    if (obj) {
+      obj.set({ opacity: clamped });
+      obj.setCoords();
+    }
+
     (this.canvas as unknown as { fire: (n: string, o: unknown) => void }).fire(
       'layer-meta-changed',
       { layerId: id, kind: meta.kind }
@@ -1139,6 +1189,7 @@ export class CanvasEngine {
           name: meta.name,
           visible: meta.visible,
           locked: meta.locked,
+          opacity: meta.opacity ?? 1,
           children: [],
         });
       }
@@ -1156,6 +1207,7 @@ export class CanvasEngine {
               name: meta.name,
               visible: meta.visible,
               locked: meta.locked,
+              opacity: meta.opacity ?? 1,
               parentId: meta.parentLayerId ?? null,
               operation: meta.operation,
               machines: meta.machines,
@@ -1166,6 +1218,7 @@ export class CanvasEngine {
               name: meta.name,
               visible: meta.visible,
               locked: meta.locked,
+              opacity: meta.opacity ?? 1,
               parentId: meta.parentLayerId ?? null,
             };
       const parent = meta.parentLayerId ? principalById.get(meta.parentLayerId) : undefined;
@@ -1615,6 +1668,16 @@ export class CanvasEngine {
 
     group.set({ left, top, originX: 'left', originY: 'top', scaleX, scaleY });
 
+    // Onda 26c — apliques-base do Novo Pedido (appliqueId `board-item:*`) são
+    // a "página" do produto. Operador edita o que está em cima (textos, logos,
+    // decorativos), não a base. Travados: não vira target de pointer (click
+    // atravessa pro filho acima, padrão Figma/Corel) e não aparece em seleção.
+    // No editor de Padrões (appliqueId arbitrário) continua editável.
+    const isBoardItemBase = appliqueId.startsWith('board-item:');
+    if (isBoardItemBase) {
+      group.set({ selectable: false, evented: false, hoverCursor: 'default' });
+    }
+
     const id = generateObjectId();
     (group as unknown as Record<string, unknown>).id = id;
 
@@ -1925,6 +1988,16 @@ export class CanvasEngine {
   }
 
   /**
+   * Onda 26b — limpa a seleção ativa do canvas. Encapsula o discard pra UI
+   * não precisar mexer no canvas Fabric direto. Usado pelo NovoPedidoPage
+   * quando nenhum broche está ativo.
+   */
+  clearSelection(): void {
+    this.canvas.discardActiveObject();
+    this.canvas.requestRenderAll();
+  }
+
+  /**
    * Updates a slot's geometry/meta. Patch is partial — only the keys present
    * are applied. Onda 14c — usado pelo painel de propriedades.
    */
@@ -2014,11 +2087,19 @@ export class CanvasEngine {
   /**
    * Applies fitText and renders the text inside the first slot of the given type.
    * No-op if no slot of that type exists.
+   *
+   * `fontSizeDelta` (pt) é somado ao tamanho calculado pelo fitText — ajuste
+   * fino manual via setas < > na sidebar (TextoItem). Default 0 = auto.
    */
-  fillTextSlot(type: 'nome' | 'profissao', text: string, fontFamily: string): void {
+  fillTextSlot(
+    type: 'nome' | 'profissao',
+    text: string,
+    fontFamily: string,
+    fontSizeDelta = 0
+  ): void {
     const slots = this.slotManager.getSlotsByType(type);
     if (slots.length === 0) return;
-    this.slotManager.addText(slots[0].id, text, fontFamily);
+    this.slotManager.addText(slots[0].id, text, fontFamily, fontSizeDelta);
   }
 
   /**
@@ -2063,6 +2144,122 @@ export class CanvasEngine {
   resetView(): void {
     this.centerProductInViewport();
     this.canvas.requestRenderAll();
+  }
+
+  /**
+   * Onda 26d — encaixa a prancha inteira no viewport com margem percentual.
+   * Calcula o zoom que faz `productWidthMm × productHeightMm` caber em
+   * `viewportWidthPx × viewportHeightPx × (1 - 2*margin)` e centraliza.
+   * Útil pra auto-fit no boot/resize do canvas. Margin 0.15 = 15% de espaço
+   * em cada borda (broche ocupa ~70% do viewport). Clampado em [ZOOM_MIN, ZOOM_MAX].
+   *
+   * "Prancha inteira" significa a área lógica do canvas-engine (productWidth/Height),
+   * que pro Novo Pedido contém todos os broches empilhados.
+   */
+  fitBoardToViewport(margin = 0.15): void {
+    const productPxW = mmToPx(this.config.productWidthMm);
+    const productPxH = mmToPx(this.config.productHeightMm);
+    if (productPxW <= 0 || productPxH <= 0) return;
+
+    const availableW = this.config.viewportWidthPx * (1 - 2 * margin);
+    const availableH = this.config.viewportHeightPx * (1 - 2 * margin);
+    const scale = Math.min(availableW / productPxW, availableH / productPxH);
+    const zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, scale));
+
+    const scaledW = productPxW * zoom;
+    const scaledH = productPxH * zoom;
+    const tx = (this.config.viewportWidthPx - scaledW) / 2;
+    const ty = (this.config.viewportHeightPx - scaledH) / 2;
+
+    this.canvas.setViewportTransform([zoom, 0, 0, zoom, tx, ty]);
+    this.canvas.requestRenderAll();
+  }
+
+  /**
+   * Onda 26d — atualiza dimensões internas do viewport e re-encaixa a prancha.
+   * Chamado pelo ResizeObserver do container quando a janela muda.
+   * Sem isso, redimensionar reduz a área de desenho mas o conteúdo continua
+   * desenhado nos pixels antigos (canvas Fabric não reflua sozinho).
+   */
+  resizeViewport(widthPx: number, heightPx: number): void {
+    if (widthPx <= 0 || heightPx <= 0) return;
+    this.config.viewportWidthPx = widthPx;
+    this.config.viewportHeightPx = heightPx;
+    this.canvas.setDimensions({ width: widthPx, height: heightPx });
+    this.fitBoardToViewport();
+  }
+
+  /**
+   * Onda 26e — renderiza labels de chapas em cima de cada grupo. Idempotente:
+   * remove labels anteriores antes de criar os novos. Labels têm
+   * `excludeFromExport: true` e não interferem em snap/alinhamento.
+   *
+   * `entries` em mm; o engine converte pra px internamente. `text` já é o
+   * label final formatado pela UI (ex: "Broches (3)").
+   */
+  renderChapaLabels(entries: Array<{ leftMm: number; topMm: number; text: string }>): void {
+    // Remove labels antigos
+    for (const old of this.chapaLabels) {
+      this.canvas.remove(old);
+    }
+    this.chapaLabels = [];
+
+    if (entries.length === 0) {
+      this.canvas.requestRenderAll();
+      return;
+    }
+
+    for (const entry of entries) {
+      const label = new fabric.Text(entry.text, {
+        left: mmToPx(entry.leftMm),
+        top: mmToPx(entry.topMm),
+        originX: 'left',
+        originY: 'top',
+        fontFamily: 'JetBrains Mono, Consolas, monospace',
+        fontSize: mmToPx(3.5), // ~3.5mm de altura — leitura confortável no auto-fit
+        fill: 'rgba(255, 255, 255, 0.4)',
+        selectable: false,
+        evented: false,
+        excludeFromExport: true,
+        hoverCursor: 'default',
+      });
+      (label as unknown as Record<string, unknown>).__capiOverlay = true;
+      this.canvas.add(label);
+      this.chapaLabels.push(label);
+    }
+    this.canvas.requestRenderAll();
+  }
+
+  /**
+   * Onda 26d — anexa zoom no scroll do mouse, ancorado no cursor (padrão
+   * Figma/Lightburn). Retorna função pra remover o handler. Idempotente:
+   * se já anexado, retorna o detach do anterior.
+   */
+  private wheelZoomDetach: (() => void) | null = null;
+  enableWheelZoom(): () => void {
+    if (this.wheelZoomDetach) return this.wheelZoomDetach;
+    const handler = (opt: { e: WheelEvent }) => {
+      const delta = opt.e.deltaY;
+      const current = this.canvas.getZoom();
+      // deltaY > 0 → roda pra baixo → zoom out (compatível com convenção do SO).
+      const factor = delta > 0 ? 0.95 : 1.05;
+      const next = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, current * factor));
+      if (next === current) {
+        opt.e.preventDefault();
+        opt.e.stopPropagation();
+        return;
+      }
+      const point = new fabric.Point(opt.e.offsetX, opt.e.offsetY);
+      this.canvas.zoomToPoint(point, next);
+      opt.e.preventDefault();
+      opt.e.stopPropagation();
+    };
+    this.canvas.on('mouse:wheel', handler);
+    this.wheelZoomDetach = () => {
+      this.canvas.off('mouse:wheel', handler);
+      this.wheelZoomDetach = null;
+    };
+    return this.wheelZoomDetach;
   }
 
   /**
@@ -2823,6 +3020,36 @@ export class CanvasEngine {
       this.canvas.add(obj);
     }
     this.slotManager.loadSlotsFromCanvas();
+
+    // Onda 26 — propaga LayerMeta.opacity pro fabric obj. obj.opacity já
+    // costuma vir do enlivenObjects (fabric serializa), mas LayerMeta é a
+    // fonte autoritativa pra esse campo: garante coerência em padrões
+    // salvos antes do campo existir (opacity undefined → mantém atual).
+    for (const meta of this.layerMeta.values()) {
+      if (meta.opacity === undefined) continue;
+      const obj = this.findByCapiId(meta.id);
+      if (obj) obj.set({ opacity: meta.opacity });
+    }
+
+    // Onda 26c — re-aplica trava nos apliques-base do Novo Pedido após
+    // deserialize. addAppliqueSvg trava no momento da criação, mas snapshot
+    // serializado pode ter sido gravado antes desta regra existir (pedidos
+    // antigos) ou pelo próprio fluxo serialize→deserialize que preserva os
+    // flags. Garantir aqui é idempotente e barato.
+    const lockedAppliqueIds = new Set<string>();
+    for (const meta of this.layerMeta.values()) {
+      if (meta.kind === 'principal' && meta.appliqueId?.startsWith('board-item:')) {
+        lockedAppliqueIds.add(meta.id);
+      }
+    }
+    if (lockedAppliqueIds.size > 0) {
+      for (const obj of this.canvas.getObjects()) {
+        const objId = (obj as unknown as Record<string, unknown>).id;
+        if (typeof objId === 'string' && lockedAppliqueIds.has(objId)) {
+          obj.set({ selectable: false, evented: false, hoverCursor: 'default' });
+        }
+      }
+    }
 
     // Re-apply material Patterns for all layers that had a materialId.
     // OperationLayerMeta has no materialId field — filter it out before accessing.

@@ -43,6 +43,17 @@ const ITEMS_PER_COLUMN = 5;
 const GAP_Y_MM = 4;
 /** Gap horizontal entre colunas em mm. */
 const GAP_X_MM = 8;
+/**
+ * Onda 26e — gap horizontal entre chapas (grupos de produtos diferentes).
+ * Maior que GAP_X_MM (entre colunas do mesmo produto) pra separar visualmente
+ * "broches" de "placas" sem precisar de borda/box. ~5× o gap normal.
+ */
+const GAP_BETWEEN_CHAPAS_MM = 30;
+/**
+ * Espaço reservado em cima de cada chapa pro label ("Broches (3)") em mm.
+ * Convertido pra px no canvas via mmToPx. Não invade os items.
+ */
+const CHAPA_LABEL_HEIGHT_MM = 8;
 
 export interface UseBoardEngineOptions {
   boardItems: BoardItemDraft[];
@@ -76,6 +87,146 @@ export interface UseBoardEngineResult {
    * canvas novo quando o engine é trocado (boardKey muda).
    */
   engineVersion: number;
+  /**
+   * Onda 26e — layout de chapas (agrupamento por productId). Exposto pra
+   * NovoPedidoPage calcular activeOffsetMm e boardBoundsPx usando as
+   * posições reais (inclui offsets de chapa) em vez de re-calcular.
+   */
+  chapasLayout: ChapasLayout | null;
+}
+
+/**
+ * Onda 26e — entry de uma chapa no resultado de computeChapas.
+ *
+ * Cada chapa agrupa items do mesmo `productId`, com seu próprio empilhamento
+ * interno e bbox absoluto na prancha.
+ */
+export interface Chapa {
+  /** productId dos items dessa chapa. */
+  productId: string;
+  /** Label visual ("Broches (3)"). productLabel é resolvido externamente — aqui só guarda o id e a contagem. */
+  itemCount: number;
+  /** Items dessa chapa, com `originalIndex` apontando pro array de entrada. */
+  items: Array<{
+    originalIndex: number;
+    leftMm: number;
+    topMm: number;
+    widthMm: number;
+    heightMm: number;
+  }>;
+  /** Bbox da chapa em coordenadas absolutas da prancha (inclui label em cima). */
+  bbox: { leftMm: number; topMm: number; widthMm: number; heightMm: number };
+}
+
+export interface ChapasLayout {
+  chapas: Chapa[];
+  /** Posições absolutas de cada item de entrada, indexadas pelo índice original. */
+  positions: Array<{ leftMm: number; topMm: number }>;
+  /** Bbox total da prancha (todas as chapas + gaps). */
+  boardWidthMm: number;
+  boardHeightMm: number;
+}
+
+/**
+ * Agrupa items por `productId` (preservando ordem de chegada) e calcula
+ * layout: chapas lado-a-lado horizontal, items empilhados verticalmente
+ * dentro de cada chapa (mesma regra column-of-5 do `computeItemPositions`),
+ * com `CHAPA_LABEL_HEIGHT_MM` reservado em cima pra label visual.
+ *
+ * Função pura, testável sem Fabric. Retorna posições absolutas prontas pra
+ * passar pro `addAppliqueSvg`.
+ */
+export function computeChapas(
+  items: Array<{ productId: string; widthMm: number; heightMm: number }>
+): ChapasLayout {
+  if (items.length === 0) {
+    return { chapas: [], positions: [], boardWidthMm: 0, boardHeightMm: 0 };
+  }
+
+  // 1. Agrupa por productId preservando ordem de chegada do primeiro item
+  //    de cada produto. Mapa Insertion-order preserva ordem natural.
+  const groups = new Map<
+    string,
+    Array<{ originalIndex: number; widthMm: number; heightMm: number }>
+  >();
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i];
+    const arr = groups.get(it.productId) ?? [];
+    arr.push({ originalIndex: i, widthMm: it.widthMm, heightMm: it.heightMm });
+    groups.set(it.productId, arr);
+  }
+
+  // 2. Pra cada grupo, calcula layout interno (mesma regra do antigo
+  //    computeItemPositions: column-of-5). Coordenadas relativas à chapa
+  //    (origem 0,0 = canto sup esq do bbox da chapa, abaixo do label).
+  const positions = new Array<{ leftMm: number; topMm: number }>(items.length);
+  const chapas: Chapa[] = [];
+  let chapaLeftMm = 0;
+
+  for (const [productId, groupItems] of groups) {
+    // Layout interno: mesma matemática column-of-5
+    const colWidths = new Map<number, number>();
+    for (let i = 0; i < groupItems.length; i++) {
+      const col = Math.floor(i / ITEMS_PER_COLUMN);
+      colWidths.set(col, Math.max(colWidths.get(col) ?? 0, groupItems[i].widthMm));
+    }
+    const colLefts = new Map<number, number>();
+    let cumLeft = 0;
+    for (let c = 0; c < colWidths.size; c++) {
+      colLefts.set(c, cumLeft);
+      cumLeft += (colWidths.get(c) ?? 0) + GAP_X_MM;
+    }
+    const colTops = new Map<number, number>();
+    const chapaItems: Chapa['items'] = [];
+    let chapaMaxRight = 0;
+    let chapaMaxBottom = 0;
+
+    for (let i = 0; i < groupItems.length; i++) {
+      const col = Math.floor(i / ITEMS_PER_COLUMN);
+      const top = colTops.get(col) ?? 0;
+      const relLeft = colLefts.get(col) ?? 0;
+      const relTop = top;
+      // Posição ABSOLUTA: offset da chapa + relativo + label-height pro topo
+      const absLeft = chapaLeftMm + relLeft;
+      const absTop = CHAPA_LABEL_HEIGHT_MM + relTop;
+      const it = groupItems[i];
+      positions[it.originalIndex] = { leftMm: absLeft, topMm: absTop };
+      chapaItems.push({
+        originalIndex: it.originalIndex,
+        leftMm: absLeft,
+        topMm: absTop,
+        widthMm: it.widthMm,
+        heightMm: it.heightMm,
+      });
+      chapaMaxRight = Math.max(chapaMaxRight, relLeft + it.widthMm);
+      chapaMaxBottom = Math.max(chapaMaxBottom, relTop + it.heightMm);
+      colTops.set(col, top + it.heightMm + GAP_Y_MM);
+    }
+
+    chapas.push({
+      productId,
+      itemCount: groupItems.length,
+      items: chapaItems,
+      bbox: {
+        leftMm: chapaLeftMm,
+        topMm: 0,
+        widthMm: chapaMaxRight,
+        heightMm: CHAPA_LABEL_HEIGHT_MM + chapaMaxBottom,
+      },
+    });
+
+    chapaLeftMm += chapaMaxRight + GAP_BETWEEN_CHAPAS_MM;
+  }
+
+  // 3. Bbox total: largura = última posição − gap final; altura = max
+  //    entre chapas (chapas mais altas dominam).
+  const boardWidthMm =
+    chapas.length > 0
+      ? chapas[chapas.length - 1].bbox.leftMm + chapas[chapas.length - 1].bbox.widthMm
+      : 0;
+  const boardHeightMm = chapas.reduce((max, c) => Math.max(max, c.bbox.heightMm), 0);
+
+  return { chapas, positions, boardWidthMm, boardHeightMm };
 }
 
 /**
@@ -83,9 +234,10 @@ export interface UseBoardEngineResult {
  * Items 0..4 = coluna 1, 5..9 = coluna 2, etc.
  * Empilhamento vertical com gap de GAP_Y_MM, gap horizontal GAP_X_MM.
  *
- * Assume todos os items têm o MESMO produto (60×25) — limitação atual.
- * Produtos mistos numa prancha funcionariam mas precisariam cálculo
- * mais elaborado (column-major bounds).
+ * ⚠️ DEPRECATED Onda 26e: assume todos os items do MESMO produto. Pra
+ * suporte a produtos mistos use `computeChapas`. Mantido pra compatibilidade
+ * com testes/consumidores que ainda não migraram (mas o boot do canvas
+ * agora usa computeChapas).
  */
 function computeItemPositions(
   items: Array<{ widthMm: number; heightMm: number }>
@@ -140,6 +292,7 @@ export function useBoardEngine(options: UseBoardEngineOptions): UseBoardEngineRe
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [boardDims, setBoardDims] = useState<{ widthMm: number; heightMm: number } | null>(null);
+  const [chapasLayout, setChapasLayout] = useState<ChapasLayout | null>(null);
   // Onda 15.fix — incrementa a cada engine novo. LayerPanel usa como dep.
   const [engineVersion, setEngineVersion] = useState(0);
 
@@ -197,6 +350,7 @@ export function useBoardEngine(options: UseBoardEngineOptions): UseBoardEngineRe
       try {
         if (boardItems.length === 0 || !canvasRef.current) {
           setBoardDims(null);
+          setChapasLayout(null);
           return;
         }
 
@@ -220,15 +374,36 @@ export function useBoardEngine(options: UseBoardEngineOptions): UseBoardEngineRe
           products.push(p);
         }
 
-        // 2. Calcula posições da prancha.
-        const dims = products.map((p) => ({
-          widthMm: p.canvasMm.width,
-          heightMm: p.canvasMm.height,
+        // 2. Calcula posições da prancha. Onda 26e — items são agrupados em
+        //    chapas por productId (computeChapas) pra produtos mistos não
+        //    ficarem empilhados juntos. 1 produto único = 1 chapa = mesmo
+        //    layout do antigo computeItemPositions.
+        const dimsForChapas = boardItems.map((it, i) => ({
+          productId: it.productId,
+          widthMm: products[i].canvasMm.width,
+          heightMm: products[i].canvasMm.height,
         }));
-        const positions = computeItemPositions(dims);
-        const board = computeBoardDims(dims, positions);
+        const layout = computeChapas(dimsForChapas);
+        const positions = layout.positions;
+        const board = { widthMm: layout.boardWidthMm, heightMm: layout.boardHeightMm };
         if (cancelled) return;
         setBoardDims(board);
+        setChapasLayout(layout);
+
+        // Onda 26e — mapeia productId → label legível pra labels visuais.
+        // Reusa nome do produto se vier do banco; fallback pro id se vazio.
+        const productLabelById = new Map<string, string>();
+        for (let i = 0; i < products.length; i++) {
+          const p = products[i];
+          if (!productLabelById.has(p.id)) {
+            productLabelById.set(p.id, p.label || p.id);
+          }
+        }
+        const chapaLabelEntries = layout.chapas.map((c) => ({
+          leftMm: c.bbox.leftMm,
+          topMm: c.bbox.topMm,
+          text: `${productLabelById.get(c.productId) ?? c.productId} (${c.itemCount})`,
+        }));
 
         // 3. Instancia engine com tamanho da prancha.
         const engine = new CanvasEngine(canvasRef.current!, {
@@ -284,13 +459,16 @@ export function useBoardEngine(options: UseBoardEngineOptions): UseBoardEngineRe
               setSelectedLayerKind(meta?.kind ?? null);
             };
             engine.setSnapOptions({ isAltDown: () => altKeyRef.current });
+            engine.enableWheelZoom();
+            engine.renderChapaLabels(chapaLabelEntries);
+            engine.fitBoardToViewport();
             engineRef.current = engine;
             // Onda 15.fix — sinaliza LayerPanel pra re-anexar listeners no canvas novo.
             setEngineVersion((v) => v + 1);
             detachKeys = attachCanvasKeybindings({
               onZoomIn: () => engine.zoomBy(1.1),
               onZoomOut: () => engine.zoomBy(1 / 1.1),
-              onZoomReset: () => engine.resetView(),
+              onZoomReset: () => engine.fitBoardToViewport(),
               onPanStart: () => engine.setPanMode(true),
               onPanEnd: () => engine.setPanMode(false),
               onSave: () => {
@@ -471,6 +649,9 @@ export function useBoardEngine(options: UseBoardEngineOptions): UseBoardEngineRe
           setSelectedLayerKind(meta?.kind ?? null);
         };
         engine.setSnapOptions({ isAltDown: () => altKeyRef.current });
+        engine.enableWheelZoom();
+        engine.renderChapaLabels(chapaLabelEntries);
+        engine.fitBoardToViewport();
         engineRef.current = engine;
         // Onda 15.fix — sinaliza LayerPanel pra re-anexar listeners no canvas novo.
         setEngineVersion((v) => v + 1);
@@ -478,7 +659,7 @@ export function useBoardEngine(options: UseBoardEngineOptions): UseBoardEngineRe
         detachKeys = attachCanvasKeybindings({
           onZoomIn: () => engine.zoomBy(1.1),
           onZoomOut: () => engine.zoomBy(1 / 1.1),
-          onZoomReset: () => engine.resetView(),
+          onZoomReset: () => engine.fitBoardToViewport(),
           onPanStart: () => engine.setPanMode(true),
           onPanEnd: () => engine.setPanMode(false),
           onSave: () => {
@@ -578,6 +759,7 @@ export function useBoardEngine(options: UseBoardEngineOptions): UseBoardEngineRe
     layerByItemId,
     boardDims,
     engineVersion,
+    chapasLayout,
   };
 }
 
