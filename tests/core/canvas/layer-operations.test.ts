@@ -283,4 +283,321 @@ describe('CanvasEngine — layer operations (Onda 7)', () => {
     engine.setLayerLocked(principalId, false);
     expect(obj.lockRotation).toBe(false);
   });
+
+  // ── 13. setLayerOpacity (Onda 26) — propaga pro obj e persiste em meta ────
+  it('setLayerOpacity define obj.opacity e LayerMeta.opacity', () => {
+    const id = addRect();
+    engine.setLayerOpacity(id, 0.5);
+
+    const obj = engine.canvas
+      .getObjects()
+      .find((o) => (o as unknown as { id?: string }).id === id)!;
+    expect(obj.opacity).toBe(0.5);
+    expect(engine.getLayerMeta(id)?.opacity).toBe(0.5);
+  });
+
+  // ── 14. setLayerOpacity clampa valores fora de [0, 1] ─────────────────────
+  it('setLayerOpacity clampa valores fora de [0, 1]', () => {
+    const id = addRect();
+    engine.setLayerOpacity(id, 1.5);
+    expect(engine.getLayerMeta(id)?.opacity).toBe(1);
+    engine.setLayerOpacity(id, -0.2);
+    expect(engine.getLayerMeta(id)?.opacity).toBe(0);
+  });
+
+  // ── 15. setLayerOpacity dispara layer-meta-changed ────────────────────────
+  it('setLayerOpacity dispara layer-meta-changed', () => {
+    const id = addRect();
+    let fired = false;
+    (
+      engine.canvas as unknown as {
+        on: (name: string, h: (e: { layerId?: string }) => void) => void;
+      }
+    ).on('layer-meta-changed', (e) => {
+      if (e.layerId === id) fired = true;
+    });
+
+    engine.setLayerOpacity(id, 0.3);
+    expect(fired).toBe(true);
+  });
+
+  // ── 16. setLayerOpacity em id inválido = no-op ────────────────────────────
+  it('setLayerOpacity em id inválido é no-op silencioso', () => {
+    expect(() => engine.setLayerOpacity('id-inexistente', 0.5)).not.toThrow();
+  });
+
+  // ── 17. opacity persiste no getLayersHierarchy ────────────────────────────
+  it('getLayersHierarchy expõe opacity (1 quando não setado, valor real após set)', () => {
+    const id1 = addRect();
+    const id2 = addRect();
+    engine.setLayerOpacity(id2, 0.7);
+
+    const hier = engine.getLayersHierarchy();
+    const node1 = hier.find((n) => n.id === id1);
+    const node2 = hier.find((n) => n.id === id2);
+    expect(node1?.opacity).toBe(1);
+    expect(node2?.opacity).toBe(0.7);
+  });
+
+  // ── 18b. moveLayerToIndex (Fase 2) — reposiciona obj e sincroniza zIndex ──
+  it('moveLayerToIndex reposiciona o obj no canvas e atualiza meta.zIndex', () => {
+    const id1 = addRect();
+    const id2 = addRect();
+    const id3 = addRect();
+
+    const objs0 = engine.canvas.getObjects();
+    const idxAtual = objs0.findIndex((o) => (o as unknown as { id?: string }).id === id1);
+    expect(idxAtual).toBeGreaterThanOrEqual(0);
+
+    const target = objs0.length - 1;
+    engine.moveLayerToIndex(id1, target);
+
+    const objsAfter = engine.canvas.getObjects();
+    const newIdx = objsAfter.findIndex((o) => (o as unknown as { id?: string }).id === id1);
+    expect(newIdx).toBe(target);
+    expect(engine.getLayerMeta(id1)?.zIndex).toBe(target);
+
+    expect(objsAfter.find((o) => (o as unknown as { id?: string }).id === id2)).toBeDefined();
+    expect(objsAfter.find((o) => (o as unknown as { id?: string }).id === id3)).toBeDefined();
+  });
+
+  it('moveLayerToIndex clampa índice fora do range do canvas', () => {
+    const id = addRect();
+    expect(() => engine.moveLayerToIndex(id, 9999)).not.toThrow();
+    expect(() => engine.moveLayerToIndex(id, -10)).not.toThrow();
+  });
+
+  it('moveLayerToIndex em id inválido é no-op silencioso', () => {
+    expect(() => engine.moveLayerToIndex('id-inexistente', 0)).not.toThrow();
+  });
+
+  // ── 18e. soloLayer (Fase 3) — só a alvo fica visible; null restaura tudo ──
+  it('soloLayer(id) deixa só a alvo visível; soloLayer(null) restaura', () => {
+    const id1 = addRect();
+    const id2 = addRect();
+    const id3 = addRect();
+
+    engine.soloLayer(id2);
+    expect(engine.getLayerMeta(id1)?.visible).toBe(false);
+    expect(engine.getLayerMeta(id2)?.visible).toBe(true);
+    expect(engine.getLayerMeta(id3)?.visible).toBe(false);
+
+    engine.soloLayer(null);
+    expect(engine.getLayerMeta(id1)?.visible).toBe(true);
+    expect(engine.getLayerMeta(id2)?.visible).toBe(true);
+    expect(engine.getLayerMeta(id3)?.visible).toBe(true);
+  });
+
+  // ── 18f. duplicateLayer (Fase 3) — cria novo id com mesma meta + offset ──
+  it('duplicateLayer cria novo obj com novo id, herda metadata e offset 10px', async () => {
+    const id = addRect();
+    engine.setLayerOpacity(id, 0.6);
+
+    const newId = await engine.duplicateLayer(id);
+    expect(newId).not.toBeNull();
+    expect(newId).not.toBe(id);
+
+    const newMeta = engine.getLayerMeta(newId!);
+    expect(newMeta).not.toBeNull();
+    // Herdou opacity.
+    expect(newMeta?.opacity).toBe(0.6);
+    // Nome novo indica que é cópia.
+    expect(newMeta?.name).toContain('(cópia)');
+
+    // O obj clonado está offset 10 em relação ao original.
+    const orig = engine.canvas
+      .getObjects()
+      .find((o) => (o as unknown as { id?: string }).id === id)!;
+    const dup = engine.canvas
+      .getObjects()
+      .find((o) => (o as unknown as { id?: string }).id === newId)!;
+    expect(dup.left).toBe((orig.left ?? 0) + 10);
+    expect(dup.top).toBe((orig.top ?? 0) + 10);
+  });
+
+  // ── 18g. duplicateLayer recusa principal (Fase 3) ─────────────────────────
+  it('duplicateLayer retorna null pra camada principal', async () => {
+    const id = addRect();
+    // Força kind=principal pra simular aplique.
+    const meta = engine.getAllLayerMetas().get(id)!;
+    (meta as unknown as { kind: string; parentLayerId: null }).kind = 'principal';
+    (meta as unknown as { kind: string; parentLayerId: null }).parentLayerId = null;
+
+    const result = await engine.duplicateLayer(id);
+    expect(result).toBeNull();
+  });
+
+  // ── 18h. duplicateLayer em id inválido = null ─────────────────────────────
+  it('duplicateLayer em id inválido retorna null', async () => {
+    const result = await engine.duplicateLayer('id-inexistente');
+    expect(result).toBeNull();
+  });
+
+  // ── 18. opacity serializa e deserializa preservando o valor ───────────────
+  it('opacity sobrevive a serialize → deserialize', async () => {
+    const id = addRect();
+    engine.setLayerOpacity(id, 0.42);
+
+    const snapshot = engine.serialize();
+    // Cria engine novo e carrega o snapshot.
+    const canvas2 = document.createElement('canvas');
+    const engine2 = new CanvasEngine(canvas2, baseConfig);
+    try {
+      await engine2.deserialize(snapshot);
+      const meta = engine2.getAllLayerMetas().get(id);
+      expect(meta?.opacity).toBe(0.42);
+      const obj = engine2.canvas
+        .getObjects()
+        .find((o) => (o as unknown as { id?: string }).id === id);
+      expect(obj?.opacity).toBe(0.42);
+    } finally {
+      engine2.dispose();
+    }
+  });
+
+  // ── 18i. setMultipleVisibility (Fase 4) — aplica em lote ──────────────────
+  it('setMultipleVisibility aplica visible em todos os ids passados', () => {
+    const id1 = addRect();
+    const id2 = addRect();
+    const id3 = addRect();
+
+    engine.setMultipleVisibility([id1, id2], false);
+    expect(engine.getLayerMeta(id1)?.visible).toBe(false);
+    expect(engine.getLayerMeta(id2)?.visible).toBe(false);
+    expect(engine.getLayerMeta(id3)?.visible).toBe(true);
+  });
+
+  // ── 18j. setMultipleOpacity (Fase 4) ──────────────────────────────────────
+  it('setMultipleOpacity aplica opacity em todos os ids passados', () => {
+    const id1 = addRect();
+    const id2 = addRect();
+
+    engine.setMultipleOpacity([id1, id2], 0.25);
+    expect(engine.getLayerMeta(id1)?.opacity).toBe(0.25);
+    expect(engine.getLayerMeta(id2)?.opacity).toBe(0.25);
+  });
+
+  // ── 18k. setMultipleLocked (Fase 4) ───────────────────────────────────────
+  it('setMultipleLocked aplica locked em todos os ids passados', () => {
+    const id1 = addRect();
+    const id2 = addRect();
+
+    engine.setMultipleLocked([id1, id2], true);
+    expect(engine.getLayerMeta(id1)?.locked).toBe(true);
+    expect(engine.getLayerMeta(id2)?.locked).toBe(true);
+  });
+
+  // ── 18l. deleteMultipleLayers (Fase 4) ────────────────────────────────────
+  it('deleteMultipleLayers remove todos os ids passados', () => {
+    const id1 = addRect();
+    const id2 = addRect();
+    const id3 = addRect();
+
+    const result = engine.deleteMultipleLayers([id1, id2]);
+    expect(result.deletedIds).toContain(id1);
+    expect(result.deletedIds).toContain(id2);
+    expect(engine.getLayerMeta(id1)).toBeNull();
+    expect(engine.getLayerMeta(id2)).toBeNull();
+    expect(engine.getLayerMeta(id3)).not.toBeNull();
+  });
+
+  // ── 18m. batch ops ignoram ids inválidos silenciosamente ──────────────────
+  it('batch ops ignoram ids inválidos silenciosamente', () => {
+    const id1 = addRect();
+    expect(() =>
+      engine.setMultipleVisibility([id1, 'nao-existe', 'tambem-nao'], false)
+    ).not.toThrow();
+    expect(engine.getLayerMeta(id1)?.visible).toBe(false);
+  });
+
+  // ── 19. setLayerColorLabel (Fase 5) — persiste e respeita 'none' ──────────
+  it('setLayerColorLabel persiste cor e none apaga', () => {
+    const id = addRect();
+    engine.setLayerColorLabel(id, 'red');
+    expect(engine.getLayerMeta(id)?.colorLabel).toBe('red');
+
+    engine.setLayerColorLabel(id, 'none');
+    // 'none' deleta o campo (volta a undefined no meta).
+    expect(engine.getLayerMeta(id)?.colorLabel).toBeUndefined();
+  });
+
+  // ── 19b. setLayerColorLabel dispara layer-meta-changed ────────────────────
+  it('setLayerColorLabel dispara layer-meta-changed', () => {
+    const id = addRect();
+    let fired = false;
+    (
+      engine.canvas as unknown as {
+        on: (n: string, h: (e: { layerId?: string }) => void) => void;
+      }
+    ).on('layer-meta-changed', (e) => {
+      if (e.layerId === id) fired = true;
+    });
+    engine.setLayerColorLabel(id, 'blue');
+    expect(fired).toBe(true);
+  });
+
+  // ── 19c. setLayerColorLabel em id inválido = no-op ────────────────────────
+  it('setLayerColorLabel em id inválido é no-op silencioso', () => {
+    expect(() => engine.setLayerColorLabel('id-inexistente', 'green')).not.toThrow();
+  });
+
+  // ── 20. setLayerBlendMode (Fase 5) — propaga pro obj.globalCompositeOperation
+  it('setLayerBlendMode persiste e seta globalCompositeOperation', () => {
+    const id = addRect();
+    engine.setLayerBlendMode(id, 'multiply');
+    expect(engine.getLayerMeta(id)?.blendMode).toBe('multiply');
+
+    const obj = engine.canvas
+      .getObjects()
+      .find((o) => (o as unknown as { id?: string }).id === id)!;
+    expect((obj as unknown as { globalCompositeOperation: string }).globalCompositeOperation).toBe(
+      'multiply'
+    );
+
+    engine.setLayerBlendMode(id, 'normal');
+    // 'normal' deleta o campo e seta source-over no obj.
+    expect(engine.getLayerMeta(id)?.blendMode).toBeUndefined();
+    expect((obj as unknown as { globalCompositeOperation: string }).globalCompositeOperation).toBe(
+      'source-over'
+    );
+  });
+
+  // ── 20b. setLayerBlendMode em id inválido = no-op ─────────────────────────
+  it('setLayerBlendMode em id inválido é no-op silencioso', () => {
+    expect(() => engine.setLayerBlendMode('id-inexistente', 'multiply')).not.toThrow();
+  });
+
+  // ── 20c. blendMode + colorLabel sobrevivem a serialize → deserialize ──────
+  it('colorLabel e blendMode sobrevivem a serialize/deserialize', async () => {
+    const id = addRect();
+    engine.setLayerColorLabel(id, 'violet');
+    engine.setLayerBlendMode(id, 'screen');
+
+    const snap = engine.serialize();
+    const canvas2 = document.createElement('canvas');
+    const engine2 = new CanvasEngine(canvas2, baseConfig);
+    try {
+      await engine2.deserialize(snap);
+      const meta = engine2.getAllLayerMetas().get(id);
+      expect(meta?.colorLabel).toBe('violet');
+      expect(meta?.blendMode).toBe('screen');
+      const obj = engine2.canvas
+        .getObjects()
+        .find((o) => (o as unknown as { id?: string }).id === id);
+      expect(
+        (obj as unknown as { globalCompositeOperation: string }).globalCompositeOperation
+      ).toBe('screen');
+    } finally {
+      engine2.dispose();
+    }
+  });
+
+  // ── 20d. LayerNode expõe defaults ('none' e 'normal') quando meta vazio ───
+  it('getLayersHierarchy expõe colorLabel/blendMode defaults pra metas sem campos', () => {
+    const id = addRect();
+    const hier = engine.getLayersHierarchy();
+    const node = hier.find((n) => n.id === id);
+    expect(node?.colorLabel).toBe('none');
+    expect(node?.blendMode).toBe('normal');
+  });
 });

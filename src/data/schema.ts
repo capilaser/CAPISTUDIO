@@ -158,6 +158,28 @@ export const materials = sqliteTable('materials', {
 // Invariants enforced at runtime by validateLayerMeta() in core/canvas/layer-meta.ts.
 // TypeScript enforces correct field usage at compile-time via the discriminant `kind`.
 
+/**
+ * Onda 26 Fase 5 — labels de cor para organização visual no painel de
+ * camadas (estilo Photoshop). Apenas indicação visual; não afeta render
+ * no canvas nem export. 7 cores fixas + 'none' (sem label).
+ */
+export type LayerColorLabel =
+  | 'none'
+  | 'red'
+  | 'orange'
+  | 'yellow'
+  | 'green'
+  | 'blue'
+  | 'violet'
+  | 'gray';
+
+/**
+ * Onda 26 Fase 5 — blend modes suportados. Subset enxuto pro domínio de
+ * produção (4 essenciais): Normal, Multiply, Screen, Overlay. Strings
+ * compatíveis com Canvas 2D globalCompositeOperation que Fabric usa.
+ */
+export type LayerBlendMode = 'normal' | 'multiply' | 'screen' | 'overlay';
+
 /** Camada principal — representa uma peça física (base, aplique). */
 export type PrincipalLayerMeta = {
   id: string;
@@ -167,6 +189,22 @@ export type PrincipalLayerMeta = {
   zIndex: number;
   visible: boolean;
   locked: boolean;
+  /**
+   * Onda 26 — opacidade 0..1. Opcional (ausente = 1). Propagada pro
+   * fabric obj.opacity via engine.setLayerOpacity(). Mantida opcional pra
+   * retrocompat com pedidos/padrões salvos antes deste campo existir.
+   */
+  opacity?: number;
+  /**
+   * Onda 26 Fase 5 — label de cor pra organização visual no painel.
+   * Não afeta canvas nem export. Opcional (ausente = 'none').
+   */
+  colorLabel?: LayerColorLabel;
+  /**
+   * Onda 26 Fase 5 — blend mode aplicado via fabric obj.globalCompositeOperation.
+   * Opcional (ausente = 'normal'). 4 modos: normal, multiply, screen, overlay.
+   */
+  blendMode?: LayerBlendMode;
   kind: 'principal';
   /** Material (texture) applied to this piece. Persisted in canvasJson. */
   materialId: string | null;
@@ -207,6 +245,12 @@ export type OperationLayerMeta = {
   zIndex: number;
   visible: boolean;
   locked: boolean;
+  /** Onda 26 — opacidade 0..1. Ver PrincipalLayerMeta.opacity. */
+  opacity?: number;
+  /** Onda 26 Fase 5 — label de cor. Ver PrincipalLayerMeta.colorLabel. */
+  colorLabel?: LayerColorLabel;
+  /** Onda 26 Fase 5 — blend mode. Ver PrincipalLayerMeta.blendMode. */
+  blendMode?: LayerBlendMode;
   kind: 'operation';
   /** One of the 7 defined operations (corte, gravação, marcação, aplique, etc.). Required. */
   operation: string;
@@ -223,6 +267,12 @@ export type VisualLayerMeta = {
   zIndex: number;
   visible: boolean;
   locked: boolean;
+  /** Onda 26 — opacidade 0..1. Ver PrincipalLayerMeta.opacity. */
+  opacity?: number;
+  /** Onda 26 Fase 5 — label de cor. Ver PrincipalLayerMeta.colorLabel. */
+  colorLabel?: LayerColorLabel;
+  /** Onda 26 Fase 5 — blend mode. Ver PrincipalLayerMeta.blendMode. */
+  blendMode?: LayerBlendMode;
   kind: 'visual';
   /** Material (texture) applied to this layer. Null when no texture is applied. */
   materialId: string | null;

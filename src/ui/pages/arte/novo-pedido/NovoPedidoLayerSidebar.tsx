@@ -1,9 +1,10 @@
 /**
- * NovoPedidoLayerSidebar — painel direito (camadas) do editor (Onda 15).
+ * NovoPedidoLayerSidebar — painel direito (camadas) do editor.
  *
- * Onda 15 — pluga o LayerPanel (Onda 7) que já estava pronto em
- * /dev/canvas-test. Agora visível no /arte/novo. Reusa a infra completa:
- * hierarchy, refresh por eventos do canvas, ações inline.
+ * Onda 15 — pluga o LayerPanel (Onda 7).
+ * Onda 26 — largura 320px (era 280) pra acomodar thumbnails + slider de
+ * opacidade do painel pro. Header/footer agora vivem dentro do LayerPanel
+ * (showTitle=true), não mais nesta aside.
  */
 import { type RefObject, type Ref } from 'react';
 
@@ -22,19 +23,14 @@ interface Props {
 
 export function NovoPedidoLayerSidebar({ engineRef, engineReady, engineVersion, panelRef }: Props) {
   return (
-    <aside className="flex w-[280px] shrink-0 flex-col overflow-y-auto border-l border-border bg-card">
-      <header className="flex items-center justify-between border-b border-border px-4 py-3">
-        <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Camadas</span>
-      </header>
-      <div className="flex-1 overflow-y-auto">
-        <LayerPanel
-          ref={panelRef}
-          engineRef={engineRef}
-          engineReady={engineReady}
-          engineVersion={engineVersion}
-          showTitle={false}
-        />
-      </div>
+    <aside className="flex w-[320px] shrink-0 flex-col border-l border-border bg-card">
+      <LayerPanel
+        ref={panelRef}
+        engineRef={engineRef}
+        engineReady={engineReady}
+        engineVersion={engineVersion}
+        showTitle
+      />
     </aside>
   );
 }

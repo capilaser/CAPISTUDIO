@@ -1,6 +1,13 @@
 import * as fabric from 'fabric';
 
-import type { CanvasItem, LayerMeta, PrincipalLayerMeta, VisualLayerMeta } from '@/data/schema';
+import type {
+  CanvasItem,
+  LayerBlendMode,
+  LayerColorLabel,
+  LayerMeta,
+  PrincipalLayerMeta,
+  VisualLayerMeta,
+} from '@/data/schema';
 import { buildMaterialPattern, loadImage } from './material-applier';
 import type { CorelSvgMeta } from './corel-svg-parser';
 import { isOperationLayer } from './layer-meta';
@@ -67,6 +74,10 @@ export type LayerNode =
       locked: boolean;
       /** Onda 26 — 0..1. 1 quando o LayerMeta não traz opacity (retrocompat). */
       opacity: number;
+      /** Onda 26 Fase 5 — sempre presente; 'none' quando meta.colorLabel undefined. */
+      colorLabel: LayerColorLabel;
+      /** Onda 26 Fase 5 — sempre presente; 'normal' quando meta.blendMode undefined. */
+      blendMode: LayerBlendMode;
       children: LayerNode[];
     }
   | {
@@ -76,6 +87,8 @@ export type LayerNode =
       visible: boolean;
       locked: boolean;
       opacity: number;
+      colorLabel: LayerColorLabel;
+      blendMode: LayerBlendMode;
       parentId: string | null;
     }
   | {
@@ -85,6 +98,8 @@ export type LayerNode =
       visible: boolean;
       locked: boolean;
       opacity: number;
+      colorLabel: LayerColorLabel;
+      blendMode: LayerBlendMode;
       parentId: string | null;
       /** Onda 15 — operação do banco (corte, gravacao, marcacao, …). */
       operation: string;
@@ -995,6 +1010,130 @@ export class CanvasEngine {
   }
 
   /**
+   * Onda 26 Fase 4 — aplica visibilidade em lote. Útil pra multi-seleção
+   * do painel. Mais eficiente que loop externo: 1 requestRenderAll no fim.
+   * Cada id inválido é silenciosamente ignorado.
+   */
+  setMultipleVisibility(ids: string[], visible: boolean): void {
+    let changed = false;
+    for (const id of ids) {
+      const meta = this.layerMeta.get(id);
+      if (!meta || meta.visible === visible) continue;
+      meta.visible = visible;
+      const obj = this.findByCapiId(id);
+      if (obj) {
+        obj.set({ visible });
+        obj.setCoords();
+      }
+      changed = true;
+      (this.canvas as unknown as { fire: (n: string, o: unknown) => void }).fire(
+        'layer-meta-changed',
+        { layerId: id, kind: meta.kind }
+      );
+    }
+    if (changed) this.canvas.requestRenderAll();
+  }
+
+  /**
+   * Onda 26 Fase 4 — aplica lock em lote. Espelha setLayerLocked pra
+   * cada id (não otimiza pra preservar contrato com lockRotation por kind).
+   */
+  setMultipleLocked(ids: string[], locked: boolean): void {
+    for (const id of ids) this.setLayerLocked(id, locked);
+  }
+
+  /**
+   * Onda 26 Fase 4 — aplica opacity em lote. Espelha setLayerOpacity.
+   */
+  setMultipleOpacity(ids: string[], opacity: number): void {
+    for (const id of ids) this.setLayerOpacity(id, opacity);
+  }
+
+  /**
+   * Onda 26 Fase 4 — deleta várias camadas. Resolve cascata (principal
+   * deleta filhos) chamando deleteLayer em sequência. Retorna lista plana
+   * de ids removidos (somando cascatas).
+   */
+  deleteMultipleLayers(ids: string[]): { deletedIds: string[] } {
+    const all: string[] = [];
+    for (const id of ids) {
+      // Algumas ids podem já ter sido removidas em cascata por uma chamada
+      // anterior do loop (caso: usuário seleciona aplique + um filho dele).
+      if (!this.layerMeta.has(id)) continue;
+      const r = this.deleteLayer(id);
+      if (r) all.push(...r.deletedIds);
+    }
+    return { deletedIds: all };
+  }
+
+  /**
+   * Onda 26 Fase 3 — esconde todas as camadas exceto a passada (Photoshop
+   * Alt+click no olho). Útil pra isolar uma peça visualmente. Reversível:
+   * chamar com null restaura tudo pra visible=true.
+   *
+   * Implementa em loop pra reusar setLayerVisibility (que dispara evento
+   * por chamada). Em libraries grandes isso poderia ser lento; aqui as
+   * listas são pequenas (~10 camadas no MVP), tradeoff aceitável.
+   */
+  soloLayer(id: string | null): void {
+    for (const meta of this.layerMeta.values()) {
+      const shouldBeVisible = id === null ? true : meta.id === id;
+      if (meta.visible !== shouldBeVisible) {
+        this.setLayerVisibility(meta.id, shouldBeVisible);
+      }
+    }
+  }
+
+  /**
+   * Onda 26 Fase 3 — duplica uma camada visual/operation. Não suporta
+   * principal nesta fase (duplicar aplique é fluxo mais complexo: cloning
+   * de SVG, parent ids etc. — deferred). Retorna o id do novo objeto, ou
+   * null se a operação não foi possível.
+   *
+   * Estratégia: usa fabric.clone(), gera novo id capi, offset 10mm pra
+   * mostrar que é cópia, registra LayerMeta espelhando o original (menos
+   * o id e zIndex que mudam).
+   */
+  async duplicateLayer(id: string): Promise<string | null> {
+    const sourceMeta = this.layerMeta.get(id);
+    if (!sourceMeta) return null;
+    if (sourceMeta.kind === 'principal') return null;
+
+    const sourceObj = this.findByCapiId(id);
+    if (!sourceObj) return null;
+
+    const cloned = await sourceObj.clone(CAPI_CUSTOM_PROPS as unknown as string[]);
+    const newId = generateObjectId();
+    (cloned as unknown as Record<string, unknown>).id = newId;
+
+    // Offset visual leve (~10px) pra cópia não cobrir o original.
+    cloned.set({
+      left: (cloned.left ?? 0) + 10,
+      top: (cloned.top ?? 0) + 10,
+    });
+    cloned.setCoords();
+
+    this.canvas.add(cloned);
+
+    // Cria LayerMeta espelhando o source — preserva parentLayerId, opacity,
+    // operation/machines/materialId/engravingId/markingId. Só id/zIndex/nome mudam.
+    const newMeta: LayerMeta = {
+      ...sourceMeta,
+      id: newId,
+      zIndex: this.canvas.getObjects().indexOf(cloned),
+      name: `${sourceMeta.name} (cópia)`,
+    };
+    this.layerMeta.set(newId, newMeta);
+
+    (this.canvas as unknown as { fire: (n: string, o: unknown) => void }).fire(
+      'layer-meta-changed',
+      { layerId: newId, kind: newMeta.kind }
+    );
+    this.canvas.requestRenderAll();
+    return newId;
+  }
+
+  /**
    * Onda 26 — define opacidade (0..1) de uma camada. Valores fora do
    * intervalo são clampeados. Persiste em LayerMeta.opacity e propaga
    * pro fabric obj.opacity. Dispara 'layer-meta-changed' (mesmo padrão
@@ -1009,6 +1148,55 @@ export class CanvasEngine {
     const obj = this.findByCapiId(id);
     if (obj) {
       obj.set({ opacity: clamped });
+      obj.setCoords();
+    }
+
+    (this.canvas as unknown as { fire: (n: string, o: unknown) => void }).fire(
+      'layer-meta-changed',
+      { layerId: id, kind: meta.kind }
+    );
+    this.canvas.requestRenderAll();
+  }
+
+  /**
+   * Onda 26 Fase 5 — define cor de label (organização visual no painel).
+   * 'none' apaga a marcação. Não afeta canvas nem export — só meta no
+   * LayerMeta. Dispara 'layer-meta-changed' pro painel re-renderizar.
+   */
+  setLayerColorLabel(id: string, label: LayerColorLabel): void {
+    const meta = this.layerMeta.get(id);
+    if (!meta) return;
+    if (label === 'none') {
+      delete meta.colorLabel;
+    } else {
+      meta.colorLabel = label;
+    }
+    (this.canvas as unknown as { fire: (n: string, o: unknown) => void }).fire(
+      'layer-meta-changed',
+      { layerId: id, kind: meta.kind }
+    );
+  }
+
+  /**
+   * Onda 26 Fase 5 — define blend mode. Aplica via fabric obj.globalCompositeOperation
+   * usando string Canvas2D equivalente. 'normal' é o default (source-over).
+   *
+   * Mapeamento: normal→source-over, multiply→multiply, screen→screen, overlay→overlay
+   * (todos suportados nativamente em Canvas2D).
+   */
+  setLayerBlendMode(id: string, mode: LayerBlendMode): void {
+    const meta = this.layerMeta.get(id);
+    if (!meta) return;
+    if (mode === 'normal') {
+      delete meta.blendMode;
+    } else {
+      meta.blendMode = mode;
+    }
+
+    const obj = this.findByCapiId(id);
+    if (obj) {
+      const composite = mode === 'normal' ? 'source-over' : mode;
+      (obj as unknown as { globalCompositeOperation: string }).globalCompositeOperation = composite;
       obj.setCoords();
     }
 
@@ -1120,6 +1308,41 @@ export class CanvasEngine {
   }
 
   /**
+   * Onda 26 (Fase 2) — move uma camada pra um índice arbitrário no
+   * z-stack do canvas. Usado pelo drag-and-drop do painel.
+   *
+   * Estratégia: usa `canvas.moveObjectTo` (Fabric 6) que reinsere o
+   * objeto na posição alvo do array. Sincroniza LayerMeta.zIndex e
+   * dispara `layer-meta-changed` (mesmo padrão de moveLayer).
+   *
+   * No-op se id inválido. Índice é clampeado ao range válido do canvas.
+   */
+  moveLayerToIndex(id: string, newCanvasIdx: number): void {
+    const meta = this.layerMeta.get(id);
+    if (!meta) return;
+    const obj = this.findByCapiId(id);
+    if (!obj) return;
+
+    const objs = this.canvas.getObjects();
+    const max = objs.length - 1;
+    const target = Math.max(0, Math.min(max, newCanvasIdx));
+
+    // Fabric 6: moveObjectTo move o objeto pra posição absoluta no array.
+    (
+      this.canvas as unknown as {
+        moveObjectTo: (o: fabric.FabricObject, idx: number) => void;
+      }
+    ).moveObjectTo(obj, target);
+
+    meta.zIndex = target;
+    (this.canvas as unknown as { fire: (n: string, o: unknown) => void }).fire(
+      'layer-meta-changed',
+      { layerId: id, kind: meta.kind }
+    );
+    this.canvas.requestRenderAll();
+  }
+
+  /**
    * Muda o `parentLayerId` de uma camada. Usado pelo dropdown "Mover
    * pra..." no painel — operação puramente de metadata (não muda a
    * posição visual do objeto no canvas).
@@ -1190,6 +1413,8 @@ export class CanvasEngine {
           visible: meta.visible,
           locked: meta.locked,
           opacity: meta.opacity ?? 1,
+          colorLabel: meta.colorLabel ?? 'none',
+          blendMode: meta.blendMode ?? 'normal',
           children: [],
         });
       }
@@ -1208,6 +1433,8 @@ export class CanvasEngine {
               visible: meta.visible,
               locked: meta.locked,
               opacity: meta.opacity ?? 1,
+              colorLabel: meta.colorLabel ?? 'none',
+              blendMode: meta.blendMode ?? 'normal',
               parentId: meta.parentLayerId ?? null,
               operation: meta.operation,
               machines: meta.machines,
@@ -1219,6 +1446,8 @@ export class CanvasEngine {
               visible: meta.visible,
               locked: meta.locked,
               opacity: meta.opacity ?? 1,
+              colorLabel: meta.colorLabel ?? 'none',
+              blendMode: meta.blendMode ?? 'normal',
               parentId: meta.parentLayerId ?? null,
             };
       const parent = meta.parentLayerId ? principalById.get(meta.parentLayerId) : undefined;
@@ -3029,6 +3258,17 @@ export class CanvasEngine {
       if (meta.opacity === undefined) continue;
       const obj = this.findByCapiId(meta.id);
       if (obj) obj.set({ opacity: meta.opacity });
+    }
+
+    // Onda 26 Fase 5 — propaga LayerMeta.blendMode pro fabric obj
+    // (globalCompositeOperation). colorLabel é só meta visual, não toca o canvas.
+    for (const meta of this.layerMeta.values()) {
+      if (meta.blendMode === undefined || meta.blendMode === 'normal') continue;
+      const obj = this.findByCapiId(meta.id);
+      if (obj) {
+        (obj as unknown as { globalCompositeOperation: string }).globalCompositeOperation =
+          meta.blendMode;
+      }
     }
 
     // Onda 26c — re-aplica trava nos apliques-base do Novo Pedido após
