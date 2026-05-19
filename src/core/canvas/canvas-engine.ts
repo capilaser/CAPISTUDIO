@@ -14,6 +14,15 @@ import {
   addMarkingSvg as addMarkingSvgFn,
   addRectangle as addRectangleFn,
 } from './engine-objects';
+import {
+  centerProductInViewport as centerProductInViewportFn,
+  zoomBy as zoomByFn,
+  fitBoardToViewport as fitBoardToViewportFn,
+  fitRegionToViewport as fitRegionToViewportFn,
+  resizeViewport as resizeViewportFn,
+  renderChapaLabels as renderChapaLabelsFn,
+  setActiveBoardHighlight as setActiveBoardHighlightFn,
+} from './engine-board';
 import type { CorelSvgMeta } from './corel-svg-parser';
 import { extractClipShapes, parseAndStripRootDimensions, type ParsedViewBox } from './svg-utils';
 import { SlotManager } from './slot-manager';
@@ -292,11 +301,7 @@ export class CanvasEngine {
    * top-left of the centered product area. Resets zoom to 1.
    */
   private centerProductInViewport(): void {
-    const productPxW = mmToPx(this.config.productWidthMm);
-    const productPxH = mmToPx(this.config.productHeightMm);
-    const tx = (this.config.viewportWidthPx - productPxW) / 2;
-    const ty = (this.config.viewportHeightPx - productPxH) / 2;
-    this.canvas.setViewportTransform([1, 0, 0, 1, tx, ty]);
+    centerProductInViewportFn(this.canvas, this.config);
   }
 
   /**
@@ -802,51 +807,11 @@ export class CanvasEngine {
   setActiveBoardHighlight(
     region: { leftMm: number; topMm: number; widthMm: number; heightMm: number } | null
   ): void {
-    if (region === null) {
-      if (this.boardItemHighlight) {
-        this.canvas.remove(this.boardItemHighlight);
-        this.boardItemHighlight = null;
-        this.canvas.requestRenderAll();
-      }
-      return;
-    }
-
-    const padPx = mmToPx(0.8); // pequeno offset pra não tampar a borda do broche
-    const left = mmToPx(region.leftMm) - padPx;
-    const top = mmToPx(region.topMm) - padPx;
-    const width = mmToPx(region.widthMm) + padPx * 2;
-    const height = mmToPx(region.heightMm) + padPx * 2;
-
-    if (this.boardItemHighlight) {
-      this.boardItemHighlight.set({ left, top, width, height });
-      this.boardItemHighlight.setCoords();
-      this.canvas.bringObjectToFront(this.boardItemHighlight);
-      this.canvas.requestRenderAll();
-      return;
-    }
-
-    const rect = new fabric.Rect({
-      left,
-      top,
-      width,
-      height,
-      originX: 'left',
-      originY: 'top',
-      fill: 'transparent',
-      stroke: '#7aa2f7', // laser-muted (mesmo tom do focus ring do design system)
-      strokeWidth: 1.5,
-      strokeUniform: true,
-      strokeDashArray: [4, 3],
-      selectable: false,
-      evented: false,
-      hoverCursor: 'default',
-      excludeFromExport: true,
-    });
-    (rect as unknown as Record<string, unknown>).__capiOverlay = true;
-    this.boardItemHighlight = rect;
-    this.canvas.add(rect);
-    this.canvas.bringObjectToFront(rect);
-    this.canvas.requestRenderAll();
+    this.boardItemHighlight = setActiveBoardHighlightFn(
+      this.canvas,
+      this.boardItemHighlight,
+      region
+    );
   }
 
   // ─── Layer operations (Onda 7 — painel de camadas) ────────────────────────
@@ -1682,15 +1647,7 @@ export class CanvasEngine {
 
   /** Multiplies current zoom by `factor`, clamped, centered on viewport center. */
   zoomBy(factor: number): void {
-    const current = this.canvas.getZoom();
-    const next = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, current * factor));
-    if (next === current) return;
-    const center = new fabric.Point(
-      this.config.viewportWidthPx / 2,
-      this.config.viewportHeightPx / 2
-    );
-    this.canvas.zoomToPoint(center, next);
-    this.canvas.requestRenderAll();
+    zoomByFn(this.canvas, this.config, factor);
   }
 
   /** Resets zoom to 1 and re-centers the product. */
@@ -1710,22 +1667,7 @@ export class CanvasEngine {
    * que pro Novo Pedido contém todos os broches empilhados.
    */
   fitBoardToViewport(margin = 0.15): void {
-    const productPxW = mmToPx(this.config.productWidthMm);
-    const productPxH = mmToPx(this.config.productHeightMm);
-    if (productPxW <= 0 || productPxH <= 0) return;
-
-    const availableW = this.config.viewportWidthPx * (1 - 2 * margin);
-    const availableH = this.config.viewportHeightPx * (1 - 2 * margin);
-    const scale = Math.min(availableW / productPxW, availableH / productPxH);
-    const zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, scale));
-
-    const scaledW = productPxW * zoom;
-    const scaledH = productPxH * zoom;
-    const tx = (this.config.viewportWidthPx - scaledW) / 2;
-    const ty = (this.config.viewportHeightPx - scaledH) / 2;
-
-    this.canvas.setViewportTransform([zoom, 0, 0, zoom, tx, ty]);
-    this.canvas.requestRenderAll();
+    fitBoardToViewportFn(this.canvas, this.config, margin);
   }
 
   /**
@@ -1739,26 +1681,7 @@ export class CanvasEngine {
     bboxMm: { leftMm: number; topMm: number; widthMm: number; heightMm: number },
     margin = 0.15
   ): void {
-    const regionPxW = mmToPx(bboxMm.widthMm);
-    const regionPxH = mmToPx(bboxMm.heightMm);
-    if (regionPxW <= 0 || regionPxH <= 0) return;
-
-    const availableW = this.config.viewportWidthPx * (1 - 2 * margin);
-    const availableH = this.config.viewportHeightPx * (1 - 2 * margin);
-    const scale = Math.min(availableW / regionPxW, availableH / regionPxH);
-    const zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, scale));
-
-    const scaledW = regionPxW * zoom;
-    const scaledH = regionPxH * zoom;
-    // Desconta o offset da chapa em px do canvas — assim a origem da chapa
-    // vai cair no canto superior-esquerdo do retângulo centralizado.
-    const offsetPxX = mmToPx(bboxMm.leftMm) * zoom;
-    const offsetPxY = mmToPx(bboxMm.topMm) * zoom;
-    const tx = (this.config.viewportWidthPx - scaledW) / 2 - offsetPxX;
-    const ty = (this.config.viewportHeightPx - scaledH) / 2 - offsetPxY;
-
-    this.canvas.setViewportTransform([zoom, 0, 0, zoom, tx, ty]);
-    this.canvas.requestRenderAll();
+    fitRegionToViewportFn(this.canvas, this.config, bboxMm, margin);
   }
 
   /**
@@ -1768,11 +1691,7 @@ export class CanvasEngine {
    * desenhado nos pixels antigos (canvas Fabric não reflua sozinho).
    */
   resizeViewport(widthPx: number, heightPx: number): void {
-    if (widthPx <= 0 || heightPx <= 0) return;
-    this.config.viewportWidthPx = widthPx;
-    this.config.viewportHeightPx = heightPx;
-    this.canvas.setDimensions({ width: widthPx, height: heightPx });
-    this.fitBoardToViewport();
+    resizeViewportFn(this.canvas, this.config, widthPx, heightPx);
   }
 
   /**
@@ -1784,36 +1703,7 @@ export class CanvasEngine {
    * label final formatado pela UI (ex: "Broches (3)").
    */
   renderChapaLabels(entries: Array<{ leftMm: number; topMm: number; text: string }>): void {
-    // Remove labels antigos
-    for (const old of this.chapaLabels) {
-      this.canvas.remove(old);
-    }
-    this.chapaLabels = [];
-
-    if (entries.length === 0) {
-      this.canvas.requestRenderAll();
-      return;
-    }
-
-    for (const entry of entries) {
-      const label = new fabric.Text(entry.text, {
-        left: mmToPx(entry.leftMm),
-        top: mmToPx(entry.topMm),
-        originX: 'left',
-        originY: 'top',
-        fontFamily: 'JetBrains Mono, Consolas, monospace',
-        fontSize: mmToPx(3.5), // ~3.5mm de altura — leitura confortável no auto-fit
-        fill: 'rgba(255, 255, 255, 0.4)',
-        selectable: false,
-        evented: false,
-        excludeFromExport: true,
-        hoverCursor: 'default',
-      });
-      (label as unknown as Record<string, unknown>).__capiOverlay = true;
-      this.canvas.add(label);
-      this.chapaLabels.push(label);
-    }
-    this.canvas.requestRenderAll();
+    renderChapaLabelsFn(this.canvas, this.chapaLabels, entries);
   }
 
   /**
