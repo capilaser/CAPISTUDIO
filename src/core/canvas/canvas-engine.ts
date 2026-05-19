@@ -30,6 +30,29 @@ import {
   removeItemContents as removeItemContentsFn,
   type SerializedCanvas as SerializedCanvasInternal,
 } from './engine-serialization';
+import {
+  type LayerNode as LayerNodeInternal,
+  getLayerMeta as getLayerMetaFn,
+  findPrincipalByAppliqueId as findPrincipalByAppliqueIdFn,
+  setLayerVisibility as setLayerVisibilityFn,
+  setMultipleVisibility as setMultipleVisibilityFn,
+  soloLayer as soloLayerFn,
+  setLayerLocked as setLayerLockedFn,
+  setMultipleLocked as setMultipleLockedFn,
+  setLayerOpacity as setLayerOpacityFn,
+  setMultipleOpacity as setMultipleOpacityFn,
+  setLayerColorLabel as setLayerColorLabelFn,
+  setLayerBlendMode as setLayerBlendModeFn,
+  renameLayer as renameLayerFn,
+  deleteLayer as deleteLayerFn,
+  deleteMultipleLayers as deleteMultipleLayersFn,
+  duplicateLayer as duplicateLayerFn,
+  moveLayer as moveLayerFn,
+  moveLayerToIndex as moveLayerToIndexFn,
+  reparentLayer as reparentLayerFn,
+  getLayersHierarchy as getLayersHierarchyFn,
+  registerLayerMeta as registerLayerMetaFn,
+} from './engine-layers';
 
 export interface EngineConfig {
   productWidthMm: number;
@@ -45,51 +68,10 @@ export interface EngineConfig {
 export const CAPI_CUSTOM_PROPS = CAPI_CUSTOM_PROPS_INTERNAL;
 
 /**
- * Nó da árvore exibida no painel de camadas (Onda 7).
- * - 'principal' = aplique/base, sempre raiz, com `children` (slots/operations/visuais).
- * - 'visual' | 'operation' = nó folha (Onda 7 não permite filhos de filhos).
+ * LayerNode — re-export do módulo `engine-layers.ts` (Onda 30.B).
+ * Documentação completa: ver `engine-layers.ts`.
  */
-export type LayerNode =
-  | {
-      kind: 'principal';
-      id: string;
-      name: string;
-      visible: boolean;
-      locked: boolean;
-      /** Onda 26 — 0..1. 1 quando o LayerMeta não traz opacity (retrocompat). */
-      opacity: number;
-      /** Onda 26 Fase 5 — sempre presente; 'none' quando meta.colorLabel undefined. */
-      colorLabel: LayerColorLabel;
-      /** Onda 26 Fase 5 — sempre presente; 'normal' quando meta.blendMode undefined. */
-      blendMode: LayerBlendMode;
-      children: LayerNode[];
-    }
-  | {
-      kind: 'visual';
-      id: string;
-      name: string;
-      visible: boolean;
-      locked: boolean;
-      opacity: number;
-      colorLabel: LayerColorLabel;
-      blendMode: LayerBlendMode;
-      parentId: string | null;
-    }
-  | {
-      kind: 'operation';
-      id: string;
-      name: string;
-      visible: boolean;
-      locked: boolean;
-      opacity: number;
-      colorLabel: LayerColorLabel;
-      blendMode: LayerBlendMode;
-      parentId: string | null;
-      /** Onda 15 — operação do banco (corte, gravacao, marcacao, …). */
-      operation: string;
-      /** Onda 15 — ids de máquinas (MB/FB/DL). 1–3 elementos. */
-      machines: string[];
-    };
+export type LayerNode = LayerNodeInternal;
 
 /**
  * SerializedCanvas — re-export do módulo `engine-serialization.ts` (Onda 30.A).
@@ -785,8 +767,7 @@ export class CanvasEngine {
 
   /** Returns a copy of the LayerMeta for the given capi id, or null. */
   getLayerMeta(id: string): LayerMeta | null {
-    const m = this.layerMeta.get(id);
-    return m ? { ...m } : null;
+    return getLayerMetaFn(this.layerMeta, id);
   }
 
   /** Returns a snapshot of all LayerMeta entries (for restore after deserialize). */
@@ -809,12 +790,7 @@ export class CanvasEngine {
    * Usado pelo PatternBar pra parentar slots do pattern ao broche correto.
    */
   findPrincipalByAppliqueId(appliqueId: string): string | null {
-    for (const [id, meta] of this.layerMeta) {
-      if (meta.kind === 'principal' && meta.appliqueId === appliqueId) {
-        return id;
-      }
-    }
-    return null;
+    return findPrincipalByAppliqueIdFn(this.layerMeta, appliqueId);
   }
 
   /**
@@ -908,24 +884,7 @@ export class CanvasEngine {
    * camada desaparece. Bug grave pego em flight na calibração da Onda 7.
    */
   setLayerVisibility(id: string, visible: boolean): void {
-    const meta = this.layerMeta.get(id);
-    if (!meta) return;
-    meta.visible = visible;
-
-    const obj = this.findByCapiId(id);
-    if (obj) {
-      obj.set({ visible });
-      obj.setCoords();
-    }
-
-    // Fabric 6 não tem 'layer-meta-changed' no tipo CanvasEvents; uso `fire`
-    // com cast (mesmo padrão usado em outras fases pra eventos sintéticos
-    // que UI componentes consomem). Listener no painel também faz cast no on().
-    (this.canvas as unknown as { fire: (n: string, o: unknown) => void }).fire(
-      'layer-meta-changed',
-      { layerId: id, kind: meta.kind }
-    );
-    this.canvas.requestRenderAll();
+    setLayerVisibilityFn(this.canvas, this.layerMeta, (i) => this.findByCapiId(i), id, visible);
   }
 
   /**
@@ -942,35 +901,7 @@ export class CanvasEngine {
    * `lockRotation` é alternado normalmente.
    */
   setLayerLocked(id: string, locked: boolean): void {
-    const meta = this.layerMeta.get(id);
-    if (!meta) return;
-    meta.locked = locked;
-
-    const obj = this.findByCapiId(id);
-    if (obj) {
-      const isPrincipal = meta.kind === 'principal';
-      obj.set({
-        lockMovementX: locked,
-        lockMovementY: locked,
-        lockScalingX: locked,
-        lockScalingY: locked,
-        // Slots/visuais preservam lockRotation=true (invariante do slot-manager).
-        // Apenas para principais alternamos rotation lock junto com os outros.
-        ...(isPrincipal ? { lockRotation: locked } : {}),
-        selectable: true,
-        evented: true,
-      });
-      obj.setCoords();
-    }
-
-    // Fabric 6 não tem 'layer-meta-changed' no tipo CanvasEvents; uso `fire`
-    // com cast (mesmo padrão usado em outras fases pra eventos sintéticos
-    // que UI componentes consomem). Listener no painel também faz cast no on().
-    (this.canvas as unknown as { fire: (n: string, o: unknown) => void }).fire(
-      'layer-meta-changed',
-      { layerId: id, kind: meta.kind }
-    );
-    this.canvas.requestRenderAll();
+    setLayerLockedFn(this.canvas, this.layerMeta, (i) => this.findByCapiId(i), id, locked);
   }
 
   /**
@@ -979,23 +910,7 @@ export class CanvasEngine {
    * Cada id inválido é silenciosamente ignorado.
    */
   setMultipleVisibility(ids: string[], visible: boolean): void {
-    let changed = false;
-    for (const id of ids) {
-      const meta = this.layerMeta.get(id);
-      if (!meta || meta.visible === visible) continue;
-      meta.visible = visible;
-      const obj = this.findByCapiId(id);
-      if (obj) {
-        obj.set({ visible });
-        obj.setCoords();
-      }
-      changed = true;
-      (this.canvas as unknown as { fire: (n: string, o: unknown) => void }).fire(
-        'layer-meta-changed',
-        { layerId: id, kind: meta.kind }
-      );
-    }
-    if (changed) this.canvas.requestRenderAll();
+    setMultipleVisibilityFn(this.canvas, this.layerMeta, (i) => this.findByCapiId(i), ids, visible);
   }
 
   /**
@@ -1003,14 +918,14 @@ export class CanvasEngine {
    * cada id (não otimiza pra preservar contrato com lockRotation por kind).
    */
   setMultipleLocked(ids: string[], locked: boolean): void {
-    for (const id of ids) this.setLayerLocked(id, locked);
+    setMultipleLockedFn(this.canvas, this.layerMeta, (i) => this.findByCapiId(i), ids, locked);
   }
 
   /**
    * Onda 26 Fase 4 — aplica opacity em lote. Espelha setLayerOpacity.
    */
   setMultipleOpacity(ids: string[], opacity: number): void {
-    for (const id of ids) this.setLayerOpacity(id, opacity);
+    setMultipleOpacityFn(this.canvas, this.layerMeta, (i) => this.findByCapiId(i), ids, opacity);
   }
 
   /**
@@ -1019,15 +934,7 @@ export class CanvasEngine {
    * de ids removidos (somando cascatas).
    */
   deleteMultipleLayers(ids: string[]): { deletedIds: string[] } {
-    const all: string[] = [];
-    for (const id of ids) {
-      // Algumas ids podem já ter sido removidas em cascata por uma chamada
-      // anterior do loop (caso: usuário seleciona aplique + um filho dele).
-      if (!this.layerMeta.has(id)) continue;
-      const r = this.deleteLayer(id);
-      if (r) all.push(...r.deletedIds);
-    }
-    return { deletedIds: all };
+    return deleteMultipleLayersFn(this.canvas, this.layerMeta, (i) => this.findByCapiId(i), ids);
   }
 
   /**
@@ -1040,12 +947,7 @@ export class CanvasEngine {
    * listas são pequenas (~10 camadas no MVP), tradeoff aceitável.
    */
   soloLayer(id: string | null): void {
-    for (const meta of this.layerMeta.values()) {
-      const shouldBeVisible = id === null ? true : meta.id === id;
-      if (meta.visible !== shouldBeVisible) {
-        this.setLayerVisibility(meta.id, shouldBeVisible);
-      }
-    }
+    soloLayerFn(this.canvas, this.layerMeta, (i) => this.findByCapiId(i), id);
   }
 
   /**
@@ -1059,42 +961,7 @@ export class CanvasEngine {
    * o id e zIndex que mudam).
    */
   async duplicateLayer(id: string): Promise<string | null> {
-    const sourceMeta = this.layerMeta.get(id);
-    if (!sourceMeta) return null;
-    if (sourceMeta.kind === 'principal') return null;
-
-    const sourceObj = this.findByCapiId(id);
-    if (!sourceObj) return null;
-
-    const cloned = await sourceObj.clone(CAPI_CUSTOM_PROPS as unknown as string[]);
-    const newId = generateObjectId();
-    (cloned as unknown as Record<string, unknown>).id = newId;
-
-    // Offset visual leve (~10px) pra cópia não cobrir o original.
-    cloned.set({
-      left: (cloned.left ?? 0) + 10,
-      top: (cloned.top ?? 0) + 10,
-    });
-    cloned.setCoords();
-
-    this.canvas.add(cloned);
-
-    // Cria LayerMeta espelhando o source — preserva parentLayerId, opacity,
-    // operation/machines/materialId/engravingId/markingId. Só id/zIndex/nome mudam.
-    const newMeta: LayerMeta = {
-      ...sourceMeta,
-      id: newId,
-      zIndex: this.canvas.getObjects().indexOf(cloned),
-      name: `${sourceMeta.name} (cópia)`,
-    };
-    this.layerMeta.set(newId, newMeta);
-
-    (this.canvas as unknown as { fire: (n: string, o: unknown) => void }).fire(
-      'layer-meta-changed',
-      { layerId: newId, kind: newMeta.kind }
-    );
-    this.canvas.requestRenderAll();
-    return newId;
+    return duplicateLayerFn(this.canvas, this.layerMeta, (i) => this.findByCapiId(i), id);
   }
 
   /**
@@ -1104,22 +971,7 @@ export class CanvasEngine {
    * de setLayerVisibility/setLayerLocked).
    */
   setLayerOpacity(id: string, opacity: number): void {
-    const meta = this.layerMeta.get(id);
-    if (!meta) return;
-    const clamped = Math.max(0, Math.min(1, opacity));
-    meta.opacity = clamped;
-
-    const obj = this.findByCapiId(id);
-    if (obj) {
-      obj.set({ opacity: clamped });
-      obj.setCoords();
-    }
-
-    (this.canvas as unknown as { fire: (n: string, o: unknown) => void }).fire(
-      'layer-meta-changed',
-      { layerId: id, kind: meta.kind }
-    );
-    this.canvas.requestRenderAll();
+    setLayerOpacityFn(this.canvas, this.layerMeta, (i) => this.findByCapiId(i), id, opacity);
   }
 
   /**
@@ -1128,17 +980,7 @@ export class CanvasEngine {
    * LayerMeta. Dispara 'layer-meta-changed' pro painel re-renderizar.
    */
   setLayerColorLabel(id: string, label: LayerColorLabel): void {
-    const meta = this.layerMeta.get(id);
-    if (!meta) return;
-    if (label === 'none') {
-      delete meta.colorLabel;
-    } else {
-      meta.colorLabel = label;
-    }
-    (this.canvas as unknown as { fire: (n: string, o: unknown) => void }).fire(
-      'layer-meta-changed',
-      { layerId: id, kind: meta.kind }
-    );
+    setLayerColorLabelFn(this.canvas, this.layerMeta, id, label);
   }
 
   /**
@@ -1149,26 +991,7 @@ export class CanvasEngine {
    * (todos suportados nativamente em Canvas2D).
    */
   setLayerBlendMode(id: string, mode: LayerBlendMode): void {
-    const meta = this.layerMeta.get(id);
-    if (!meta) return;
-    if (mode === 'normal') {
-      delete meta.blendMode;
-    } else {
-      meta.blendMode = mode;
-    }
-
-    const obj = this.findByCapiId(id);
-    if (obj) {
-      const composite = mode === 'normal' ? 'source-over' : mode;
-      (obj as unknown as { globalCompositeOperation: string }).globalCompositeOperation = composite;
-      obj.setCoords();
-    }
-
-    (this.canvas as unknown as { fire: (n: string, o: unknown) => void }).fire(
-      'layer-meta-changed',
-      { layerId: id, kind: meta.kind }
-    );
-    this.canvas.requestRenderAll();
+    setLayerBlendModeFn(this.canvas, this.layerMeta, (i) => this.findByCapiId(i), id, mode);
   }
 
   /**
@@ -1176,18 +999,7 @@ export class CanvasEngine {
    * via RenameInput, mas garantia também aqui).
    */
   renameLayer(id: string, newName: string): void {
-    const trimmed = newName.trim();
-    if (!trimmed) return;
-    const meta = this.layerMeta.get(id);
-    if (!meta) return;
-    meta.name = trimmed;
-    // Fabric 6 não tem 'layer-meta-changed' no tipo CanvasEvents; uso `fire`
-    // com cast (mesmo padrão usado em outras fases pra eventos sintéticos
-    // que UI componentes consomem). Listener no painel também faz cast no on().
-    (this.canvas as unknown as { fire: (n: string, o: unknown) => void }).fire(
-      'layer-meta-changed',
-      { layerId: id, kind: meta.kind }
-    );
+    renameLayerFn(this.canvas, this.layerMeta, id, newName);
   }
 
   /**
@@ -1202,39 +1014,7 @@ export class CanvasEngine {
    * `{ deletedIds: [] }`).
    */
   deleteLayer(id: string): { deletedIds: string[] } {
-    const meta = this.layerMeta.get(id);
-    if (!meta) return { deletedIds: [] };
-
-    const deletedIds: string[] = [];
-
-    // Cascade: se principal, descobre filhos primeiro.
-    if (meta.kind === 'principal') {
-      for (const [childId, childMeta] of this.layerMeta.entries()) {
-        if (childMeta.parentLayerId === id) {
-          const childObj = this.findByCapiId(childId);
-          if (childObj) this.canvas.remove(childObj);
-          this.layerMeta.delete(childId);
-          deletedIds.push(childId);
-        }
-      }
-    }
-
-    // Remove o objeto principal/visual.
-    const obj = this.findByCapiId(id);
-    if (obj) this.canvas.remove(obj);
-    this.layerMeta.delete(id);
-    deletedIds.push(id);
-
-    this.canvas.discardActiveObject();
-    // Fabric 6 não tem 'layer-meta-changed' no tipo CanvasEvents; uso `fire`
-    // com cast (mesmo padrão usado em outras fases pra eventos sintéticos
-    // que UI componentes consomem). Listener no painel também faz cast no on().
-    (this.canvas as unknown as { fire: (n: string, o: unknown) => void }).fire(
-      'layer-meta-changed',
-      { layerId: id, kind: meta.kind }
-    );
-    this.canvas.requestRenderAll();
-    return { deletedIds };
+    return deleteLayerFn(this.canvas, this.layerMeta, (i) => this.findByCapiId(i), id);
   }
 
   /**
@@ -1246,29 +1026,7 @@ export class CanvasEngine {
    * (para 'down') — Fabric simplesmente não faz nada nesse caso.
    */
   moveLayer(id: string, direction: 'up' | 'down'): void {
-    const meta = this.layerMeta.get(id);
-    if (!meta) return;
-    const obj = this.findByCapiId(id);
-    if (!obj) return;
-
-    if (direction === 'up') {
-      this.canvas.bringObjectForward(obj);
-    } else {
-      this.canvas.sendObjectBackwards(obj);
-    }
-
-    // Sincroniza zIndex do LayerMeta com a nova posição do objeto no canvas.
-    const newIdx = this.canvas.getObjects().indexOf(obj);
-    if (newIdx >= 0) meta.zIndex = newIdx;
-
-    // Fabric 6 não tem 'layer-meta-changed' no tipo CanvasEvents; uso `fire`
-    // com cast (mesmo padrão usado em outras fases pra eventos sintéticos
-    // que UI componentes consomem). Listener no painel também faz cast no on().
-    (this.canvas as unknown as { fire: (n: string, o: unknown) => void }).fire(
-      'layer-meta-changed',
-      { layerId: id, kind: meta.kind }
-    );
-    this.canvas.requestRenderAll();
+    moveLayerFn(this.canvas, this.layerMeta, (i) => this.findByCapiId(i), id, direction);
   }
 
   /**
@@ -1282,28 +1040,7 @@ export class CanvasEngine {
    * No-op se id inválido. Índice é clampeado ao range válido do canvas.
    */
   moveLayerToIndex(id: string, newCanvasIdx: number): void {
-    const meta = this.layerMeta.get(id);
-    if (!meta) return;
-    const obj = this.findByCapiId(id);
-    if (!obj) return;
-
-    const objs = this.canvas.getObjects();
-    const max = objs.length - 1;
-    const target = Math.max(0, Math.min(max, newCanvasIdx));
-
-    // Fabric 6: moveObjectTo move o objeto pra posição absoluta no array.
-    (
-      this.canvas as unknown as {
-        moveObjectTo: (o: fabric.FabricObject, idx: number) => void;
-      }
-    ).moveObjectTo(obj, target);
-
-    meta.zIndex = target;
-    (this.canvas as unknown as { fire: (n: string, o: unknown) => void }).fire(
-      'layer-meta-changed',
-      { layerId: id, kind: meta.kind }
-    );
-    this.canvas.requestRenderAll();
+    moveLayerToIndexFn(this.canvas, this.layerMeta, (i) => this.findByCapiId(i), id, newCanvasIdx);
   }
 
   /**
@@ -1321,26 +1058,7 @@ export class CanvasEngine {
    *   - Permitido reparent para null (solto / sem aplique pai).
    */
   reparentLayer(id: string, newParentId: string | null): void {
-    const meta = this.layerMeta.get(id);
-    if (!meta) return;
-
-    // Invariante ADR 010 §1: principais sempre têm parentLayerId=null.
-    if (meta.kind === 'principal') return;
-
-    // Valida que o novo pai existe e é principal (quando não-null).
-    if (newParentId !== null) {
-      const parentMeta = this.layerMeta.get(newParentId);
-      if (!parentMeta || parentMeta.kind !== 'principal') return;
-    }
-
-    meta.parentLayerId = newParentId;
-    // Fabric 6 não tem 'layer-meta-changed' no tipo CanvasEvents; uso `fire`
-    // com cast (mesmo padrão usado em outras fases pra eventos sintéticos
-    // que UI componentes consomem). Listener no painel também faz cast no on().
-    (this.canvas as unknown as { fire: (n: string, o: unknown) => void }).fire(
-      'layer-meta-changed',
-      { layerId: id, kind: meta.kind }
-    );
+    reparentLayerFn(this.canvas, this.layerMeta, id, newParentId);
   }
 
   /**
@@ -1354,85 +1072,7 @@ export class CanvasEngine {
    * no topo do painel via reverse no caller).
    */
   getLayersHierarchy(): LayerNode[] {
-    const canvasObjects = this.canvas.getObjects();
-    const indexOf = (id: string): number => {
-      const obj = this.findByCapiId(id);
-      return obj ? canvasObjects.indexOf(obj) : -1;
-    };
-
-    // Tipos locais pra evitar narrowing pain — separamos principal e leaf.
-    type PrincipalNode = Extract<LayerNode, { kind: 'principal' }>;
-    type LeafNode = Extract<LayerNode, { kind: 'visual' | 'operation' }>;
-
-    const principals: PrincipalNode[] = [];
-    const orphans: LeafNode[] = [];
-
-    // Primeiro passe: monta os principais.
-    for (const meta of this.layerMeta.values()) {
-      if (meta.kind === 'principal') {
-        principals.push({
-          kind: 'principal',
-          id: meta.id,
-          name: meta.name,
-          visible: meta.visible,
-          locked: meta.locked,
-          opacity: meta.opacity ?? 1,
-          colorLabel: meta.colorLabel ?? 'none',
-          blendMode: meta.blendMode ?? 'normal',
-          children: [],
-        });
-      }
-    }
-    const principalById = new Map<string, PrincipalNode>(principals.map((p) => [p.id, p]));
-
-    // Segundo passe: distribui filhos pros pais ou pra órfãos.
-    for (const meta of this.layerMeta.values()) {
-      if (meta.kind === 'principal') continue;
-      const node: LeafNode =
-        meta.kind === 'operation'
-          ? {
-              kind: 'operation',
-              id: meta.id,
-              name: meta.name,
-              visible: meta.visible,
-              locked: meta.locked,
-              opacity: meta.opacity ?? 1,
-              colorLabel: meta.colorLabel ?? 'none',
-              blendMode: meta.blendMode ?? 'normal',
-              parentId: meta.parentLayerId ?? null,
-              operation: meta.operation,
-              machines: meta.machines,
-            }
-          : {
-              kind: 'visual',
-              id: meta.id,
-              name: meta.name,
-              visible: meta.visible,
-              locked: meta.locked,
-              opacity: meta.opacity ?? 1,
-              colorLabel: meta.colorLabel ?? 'none',
-              blendMode: meta.blendMode ?? 'normal',
-              parentId: meta.parentLayerId ?? null,
-            };
-      const parent = meta.parentLayerId ? principalById.get(meta.parentLayerId) : undefined;
-      if (parent) {
-        parent.children.push(node);
-      } else {
-        orphans.push(node);
-      }
-    }
-
-    // Ordena por z-index do canvas (topo do array = z mais alto).
-    const byZ = (a: LayerNode, b: LayerNode): number => indexOf(b.id) - indexOf(a.id);
-    // Onda 15 — principals (broches) usam ordem INVERSA: broche 1 em cima,
-    // broche N embaixo. Operador associa ordem do painel com a ordem da
-    // sidebar esquerda. Children e órfãos mantêm z-order natural (Photoshop).
-    const byZAsc = (a: LayerNode, b: LayerNode): number => indexOf(a.id) - indexOf(b.id);
-    principals.sort(byZAsc);
-    for (const p of principals) p.children.sort(byZ);
-    orphans.sort(byZ);
-
-    return [...principals, ...orphans];
+    return getLayersHierarchyFn(this.canvas, this.layerMeta, (i) => this.findByCapiId(i));
   }
 
   // ─── Material API ─────────────────────────────────────────────────────────
@@ -2984,22 +2624,12 @@ export class CanvasEngine {
    * @param parentLayerId  capi id of the parent layer (e.g. aplique) when the
    *                       new layer lives inside another. null = root-level
    *                       (parent is the product canvas).
+   *
+   * Onda 30.B — delegado para `engine-layers.ts`. Mantido como método privado
+   * pra preservar API interna (addRectangle/createSlot chamam this.X).
    */
   private registerLayerMeta(id: string, parentLayerId: string | null = null): void {
-    if (this.layerMeta.has(id)) return; // idempotent
-    // Emit VisualLayerMeta (ADR 010 §1). Principal layers are created explicitly
-    // by addAppliqueSvg (Onda 6.5 Fase A+). Operation layers are deferred to Onda 7+.
-    const meta: VisualLayerMeta = {
-      id,
-      parentLayerId,
-      name: `Camada ${this.layerMeta.size + 1}`,
-      zIndex: this.canvas.getObjects().length - 1,
-      visible: true,
-      locked: false,
-      kind: 'visual',
-      materialId: null,
-    };
-    this.layerMeta.set(id, meta);
+    registerLayerMetaFn(this.canvas, this.layerMeta, id, parentLayerId);
   }
 }
 
