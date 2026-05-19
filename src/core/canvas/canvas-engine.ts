@@ -1,6 +1,15 @@
 import * as fabric from 'fabric';
 
-import type { CanvasItem, LayerBlendMode, LayerColorLabel, LayerMeta } from '@/data/schema';
+import type {
+  CanvasItem,
+  LayerBlendMode,
+  LayerColorLabel,
+  LayerLocks,
+  LayerMeta,
+  MachineCode,
+  PatternRole,
+  ProcessType,
+} from '@/data/schema';
 import {
   applyMaterialToLayer as applyMaterialToLayerFn,
   applyMaterialToBase as applyMaterialToBaseFn,
@@ -64,6 +73,12 @@ import {
   reparentLayer as reparentLayerFn,
   getLayersHierarchy as getLayersHierarchyFn,
   registerLayerMeta as registerLayerMetaFn,
+  // Onda 33 — pattern classification (spec "templates inteligentes")
+  setPatternRole as setPatternRoleFn,
+  setProcessRouting as setProcessRoutingFn,
+  setLayerLocks as setLayerLocksFn,
+  convertToArea as convertToAreaFn,
+  hasChildren as hasChildrenFn,
 } from './engine-layers';
 
 export interface EngineConfig {
@@ -1024,6 +1039,72 @@ export class CanvasEngine {
    */
   reparentLayer(id: string, newParentId: string | null): void {
     reparentLayerFn(this.canvas, this.layerMeta, id, newParentId);
+  }
+
+  // ─── Onda 33 — Pattern classification (spec "templates inteligentes") ────
+
+  /**
+   * Anota o papel da camada na spec (PRODUCT/APPLIQUE/CONTOUR/TEXT_AREA/LOGO_AREA).
+   * Passe `undefined` pra remover a classificação. Não mexe no Fabric object —
+   * só metadata. Pra converter um vetor em ÁREA com placeholder visual, use
+   * `convertToArea`.
+   */
+  setPatternRole(id: string, role: PatternRole | undefined): void {
+    setPatternRoleFn(this.canvas, this.layerMeta, id, role);
+  }
+
+  /**
+   * Define processo + máquinas-alvo da camada. `machineTargets` é
+   * deduplicado e truncado em 3. Passe `undefined` em qualquer parâmetro
+   * pra zerar.
+   *
+   * Onda 33 só persiste o que veio; validação "≥1 máquina" entra na
+   * Onda 40 (export).
+   */
+  setProcessRouting(
+    id: string,
+    processType: ProcessType | undefined,
+    machineTargets: MachineCode[] | undefined
+  ): void {
+    setProcessRoutingFn(this.canvas, this.layerMeta, id, processType, machineTargets);
+  }
+
+  /**
+   * Atualiza locks granulares (Onda 33). Patch parcial (preserva os campos
+   * não passados); `null` remove o `lockGranular` inteiro (cai no `locked`
+   * legacy do `setLayerLocked`).
+   *
+   * Não mexe nas flags Fabric — Onda 34 unifica esse caminho.
+   */
+  setLayerLocks(id: string, patch: Partial<LayerLocks> | null): void {
+    setLayerLocksFn(this.canvas, this.layerMeta, id, patch);
+  }
+
+  /**
+   * Converte uma camada de vetor real em ÁREA (TEXT_AREA ou LOGO_AREA):
+   * captura bounds em mm, remove vetor, cria placeholder tracejado roxo
+   * no mesmo lugar, preserva o id original. Operação destrutiva.
+   *
+   * Retorna true em sucesso. Retorna false se:
+   *  - role inválido (não-TEXT_AREA / não-LOGO_AREA)
+   *  - id inexistente
+   *  - objeto Fabric não encontrado
+   *  - camada é principal COM filhos (slot vazaria do aplique pai)
+   *
+   * Caller responsável por dialog de confirmação antes — o vetor original
+   * é removido.
+   */
+  convertToArea(id: string, role: 'TEXT_AREA' | 'LOGO_AREA'): boolean {
+    return convertToAreaFn(this.canvas, this.layerMeta, (i) => this.findByCapiId(i), id, role);
+  }
+
+  /**
+   * Helper informativo: layer tem filhos diretos? Usado pela UI pra
+   * desabilitar "Converter em AREA" quando o principal selecionado
+   * tem slots/visuais dentro.
+   */
+  hasChildren(id: string): boolean {
+    return hasChildrenFn(this.layerMeta, id);
   }
 
   /**
