@@ -58,6 +58,11 @@ import { LayerPanel } from '@/ui/canvas/LayerPanel';
 import AppLayout from '@/ui/layout/AppLayout';
 
 import { ObjectPropertiesPanel, type ObjectGeometry } from './ObjectPropertiesPanel';
+import {
+  PatternClassificationPanel,
+  type PatternClassificationState,
+} from './PatternClassificationPanel';
+import type { LayerLocks, MachineCode, PatternRole, ProcessType } from '@/data/schema';
 
 const VIEWPORT = { widthPx: 900, heightPx: 600 };
 
@@ -224,6 +229,84 @@ export default function PadraoEditorPage() {
     if (!engine || !selectedObject) return;
     engine.setObjectGeometryMm(selectedObject.id, patch);
     refreshSelected(selectedObject.id);
+  }
+
+  // ── Onda 33 — Classificação da camada selecionada ────────────────────────
+  // Tick incremento força re-render do PatternClassificationPanel após cada
+  // setPatternRole/setProcessRouting/setLayerLocks. Sem ele, o painel
+  // não refletiria a mudança porque o engine muta layerMeta in-place.
+  const [classificationTick, setClassificationTick] = useState(0);
+  const bumpClassification = useCallback(() => setClassificationTick((t) => t + 1), []);
+
+  // State derivado: snapshot dos 6 campos opcionais do LayerMeta selecionado.
+  // Recomputado quando selectedObject ou classificationTick mudam.
+  const classificationState: PatternClassificationState = (() => {
+    void classificationTick; // depend on tick — sinal explícito de re-leitura
+    const engine = engineRef.current;
+    const layerId = selectedObject?.id ?? null;
+    if (!engine || !layerId) {
+      return {
+        layerId: null,
+        patternRole: undefined,
+        processType: undefined,
+        machineTargets: [],
+        locks: {},
+        hasChildren: false,
+      };
+    }
+    const meta = engine.getLayerMeta(layerId);
+    return {
+      layerId,
+      patternRole: meta?.patternRole,
+      processType: meta?.processType,
+      machineTargets: meta?.machineTargets ?? [],
+      locks: meta?.lockGranular ?? {},
+      hasChildren: engine.hasChildren(layerId),
+    };
+  })();
+
+  function handleSetPatternRole(role: PatternRole | undefined) {
+    const engine = engineRef.current;
+    if (!engine || !selectedObject) return;
+    engine.setPatternRole(selectedObject.id, role);
+    bumpClassification();
+  }
+
+  function handleSetProcess(process: ProcessType | undefined) {
+    const engine = engineRef.current;
+    if (!engine || !selectedObject) return;
+    engine.setProcessRouting(selectedObject.id, process, classificationState.machineTargets);
+    bumpClassification();
+  }
+
+  function handleSetMachines(machines: MachineCode[]) {
+    const engine = engineRef.current;
+    if (!engine || !selectedObject) return;
+    engine.setProcessRouting(selectedObject.id, classificationState.processType, machines);
+    bumpClassification();
+  }
+
+  function handleSetLock(key: keyof LayerLocks, value: boolean) {
+    const engine = engineRef.current;
+    if (!engine || !selectedObject) return;
+    engine.setLayerLocks(selectedObject.id, { [key]: value });
+    bumpClassification();
+  }
+
+  function handleConvertToArea(role: 'TEXT_AREA' | 'LOGO_AREA') {
+    const engine = engineRef.current;
+    if (!engine || !selectedObject) return;
+    const ok = engine.convertToArea(selectedObject.id, role);
+    if (!ok) {
+      toast.error('Não foi possível converter esta camada em área.');
+      return;
+    }
+    // ID preservado — selectedObject ainda aponta pro mesmo lugar.
+    // refreshSelected captura a nova geometria do placeholder (igual à do
+    // vetor original).
+    refreshSelected(selectedObject.id);
+    bumpClassification();
+    toast.success(`Convertido em ${role}.`);
   }
 
   // ── Adicionadores de formas decorativas ───────────────────────────────────
@@ -528,6 +611,16 @@ export default function PadraoEditorPage() {
                 onChange={handleObjectPatch}
               />
             )}
+
+            {/* Onda 33 — Classificação semântica da camada (spec templates). */}
+            <PatternClassificationPanel
+              state={classificationState}
+              onSetPatternRole={handleSetPatternRole}
+              onSetProcess={handleSetProcess}
+              onSetMachines={handleSetMachines}
+              onSetLock={handleSetLock}
+              onConvertToArea={handleConvertToArea}
+            />
 
             {/* Onda 15 — painel de camadas no editor de padrão. */}
             <div className="-mx-4 mt-2 border-t border-border pt-2">
