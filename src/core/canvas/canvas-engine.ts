@@ -1,16 +1,20 @@
 import * as fabric from 'fabric';
 
-import type {
-  CanvasItem,
-  LayerBlendMode,
-  LayerColorLabel,
-  LayerMeta,
-  PrincipalLayerMeta,
-  VisualLayerMeta,
-} from '@/data/schema';
-import { buildMaterialPattern, loadImage } from './material-applier';
+import type { CanvasItem, LayerBlendMode, LayerColorLabel, LayerMeta } from '@/data/schema';
+import {
+  applyMaterialToLayer as applyMaterialToLayerFn,
+  applyMaterialToBase as applyMaterialToBaseFn,
+  buildProductClipPath as buildProductClipPathFn,
+  preloadMaterials as preloadMaterialsFn,
+  removeMaterialFromLayer as removeMaterialFromLayerFn,
+} from './engine-material';
+import {
+  addAppliqueSvg as addAppliqueSvgFn,
+  addEngravingSvg as addEngravingSvgFn,
+  addMarkingSvg as addMarkingSvgFn,
+  addRectangle as addRectangleFn,
+} from './engine-objects';
 import type { CorelSvgMeta } from './corel-svg-parser';
-import { isOperationLayer } from './layer-meta';
 import { extractClipShapes, parseAndStripRootDimensions, type ParsedViewBox } from './svg-utils';
 import { SlotManager } from './slot-manager';
 import type { SlotMeta, SlotType } from './types';
@@ -22,7 +26,6 @@ import type { ProximityResult } from './alignment/proximity-calculator';
 import { getCapiId } from './capi-id';
 import {
   CAPI_CUSTOM_PROPS as CAPI_CUSTOM_PROPS_INTERNAL,
-  generateObjectId as generateObjectIdInternal,
   findById as findByIdInternal,
   serializeCanvas,
   deserializeCanvas,
@@ -82,8 +85,6 @@ const BASE_OBJECT_FLAG = '__capiBase';
 const ASPECT_TOLERANCE = 1e-3;
 const ZOOM_MIN = 0.1;
 const ZOOM_MAX = 10;
-/** Default fill restored when a material is removed from a visual layer. */
-const DEFAULT_LAYER_FILL = 'rgba(122, 162, 247, 0.18)';
 /**
  * Default stroke applied to base-layer paths after cleanCorelSvg strips fills.
  * ADR 010 §3: contorno da peça = ink-700. Canvas engine is authoritative for colour.
@@ -92,11 +93,10 @@ const DEFAULT_LAYER_FILL = 'rgba(122, 162, 247, 0.18)';
 const SVG_BASE_STROKE = '#2a2c2e';
 
 /**
- * Aliases internos para os helpers extraídos em `engine-serialization.ts` (Onda 30.A).
- * Mantêm assinaturas pequenas dentro deste arquivo. `findById` recebe `isBaseObject`
- * porque o módulo extraído não importa este arquivo (evita import circular).
+ * Alias interno para o `findById` extraído em `engine-serialization.ts` (Onda 30.A).
+ * Recebe `isBaseObject` porque o módulo extraído não importa este arquivo (evita
+ * import circular).
  */
-const generateObjectId = generateObjectIdInternal;
 function findById(canvas: fabric.Canvas, id: string): fabric.FabricObject | undefined {
   return findByIdInternal(canvas, isBaseObject, id);
 }
@@ -1091,53 +1091,16 @@ export class CanvasEngine {
    * @param assetUrl   WebView-accessible URL (from resolveAssetUrl)
    */
   async applyMaterialToLayer(layerId: string, materialId: string, assetUrl: string): Promise<void> {
-    const obj = findById(this.canvas, layerId);
-    if (!obj) return;
-
-    const w = obj.width ?? 0;
-    const h = obj.height ?? 0;
-
-    // DEBUG Onda 18 — bug material dourado→prata.
-    // Log estruturado: entrada da função + estado do cache no momento.
-    // Remove quando bug for resolvido (memory: debt_material_dourado_prata).
-    const cacheHadKey = this.materialImageCache.has(materialId);
-    if (import.meta.env.DEV) {
-      console.log(
-        `[DEBUG-mat] applyMaterialToLayer(layerId="${layerId}", materialId="${materialId}", ` +
-          `urlTail="${assetUrl.split('/').slice(-2).join('/')}", cacheHit=${cacheHadKey}, ` +
-          `cacheKeys=[${Array.from(this.materialImageCache.keys()).join(',')}])`
-      );
-    }
-
-    // Cached loader: reuse the HTMLImageElement for the same materialId
-    // across calls within a session (avoids repeated IPC / network round-trips).
-    // Cache key is materialId — stable across Tauri asset-URL regeneration.
-    // Onda 15.fix — dedupe in-flight: cache armazena Promise, não Image.
-    // Chamadas paralelas pro mesmo materialId compartilham a mesma load.
-    const cachedLoader = (url: string): Promise<HTMLImageElement> => {
-      const hit = this.materialImageCache.get(materialId);
-      if (hit) return hit;
-      const promise = loadImage(url).catch((err) => {
-        // Se o load falhar, remove do cache — próxima tentativa pode succeder.
-        this.materialImageCache.delete(materialId);
-        throw err;
-      });
-      this.materialImageCache.set(materialId, promise);
-      return promise;
-    };
-
-    const pattern = await buildMaterialPattern(assetUrl, w, h, cachedLoader);
-
-    // Single set() call — avoids any intermediate render on the animation frame
-    // between setting fill and clipPath (Fabric Q3 recommendation).
-    const clipPath = this.buildProductClipPath();
-    obj.set(clipPath !== null ? { fill: pattern, clipPath } : { fill: pattern });
-
-    // Operation layers have no materialId (ADR 010 §1). Narrow before mutating.
-    const meta = this.layerMeta.get(layerId);
-    if (meta && !isOperationLayer(meta)) meta.materialId = materialId;
-
-    this.canvas.requestRenderAll();
+    return applyMaterialToLayerFn(
+      this.canvas,
+      this.layerMeta,
+      this.materialImageCache,
+      (id) => findById(this.canvas, id),
+      () => this.buildProductClipPath(),
+      layerId,
+      materialId,
+      assetUrl
+    );
   }
 
   /**
@@ -1152,64 +1115,16 @@ export class CanvasEngine {
    *    scale aplicado e width/height raw são coordenadas do viewBox, não px.
    */
   async applyMaterialToBase(materialId: string, assetUrl: string): Promise<void> {
-    const baseObj = this.canvas.getObjects().find((o) => isBaseObject(o));
-    if (!baseObj) {
-      if (import.meta.env.DEV) {
-        console.warn('[canvas-engine] applyMaterialToBase: no base object loaded.');
-      }
-      return;
-    }
-
-    const w = mmToPx(this.config.productWidthMm);
-    const h = mmToPx(this.config.productHeightMm);
-
-    // Onda 15.fix — dedupe in-flight: cache armazena Promise, não Image.
-    // Chamadas paralelas pro mesmo materialId compartilham a mesma load.
-    const cachedLoader = (url: string): Promise<HTMLImageElement> => {
-      const hit = this.materialImageCache.get(materialId);
-      if (hit) return hit;
-      const promise = loadImage(url).catch((err) => {
-        // Se o load falhar, remove do cache — próxima tentativa pode succeder.
-        this.materialImageCache.delete(materialId);
-        throw err;
-      });
-      this.materialImageCache.set(materialId, promise);
-      return promise;
-    };
-
-    const pattern = await buildMaterialPattern(assetUrl, w, h, cachedLoader);
-    const clipPath = this.buildProductClipPath();
-
-    // Remove rect de material anterior se existir.
-    const existing = this.canvas
-      .getObjects()
-      .find((o) => (o as unknown as Record<string, unknown>).__capiMaterialRect === true);
-    if (existing) this.canvas.remove(existing);
-
-    // Rect que recebe o material — mesmo tamanho do produto, clipado pelo contorno.
-    // Fica entre a base (contorno) e o fundo do canvas, excluído do export production.
-    const rect = new fabric.Rect({
-      left: baseObj.left ?? 0,
-      top: baseObj.top ?? 0,
-      width: w,
-      height: h,
-      fill: pattern,
-      selectable: false,
-      evented: false,
-      hoverCursor: 'default',
-      excludeFromExport: true,
-      ...(clipPath ? { clipPath } : {}),
-    });
-    (rect as unknown as Record<string, unknown>).__capiMaterialRect = true;
-
-    this.canvas.add(rect);
-    // Rect fica logo acima do fundo (sendObjectToBack move pra index 0),
-    // mas abaixo da base (contorno) e de tudo mais.
-    this.canvas.sendObjectToBack(rect);
-    // A base (contorno) deve ficar na frente do rect — move pra segundo plano.
-    this.canvas.sendObjectToBack(baseObj);
-
-    this.canvas.requestRenderAll();
+    return applyMaterialToBaseFn(
+      this.canvas,
+      this.materialImageCache,
+      isBaseObject,
+      () => this.buildProductClipPath(),
+      this.config.productWidthMm,
+      this.config.productHeightMm,
+      materialId,
+      assetUrl
+    );
   }
 
   /**
@@ -1228,30 +1143,14 @@ export class CanvasEngine {
    * Fabric 6 (GitHub #7742).
    */
   private buildProductClipPath(): fabric.Path | null {
-    if (this.productPaths.length === 0 || !this.productSvgViewBox) return null;
-
-    const sx = mmToPx(this.config.productWidthMm) / this.productSvgViewBox.width;
-    const sy = mmToPx(this.config.productHeightMm) / this.productSvgViewBox.height;
-
-    // Resolve the product group's canvas position so the clip aligns precisely.
-    // With absolutePositioned: true, left/top are in canvas absolute space — they
-    // must match the product group's origin. originX/originY: 'left'/'top' forces
-    // Fabric to skip auto-centering (which would offset the path to its bbox center).
-    const productGroup = this.canvas.getObjects().find((o) => isBaseObject(o));
-    const pgLeft = productGroup?.left ?? 0;
-    const pgTop = productGroup?.top ?? 0;
-
-    const clipPath = new fabric.Path(this.productPaths.join(' '), {
-      left: pgLeft,
-      top: pgTop,
-      originX: 'left',
-      originY: 'top',
-      scaleX: sx,
-      scaleY: sy,
-      absolutePositioned: true,
-    });
-
-    return clipPath;
+    return buildProductClipPathFn(
+      this.canvas,
+      isBaseObject,
+      this.productPaths,
+      this.productSvgViewBox,
+      this.config.productWidthMm,
+      this.config.productHeightMm
+    );
   }
 
   /**
@@ -1274,23 +1173,7 @@ export class CanvasEngine {
    * @param entries  Array of { id: materialId, url: resolved asset URL }
    */
   async preloadMaterials(entries: Array<{ id: string; url: string }>): Promise<void> {
-    // Onda 15.fix — cache armazena Promise pra in-flight dedupe; preload registra
-    // a promise direto e await coletivo no final.
-    const promises: Array<Promise<HTMLImageElement | null>> = entries.map(({ id, url }) => {
-      if (this.materialImageCache.has(id)) {
-        return this.materialImageCache.get(id)!.catch(() => null);
-      }
-      const p = loadImage(url).catch((err) => {
-        if (import.meta.env.DEV) {
-          console.warn(`[canvas-engine] preloadMaterials: failed to load "${id}":`, err);
-        }
-        this.materialImageCache.delete(id);
-        throw err;
-      });
-      this.materialImageCache.set(id, p);
-      return p.catch(() => null);
-    });
-    await Promise.all(promises);
+    return preloadMaterialsFn(this.materialImageCache, entries);
   }
 
   /**
@@ -1298,16 +1181,12 @@ export class CanvasEngine {
    * and clearing the product-contour clipPath if one was applied.
    */
   removeMaterialFromLayer(layerId: string): void {
-    const obj = findById(this.canvas, layerId);
-    if (!obj) return;
-
-    obj.set({ fill: DEFAULT_LAYER_FILL, clipPath: undefined });
-
-    // Operation layers have no materialId (ADR 010 §1). Narrow before mutating.
-    const meta = this.layerMeta.get(layerId);
-    if (meta && !isOperationLayer(meta)) meta.materialId = null;
-
-    this.canvas.requestRenderAll();
+    removeMaterialFromLayerFn(
+      this.canvas,
+      this.layerMeta,
+      (id) => findById(this.canvas, id),
+      layerId
+    );
   }
 
   // ─── Product SVG ─────────────────────────────────────────────────────────
@@ -1475,69 +1354,16 @@ export class CanvasEngine {
     appliqueId: string,
     position?: { leftMm: number; topMm: number }
   ): Promise<string> {
-    const { objects } = await fabric.loadSVGFromString(meta.svgStripped);
-    const validObjects = objects.filter((o): o is fabric.FabricObject => o !== null);
-    if (validObjects.length === 0) {
-      throw new Error(
-        `[canvas-engine] addAppliqueSvg: no drawable shapes in SVG for applique "${appliqueId}".`
-      );
-    }
-
-    // ADR 011: fill: '' = transparent in Fabric/Canvas2D. Do NOT use 'none'.
-    for (const obj of validObjects) {
-      obj.set({ fill: '', stroke: SVG_BASE_STROKE, strokeWidth: 1, strokeUniform: true });
-    }
-
-    const group = fabric.util.groupSVGElements(validObjects);
-
-    const scaleX = meta.scaleFactor;
-    const scaleY = mmToPx(meta.heightMm) / meta.viewBoxH;
-
-    // Onda 13.6 — quando `position` é passado, pula centragem.
-    const leftMm = position ? position.leftMm : (this.config.productWidthMm - meta.widthMm) / 2;
-    const topMm = position ? position.topMm : (this.config.productHeightMm - meta.heightMm) / 2;
-    const left = mmToPx(leftMm);
-    const top = mmToPx(topMm);
-
-    group.set({ left, top, originX: 'left', originY: 'top', scaleX, scaleY });
-
-    // Onda 26c — apliques-base do Novo Pedido (appliqueId `board-item:*`) são
-    // a "página" do produto. Operador edita o que está em cima (textos, logos,
-    // decorativos), não a base. Travados: não vira target de pointer (click
-    // atravessa pro filho acima, padrão Figma/Corel) e não aparece em seleção.
-    // No editor de Padrões (appliqueId arbitrário) continua editável.
-    const isBoardItemBase = appliqueId.startsWith('board-item:');
-    if (isBoardItemBase) {
-      group.set({ selectable: false, evented: false, hoverCursor: 'default' });
-    }
-
-    const id = generateObjectId();
-    (group as unknown as Record<string, unknown>).id = id;
-
-    this.canvas.add(group);
-    this.canvas.requestRenderAll();
-
-    const principalMeta: PrincipalLayerMeta = {
-      id,
-      parentLayerId: null,
+    return addAppliqueSvgFn(
+      this.canvas,
+      this.layerMeta,
+      this.config.productWidthMm,
+      this.config.productHeightMm,
+      meta,
       name,
-      zIndex: this.canvas.getObjects().length - 1,
-      visible: true,
-      locked: false,
-      kind: 'principal',
-      materialId: null,
       appliqueId,
-      // Mini-Onda 8.6: bounds autoritativos do viewBox SVG (ADR 005).
-      originalBounds: {
-        left: leftMm,
-        top: topMm,
-        width: meta.widthMm,
-        height: meta.heightMm,
-      },
-    };
-    this.layerMeta.set(id, principalMeta);
-
-    return id;
+      position
+    );
   }
 
   /**
@@ -1562,62 +1388,17 @@ export class CanvasEngine {
     engravingId: string,
     parentLayerId: string | null
   ): Promise<string> {
-    const { objects } = await fabric.loadSVGFromString(meta.svgStripped);
-    const validObjects = objects.filter((o): o is fabric.FabricObject => o !== null);
-    if (validObjects.length === 0) {
-      throw new Error(
-        `[canvas-engine] addEngravingSvg: no drawable shapes in SVG for engraving "${engravingId}".`
-      );
-    }
-
-    // ADR 011: fill: '' = transparent. Stroke padrão da peça.
-    for (const obj of validObjects) {
-      obj.set({ fill: '', stroke: SVG_BASE_STROKE, strokeWidth: 1, strokeUniform: true });
-    }
-
-    const group = fabric.util.groupSVGElements(validObjects);
-
-    const scaleX = meta.scaleFactor;
-    const scaleY = mmToPx(meta.heightMm) / meta.viewBoxH;
-
-    // Posição inicial: centro do aplique pai quando há parentLayerId válido,
-    // senão centro do canvas. parentBounds vem em mm, convertemos pra px.
-    const parentBounds = parentLayerId ? this.getParentBoundsForObject(parentLayerId) : null;
-    const cxMm = parentBounds
-      ? parentBounds.left + parentBounds.width / 2
-      : this.config.productWidthMm / 2;
-    const cyMm = parentBounds
-      ? parentBounds.top + parentBounds.height / 2
-      : this.config.productHeightMm / 2;
-    const left = mmToPx(cxMm - meta.widthMm / 2);
-    const top = mmToPx(cyMm - meta.heightMm / 2);
-
-    group.set({ left, top, originX: 'left', originY: 'top', scaleX, scaleY });
-
-    const id = generateObjectId();
-    (group as unknown as Record<string, unknown>).id = id;
-
-    this.canvas.add(group);
-
-    const visualMeta: VisualLayerMeta = {
-      id,
-      parentLayerId,
+    return addEngravingSvgFn(
+      this.canvas,
+      this.layerMeta,
+      (objId) => this.getParentBoundsForObject(objId),
+      this.config.productWidthMm,
+      this.config.productHeightMm,
+      meta,
       name,
-      zIndex: this.canvas.getObjects().length - 1,
-      visible: true,
-      locked: false,
-      kind: 'visual',
-      materialId: null,
       engravingId,
-    };
-    this.layerMeta.set(id, visualMeta);
-
-    // Seleciona o grupo recém-criado — feedback imediato + atalho pra
-    // alignment/proximity overlay reagir na sequência.
-    this.canvas.setActiveObject(group);
-    this.canvas.requestRenderAll();
-
-    return id;
+      parentLayerId
+    );
   }
 
   /**
@@ -1636,57 +1417,17 @@ export class CanvasEngine {
     markingId: string,
     parentLayerId: string | null
   ): Promise<string> {
-    const { objects } = await fabric.loadSVGFromString(meta.svgStripped);
-    const validObjects = objects.filter((o): o is fabric.FabricObject => o !== null);
-    if (validObjects.length === 0) {
-      throw new Error(
-        `[canvas-engine] addMarkingSvg: no drawable shapes in SVG for marking "${markingId}".`
-      );
-    }
-
-    for (const obj of validObjects) {
-      obj.set({ fill: '', stroke: SVG_BASE_STROKE, strokeWidth: 1, strokeUniform: true });
-    }
-
-    const group = fabric.util.groupSVGElements(validObjects);
-
-    const scaleX = meta.scaleFactor;
-    const scaleY = mmToPx(meta.heightMm) / meta.viewBoxH;
-
-    const parentBounds = parentLayerId ? this.getParentBoundsForObject(parentLayerId) : null;
-    const cxMm = parentBounds
-      ? parentBounds.left + parentBounds.width / 2
-      : this.config.productWidthMm / 2;
-    const cyMm = parentBounds
-      ? parentBounds.top + parentBounds.height / 2
-      : this.config.productHeightMm / 2;
-    const left = mmToPx(cxMm - meta.widthMm / 2);
-    const top = mmToPx(cyMm - meta.heightMm / 2);
-
-    group.set({ left, top, originX: 'left', originY: 'top', scaleX, scaleY });
-
-    const id = generateObjectId();
-    (group as unknown as Record<string, unknown>).id = id;
-
-    this.canvas.add(group);
-
-    const visualMeta: VisualLayerMeta = {
-      id,
-      parentLayerId,
+    return addMarkingSvgFn(
+      this.canvas,
+      this.layerMeta,
+      (objId) => this.getParentBoundsForObject(objId),
+      this.config.productWidthMm,
+      this.config.productHeightMm,
+      meta,
       name,
-      zIndex: this.canvas.getObjects().length - 1,
-      visible: true,
-      locked: false,
-      kind: 'visual',
-      materialId: null,
       markingId,
-    };
-    this.layerMeta.set(id, visualMeta);
-
-    this.canvas.setActiveObject(group);
-    this.canvas.requestRenderAll();
-
-    return id;
+      parentLayerId
+    );
   }
 
   /**
@@ -1695,35 +1436,14 @@ export class CanvasEngine {
    * Automatically registers a LayerMeta entry (kind='visual').
    */
   addRectangle(xMm: number, yMm: number, wMm: number, hMm: number): fabric.Rect {
-    const rect = new fabric.Rect({
-      left: mmToPx(xMm),
-      top: mmToPx(yMm),
-      width: mmToPx(wMm),
-      height: mmToPx(hMm),
-      originX: 'left',
-      originY: 'top',
-      fill: DEFAULT_LAYER_FILL,
-      stroke: '#7aa2f7',
-      strokeWidth: 1,
-      strokeUniform: true,
-      cornerColor: '#7aa2f7',
-      cornerStrokeColor: '#7aa2f7',
-      borderColor: '#7aa2f7',
-      transparentCorners: false,
-      cornerSize: 8,
-    });
-    this.canvas.add(rect);
-
-    // Assign a stable id immediately so layerMeta can be keyed by it.
-    const rec = rect as unknown as Record<string, unknown>;
-    if (typeof rec.id !== 'string' || !rec.id) {
-      rec.id = generateObjectId();
-    }
-    this.registerLayerMeta(rec.id as string);
-
-    this.canvas.setActiveObject(rect);
-    this.canvas.requestRenderAll();
-    return rect;
+    return addRectangleFn(
+      this.canvas,
+      (id, parent) => this.registerLayerMeta(id, parent),
+      xMm,
+      yMm,
+      wMm,
+      hMm
+    );
   }
 
   /**
