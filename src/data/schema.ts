@@ -180,8 +180,103 @@ export type LayerColorLabel =
  */
 export type LayerBlendMode = 'normal' | 'multiply' | 'screen' | 'overlay';
 
-/** Camada principal — representa uma peça física (base, aplique). */
-export type PrincipalLayerMeta = {
+// ─── Onda 33 — Pattern classification (spec "templates inteligentes") ────────
+//
+// Todos os campos abaixo são OPCIONAIS em LayerMeta. Padrões salvos antes da
+// Onda 33 vêm com tudo undefined; UI e engine usam fallbacks. Persistidos
+// dentro de canvasJson.capi.layers via spread em engine-serialization.ts —
+// sem migration SQL, sem bucket separado.
+//
+// Migração futura (Onda 35 — modelo de tipos formal): `patternRole` vira o
+// discriminator real da union, substituindo `kind`. Por enquanto convivem.
+
+/**
+ * Classificação semântica da camada na spec de templates inteligentes.
+ *  - PRODUCT     — peça principal/corte base. 1 por template.
+ *  - APPLIQUE    — peças adicionais coladas depois (sub-árvores).
+ *  - CONTOUR     — linhas decorativas e contornos.
+ *  - TEXT_AREA   — placeholder de texto: só bounds+meta, sem curvas.
+ *  - LOGO_AREA   — placeholder de logo: só bounds+meta, sem curvas.
+ *
+ * undefined em LayerMeta = camada legada não classificada (retrocompat).
+ */
+export type PatternRole = 'PRODUCT' | 'APPLIQUE' | 'CONTOUR' | 'TEXT_AREA' | 'LOGO_AREA';
+
+/**
+ * Processo de produção. 3 valores fixos da spec. Onda 40 vai usar isto pra
+ * separar export por processo (cor preta = corte, vermelho = gravacao,
+ * azul = marcacao).
+ */
+export type ProcessType = 'corte' | 'gravacao' | 'marcacao';
+
+/**
+ * Código de máquina conforme spec (M1/M2/M3). Tradução pra IDs do banco
+ * (master-biro / fiber-laser / due-laser) fica em `src/lib/machine-codes.ts`
+ * — single source of truth.
+ *
+ * Onda 33 persiste códigos da spec; Onda 40 (export) traduz na borda.
+ */
+export type MachineCode = 'M1' | 'M2' | 'M3';
+
+/**
+ * Locks granulares por dimensão (spec). Convive com `LayerMeta.locked: boolean`
+ * legacy durante a Onda 33 — quando `lockGranular` está presente, ele vence;
+ * quando ausente, cai no `locked` boolean. Onda 34 unifica.
+ */
+export interface LayerLocks {
+  position?: boolean;
+  scale?: boolean;
+  rotation?: boolean;
+  /** Impede deletar/reparentar; sem equivalente Fabric — validado no engine. */
+  structure?: boolean;
+}
+
+/**
+ * Bounds em mm para áreas inteligentes (TEXT_AREA / LOGO_AREA). Fonte de
+ * verdade da geometria da área — engine-serialization persiste isto e na
+ * deserialize o placeholder Rect é recriado a partir destes bounds.
+ *
+ * Para PRODUCT/APPLIQUE/CONTOUR não é usado — eles preservam o vetor real
+ * e a geometria vive no objeto Fabric / originalBounds.
+ */
+export interface LayerBoundsMm {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Modo de encaixe pra LOGO_AREA. Onda 33 só suporta 'contain'; ondas futuras
+ * (33+ ou 37 AREA-vs-ASSET) podem adicionar 'cover', 'stretch'.
+ */
+export type FitMode = 'contain';
+
+/**
+ * Bloco de campos da Onda 33 inseridos em cada variante de LayerMeta.
+ * Todos opcionais — retrocompat completa com padrões salvos antes desta onda.
+ */
+export interface PatternLayerExtras {
+  patternRole?: PatternRole;
+  processType?: ProcessType;
+  /** 1..3 códigos M1/M2/M3. Validação de cardinalidade fica no engine. */
+  machineTargets?: MachineCode[];
+  /** Obrigatório quando patternRole === 'TEXT_AREA' | 'LOGO_AREA'. */
+  boundsMm?: LayerBoundsMm;
+  /** Onda 33 só aceita 'contain' (default p/ LOGO_AREA). */
+  fitMode?: FitMode;
+  /** Locks granulares da spec. Onda 34 unifica com `locked` legacy. */
+  lockGranular?: LayerLocks;
+}
+
+/**
+ * Camada principal — representa uma peça física (base, aplique).
+ *
+ * Onda 33: herda `PatternLayerExtras` com 6 campos opcionais de classificação
+ * de templates (patternRole, processType, machineTargets, boundsMm, fitMode,
+ * lockGranular). Padrões salvos antes da Onda 33 vêm com tudo undefined.
+ */
+export type PrincipalLayerMeta = PatternLayerExtras & {
   id: string;
   /** Always null for principal layers (ADR 010 §1 invariant 1). */
   parentLayerId: null;
@@ -236,8 +331,12 @@ export type PrincipalLayerMeta = {
   originalBounds?: { left: number; top: number; width: number; height: number };
 };
 
-/** Sub-camada de operação — operação de máquina sobre a peça física pai. */
-export type OperationLayerMeta = {
+/**
+ * Sub-camada de operação — operação de máquina sobre a peça física pai.
+ *
+ * Onda 33: herda `PatternLayerExtras` (ver PrincipalLayerMeta).
+ */
+export type OperationLayerMeta = PatternLayerExtras & {
   id: string;
   /** FK → id of the parent PrincipalLayerMeta. Never null (ADR 010 §1 invariant 2). */
   parentLayerId: string;
@@ -258,8 +357,14 @@ export type OperationLayerMeta = {
   machines: string[];
 };
 
-/** Camada visual decorativa — retrocompat com Ondas 3-5 e para uso futuro. */
-export type VisualLayerMeta = {
+/**
+ * Camada visual decorativa — retrocompat com Ondas 3-5 e para uso futuro.
+ *
+ * Onda 33: herda `PatternLayerExtras` (ver PrincipalLayerMeta). É a variante
+ * mais usada pelos novos campos — placeholders TEXT_AREA/LOGO_AREA criados
+ * por `convertToArea` ficam aqui (kind='visual' + patternRole='TEXT_AREA').
+ */
+export type VisualLayerMeta = PatternLayerExtras & {
   id: string;
   /** null = top-level visual. string = child of a principal (never child of operation). */
   parentLayerId: string | null;
