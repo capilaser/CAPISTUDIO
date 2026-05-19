@@ -1,15 +1,21 @@
 /**
  * capi-id.ts — extração canônica do "capi id" de um objeto Fabric.
  *
- * Motivação (Onda 7b, Fix #1 — Causa #B):
- *   - Objetos comuns (rect, aplique, etc.) carregam `id` direto no FabricObject
- *     (gravado em addRectangle / addAppliqueSvg / serialize).
- *   - Slots NÃO carregam `id` direto — só `capiSlot: SlotMeta`. O id capi do
- *     slot mora em `capiSlot.id` (slot-manager nunca seta `body.id`).
+ * Motivação histórica (Onda 7b, Fix #1 — Causa #B):
+ *   - Objetos comuns (rect, aplique, etc.) carregam `id` direto no FabricObject.
+ *   - Slots, ANTES da Onda 31, NÃO carregavam `id` direto — só `capiSlot: SlotMeta`.
+ *     O id capi do slot morava SÓ em `capiSlot.id`.
  *
- * Antes desta abstração, o AlignmentToolbar (e qualquer caller) lia `obj.id`
- * direto e recebia `undefined` para slots, fazendo silently fallback pra
- * canvas em vez de pai imediato.
+ * Onda 31 — eliminou o dual-path:
+ *   - `slot-manager.createSlot` agora seta `body.id = meta.id` na criação.
+ *   - `slot-manager.loadSlotsFromCanvas` normaliza `body.id` para `capiSlot.id`
+ *     ao carregar slots legados (de canvasJson antigo).
+ *   - Em `applyPatternObjects`, IDs novos já são sincronizados em ambos.
+ *
+ * Esta função continua sendo o caminho canônico: ela tenta `obj.id` primeiro
+ * (caminho rápido, válido pra TODOS os objetos pós-Onda 31), e cai pra
+ * `capiSlot.id` como fallback (compatibilidade com canvasJson serializado
+ * em ondas anteriores que ainda não passou por `loadSlotsFromCanvas`).
  *
  * Função pura, sem dependência de Fabric — recebe um shape mínimo que ambos
  * fabric.FabricObject e plain objects de teste satisfazem.

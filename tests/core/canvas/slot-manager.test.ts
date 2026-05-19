@@ -107,6 +107,25 @@ describe('SlotManager', () => {
     expect(stored.maxHeight).toBe(8);
   });
 
+  // ── 5b. Onda 31 — body.id sincronizado com capiSlot.id ──────────────────
+  it('Onda 31: body.id equals capiSlot.id after createSlot (eliminates dual-path)', () => {
+    const meta = manager.createSlot('nome');
+    const obj = manager.getFabricObject(meta.id) as unknown as Record<string, unknown>;
+
+    // Antes da Onda 31, body.id era undefined — findById(canvas, slotId)
+    // não achava slots. A partir da Onda 31, o slot manager seta body.id
+    // = meta.id na criação, então TANTO findById quanto findByCapiId
+    // encontram o slot.
+    expect(obj['id']).toBe(meta.id);
+    expect((obj['capiSlot'] as SlotMeta).id).toBe(meta.id);
+
+    // Findable via canvas direto (caminho do `findById`).
+    const found = canvas
+      .getObjects()
+      .find((o) => (o as unknown as Record<string, unknown>).id === meta.id);
+    expect(found).toBe(manager.getFabricObject(meta.id));
+  });
+
   // ── 6. Default position is centred in the product area ──────────────────
   it('positions the slot at the centre of the product area by default', () => {
     const meta = manager.createSlot('nome');

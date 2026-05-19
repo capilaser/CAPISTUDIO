@@ -126,6 +126,11 @@ export class SlotManager {
     const body = this.buildBodyRect(meta);
     const overlay = this.buildOverlayRect(meta);
     setCapiSlot(body, meta);
+    // Onda 31 — sincroniza body.id com capiSlot.id. Elimina dual-path:
+    // a partir desta onda, slots novos podem ser encontrados tanto por
+    // `findById` (lê obj.id) quanto por `findByCapiId`. Slots legados
+    // (canvasJson antigo sem obj.id) são normalizados em loadSlotsFromCanvas.
+    (body as unknown as Record<string, unknown>).id = meta.id;
 
     this.canvas.add(body);
     this.canvas.add(overlay);
@@ -448,6 +453,12 @@ export class SlotManager {
 
       const body = obj as fabric.Rect;
       body.set({ lockRotation: true }); // re-enforce invariant after deserialization
+      // Onda 31 — normaliza body.id com capiSlot.id pra slots legados que
+      // foram serializados antes desta onda. Idempotente: se já bate, no-op.
+      const rec = body as unknown as Record<string, unknown>;
+      if (rec.id !== meta.id) {
+        rec.id = meta.id;
+      }
       const overlay = this.buildOverlayRect(meta);
       this.canvas.add(overlay);
       this.slots.set(meta.id, { meta: { ...meta }, body, overlay });
