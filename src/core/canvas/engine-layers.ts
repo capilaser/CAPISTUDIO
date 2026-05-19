@@ -13,7 +13,18 @@
  */
 import * as fabric from 'fabric';
 
-import type { LayerBlendMode, LayerColorLabel, LayerMeta, VisualLayerMeta } from '@/data/schema';
+import type {
+  LayerBlendMode,
+  LayerBoundsMm,
+  LayerColorLabel,
+  LayerLocks,
+  LayerMeta,
+  MachineCode,
+  PatternRole,
+  ProcessType,
+  VisualLayerMeta,
+} from '@/data/schema';
+import { pxToMm } from './units';
 import { CAPI_CUSTOM_PROPS, generateObjectId } from './engine-serialization';
 
 /**
@@ -667,4 +678,232 @@ export function registerLayerMeta(
     materialId: null,
   };
   layerMeta.set(id, meta);
+}
+
+// ─── Onda 33 — Pattern classification helpers ────────────────────────────────
+
+/**
+ * Define o papel da camada na spec de templates inteligentes. No-op se
+ * `id` não existe.
+ *
+ * `role === undefined` remove a classificação (volta a ser "não classificada").
+ *
+ * Para converter um vetor real em TEXT_AREA / LOGO_AREA (que substitui as
+ * curvas por um placeholder de bounds), use `convertToArea` — esta função
+ * só anota metadata, sem mexer no Fabric object.
+ */
+export function setPatternRole(
+  canvas: fabric.Canvas,
+  layerMeta: Map<string, LayerMeta>,
+  id: string,
+  role: PatternRole | undefined
+): void {
+  const meta = layerMeta.get(id);
+  if (!meta) return;
+  if (role === undefined) {
+    delete meta.patternRole;
+  } else {
+    meta.patternRole = role;
+  }
+  fireLayerMetaChanged(canvas, id, meta.kind);
+}
+
+/**
+ * Define processo + máquinas-alvo da camada. Validação leve:
+ *  - `machineTargets` é deduplicado e truncado para 3.
+ *  - `processType === undefined` E `machineTargets === undefined` zera ambos.
+ *
+ * Não rejeita array vazio aqui — Onda 33 grava o que veio; validação
+ * "≥1 máquina obrigatória" entra na Onda 40 (export).
+ */
+export function setProcessRouting(
+  canvas: fabric.Canvas,
+  layerMeta: Map<string, LayerMeta>,
+  id: string,
+  processType: ProcessType | undefined,
+  machineTargets: MachineCode[] | undefined
+): void {
+  const meta = layerMeta.get(id);
+  if (!meta) return;
+
+  if (processType === undefined) {
+    delete meta.processType;
+  } else {
+    meta.processType = processType;
+  }
+
+  if (machineTargets === undefined) {
+    delete meta.machineTargets;
+  } else {
+    const unique = Array.from(new Set(machineTargets));
+    meta.machineTargets = unique.slice(0, 3);
+  }
+
+  fireLayerMetaChanged(canvas, id, meta.kind);
+}
+
+/**
+ * Define locks granulares (Onda 33). Substitui o boolean `locked` legacy
+ * via patch parcial:
+ *   - patch = { position: true } → preserva os outros campos atuais
+ *   - patch = null              → remove `lockGranular` (cai no `locked` legacy)
+ *
+ * Não mexe nas flags Fabric (`lockMovementX`, etc.) — Onda 34 unifica esse
+ * caminho com o `setLayerLocked` legacy. Nesta onda, `lockGranular` é
+ * apenas metadata persistida.
+ */
+export function setLayerLocks(
+  canvas: fabric.Canvas,
+  layerMeta: Map<string, LayerMeta>,
+  id: string,
+  patch: Partial<LayerLocks> | null
+): void {
+  const meta = layerMeta.get(id);
+  if (!meta) return;
+
+  if (patch === null) {
+    delete meta.lockGranular;
+  } else {
+    const current = meta.lockGranular ?? {};
+    meta.lockGranular = { ...current, ...patch };
+  }
+
+  fireLayerMetaChanged(canvas, id, meta.kind);
+}
+
+/**
+ * Converte uma camada de vetor real em ÁREA (TEXT_AREA ou LOGO_AREA).
+ *
+ * Etapas:
+ *  1. Lê bounds em mm do objeto Fabric atual (left+width*scaleX, etc).
+ *  2. Captura `parentLayerId` do LayerMeta atual (mantido).
+ *  3. Remove o Fabric object original.
+ *  4. Cria um placeholder `fabric.Rect` semi-transparente com stroke
+ *     tracejado roxo (`#a78bfa`, dashArray [4,3]) nas mesmas coords.
+ *  5. Define `body.id = id` (preserva o ID original — invariante Onda 31).
+ *  6. Substitui o LayerMeta por VisualLayerMeta novo com:
+ *       kind: 'visual', patternRole: role, boundsMm: {x,y,width,height},
+ *       parentLayerId (preservado), e fitMode: 'contain' p/ LOGO_AREA.
+ *
+ * Restrições:
+ *  - `role` precisa ser TEXT_AREA ou LOGO_AREA. Retorna false caso contrário.
+ *  - Não converte camada principal com FILHOS (slot vazaria do aplique).
+ *    Caller que cheque com `hasChildren` ou trate o false retornado.
+ *  - Não converte se o objeto Fabric não existir (id sem objeto vivo).
+ *
+ * Retorna true se a conversão foi feita, false em qualquer rejeição.
+ *
+ * Operação destrutiva: o vetor original some. Caller responsável por
+ * confirmação de UX antes de chamar.
+ */
+export function convertToArea(
+  canvas: fabric.Canvas,
+  layerMeta: Map<string, LayerMeta>,
+  findByCapiId: (id: string) => fabric.FabricObject | undefined,
+  id: string,
+  role: 'TEXT_AREA' | 'LOGO_AREA'
+): boolean {
+  if (role !== 'TEXT_AREA' && role !== 'LOGO_AREA') return false;
+
+  const meta = layerMeta.get(id);
+  if (!meta) return false;
+
+  // Principal com filhos: rejeitar (slot vazaria para fora do aplique).
+  if (meta.kind === 'principal') {
+    const hasChildren = Array.from(layerMeta.values()).some((m) => m.parentLayerId === id);
+    if (hasChildren) return false;
+  }
+
+  const obj = findByCapiId(id);
+  if (!obj) return false;
+
+  // 1. Captura bounds em mm do objeto atual (considerando scale).
+  const leftPx = obj.left ?? 0;
+  const topPx = obj.top ?? 0;
+  const widthPx = (obj.width ?? 0) * (obj.scaleX ?? 1);
+  const heightPx = (obj.height ?? 0) * (obj.scaleY ?? 1);
+  const boundsMm: LayerBoundsMm = {
+    x: pxToMm(leftPx),
+    y: pxToMm(topPx),
+    width: pxToMm(widthPx),
+    height: pxToMm(heightPx),
+  };
+
+  // 2. Preserva parentLayerId. Principal sem filhos: vira visual top-level.
+  const parentLayerId = meta.kind === 'principal' ? null : (meta.parentLayerId ?? null);
+  const name = meta.name; // preserva nome editado pelo operador
+
+  // 3. Remove objeto antigo do canvas.
+  canvas.remove(obj);
+
+  // 4. Cria placeholder tracejado roxo (alinhado com style das proximity
+  //    lines da engine — operador reconhece como "área inteligente, não
+  //    é geometria real").
+  const placeholder = new fabric.Rect({
+    left: leftPx,
+    top: topPx,
+    width: widthPx,
+    height: heightPx,
+    originX: 'left',
+    originY: 'top',
+    fill: 'rgba(167, 139, 250, 0.06)', // violet-400 a 6%
+    stroke: '#a78bfa',
+    strokeWidth: 1.5,
+    strokeUniform: true,
+    strokeDashArray: [4, 3],
+    scaleX: 1,
+    scaleY: 1,
+    cornerColor: '#a78bfa',
+    cornerStrokeColor: '#a78bfa',
+    borderColor: '#a78bfa',
+    transparentCorners: false,
+    cornerSize: 8,
+    objectCaching: false, // mesmas razões do slot overlay (ver slot-manager)
+  });
+  // 5. Invariante Onda 31: body.id = layerId. NÃO setamos `capiSlot` —
+  //    áreas da Onda 33 NÃO são slots do SlotManager; loadSlotsFromCanvas
+  //    ignora rects sem capiSlot.
+  (placeholder as unknown as Record<string, unknown>).id = id;
+  canvas.add(placeholder);
+
+  // 6. LayerMeta novo. Sempre visual (mesmo se origem foi principal).
+  const newMeta: VisualLayerMeta = {
+    kind: 'visual',
+    id,
+    parentLayerId,
+    name,
+    zIndex: canvas.getObjects().length - 1,
+    visible: meta.visible,
+    locked: meta.locked,
+    opacity: meta.opacity,
+    colorLabel: meta.colorLabel,
+    blendMode: meta.blendMode,
+    materialId: null,
+    // Onda 33 — campos novos
+    patternRole: role,
+    boundsMm,
+    processType: meta.processType,
+    machineTargets: meta.machineTargets,
+    lockGranular: meta.lockGranular,
+    ...(role === 'LOGO_AREA' ? { fitMode: 'contain' as const } : {}),
+  };
+  layerMeta.set(id, newMeta);
+
+  canvas.setActiveObject(placeholder);
+  fireLayerMetaChanged(canvas, id, 'visual');
+  canvas.requestRenderAll();
+  return true;
+}
+
+/**
+ * Verifica se um layer principal tem filhos diretos. Helper para UI
+ * decidir se "Converter em AREA" deve aparecer disabled ou bloqueado.
+ *
+ * Usa `mmToPx`-free — só itera `layerMeta`. O(n).
+ */
+export function hasChildren(layerMeta: Map<string, LayerMeta>, id: string): boolean {
+  for (const m of layerMeta.values()) {
+    if (m.parentLayerId === id) return true;
+  }
+  return false;
 }
