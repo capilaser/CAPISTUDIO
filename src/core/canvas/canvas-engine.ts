@@ -12,7 +12,7 @@ import { buildMaterialPattern, loadImage } from './material-applier';
 import type { CorelSvgMeta } from './corel-svg-parser';
 import { isOperationLayer } from './layer-meta';
 import { extractClipShapes, parseAndStripRootDimensions, type ParsedViewBox } from './svg-utils';
-import { SlotManager, getCapiSlot, setCapiSlot } from './slot-manager';
+import { SlotManager } from './slot-manager';
 import type { SlotMeta, SlotType } from './types';
 import { mmToPx, pxToMm } from './units';
 import { computeSnapCandidates, applySnapResult } from './alignment/snap-engine';
@@ -20,6 +20,16 @@ import type { RectMm, SnapCandidate, SnapResult, SnapTarget } from './alignment/
 import { guidesShouldChange } from './alignment/guides-diff';
 import type { ProximityResult } from './alignment/proximity-calculator';
 import { getCapiId } from './capi-id';
+import {
+  CAPI_CUSTOM_PROPS as CAPI_CUSTOM_PROPS_INTERNAL,
+  generateObjectId as generateObjectIdInternal,
+  findById as findByIdInternal,
+  serializeCanvas,
+  deserializeCanvas,
+  applyPatternObjects as applyPatternObjectsFn,
+  removeItemContents as removeItemContentsFn,
+  type SerializedCanvas as SerializedCanvasInternal,
+} from './engine-serialization';
 
 export interface EngineConfig {
   productWidthMm: number;
@@ -29,36 +39,10 @@ export interface EngineConfig {
 }
 
 /**
- * Custom Capi properties that must be carried through Fabric serialization.
- * Fabric's toObject only persists these if explicitly listed (Risco 3).
- *
- *  - id        : stable per-object UUID, generated on first serialize
- *  - capiSlot  : SlotMeta (Onda 4+) — type/maxArea/auto* for slot-typed objects
- *
- * Add to this list when introducing new Capi-specific object metadata.
- *
- * NOT listed here (intentional):
- *  - materialId        : lives in capi.layers (LayerMeta), not per-object (ADR 008).
- *  - __capiBase        : base do produto. Sempre tem `excludeFromExport: true`,
- *                        então o OBJETO INTEIRO não vai pro toJSON — flag não
- *                        precisa sobreviver porque o objeto é recriado pelo
- *                        boot (addAppliqueSvg) e não pelo deserialize.
- *  - __capiMaterialRect: rect de textura aplicado em applyMaterialToBase. Mesma
- *                        razão — `excludeFromExport: true`. Pra multi-broche
- *                        (Onda 13+), material vai DIRETO no aplique como fill,
- *                        sem __capiMaterialRect.
- *  - __capiOverlay     : slot overlay tracejado vermelho + board item highlight
- *                        azul. Mesma razão — `excludeFromExport: true`,
- *                        decoração do editor, recriada quando necessário.
- *
- * Investigação Onda 18: o "débito CAPI_CUSTOM_PROPS incompleto" anotado no
- * STATUS-ONDA-17 estava mal-diagnosticado. As flags somem do canvasJson
- * porque o objeto inteiro não é serializado (intencional via excludeFromExport),
- * não porque a lista de custom-props está incompleta. Adicionar essas flags
- * aqui seria no-op: Fabric filtra `_objects.filter(t => !t.excludeFromExport)`
- * ANTES de aplicar CAPI_CUSTOM_PROPS. Débito retirado.
+ * CAPI_CUSTOM_PROPS — re-export do módulo `engine-serialization.ts` (Onda 30.A).
+ * Documentação completa: ver `engine-serialization.ts`.
  */
-export const CAPI_CUSTOM_PROPS = ['id', 'capiSlot'] as const;
+export const CAPI_CUSTOM_PROPS = CAPI_CUSTOM_PROPS_INTERNAL;
 
 /**
  * Nó da árvore exibida no painel de camadas (Onda 7).
@@ -107,26 +91,10 @@ export type LayerNode =
       machines: string[];
     };
 
-export interface SerializedCanvas {
-  version: string;
-  objects: Array<Record<string, unknown>>;
-  capi: {
-    /**
-     * Onda 13 (schemaVersion=3): items da prancha. Pelo menos 1 item.
-     * Padrão master sempre tem 1 item, offsets zerados.
-     */
-    items: CanvasItem[];
-    units: 'mm';
-    /**
-     * Schema version for the envelope.
-     *   2 = pre-Onda 13 (envelope tinha capi.productId direto, ADR 010 §1)
-     *   3 = Onda 13 multi-broche (envelope troca productId por items[])
-     */
-    schemaVersion: number;
-    /** LayerMeta array — one entry per user object. Onda 5+. */
-    layers: LayerMeta[];
-  };
-}
+/**
+ * SerializedCanvas — re-export do módulo `engine-serialization.ts` (Onda 30.A).
+ */
+export type SerializedCanvas = SerializedCanvasInternal;
 
 const BASE_OBJECT_FLAG = '__capiBase';
 const ASPECT_TOLERANCE = 1e-3;
@@ -141,18 +109,14 @@ const DEFAULT_LAYER_FILL = 'rgba(122, 162, 247, 0.18)';
  */
 const SVG_BASE_STROKE = '#2a2c2e';
 
-function generateObjectId(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  return `obj-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-/** Helper: find a user (non-base) object by its capi id. */
+/**
+ * Aliases internos para os helpers extraídos em `engine-serialization.ts` (Onda 30.A).
+ * Mantêm assinaturas pequenas dentro deste arquivo. `findById` recebe `isBaseObject`
+ * porque o módulo extraído não importa este arquivo (evita import circular).
+ */
+const generateObjectId = generateObjectIdInternal;
 function findById(canvas: fabric.Canvas, id: string): fabric.FabricObject | undefined {
-  return canvas
-    .getObjects()
-    .find((o) => !isBaseObject(o) && (o as unknown as Record<string, unknown>).id === id);
+  return findByIdInternal(canvas, isBaseObject, id);
 }
 
 export class CanvasEngine {
@@ -2875,72 +2839,7 @@ export class CanvasEngine {
    * offsetX/offsetY). Padrão (master) sempre passa 1 item com offsets zerados.
    */
   serialize(items: CanvasItem[]): SerializedCanvas {
-    // Ensure user objects have ids.
-    // Fase C: pula `excludeFromExport: true` (snap guides, slot overlays sem id)
-    // — eles não vão pro toJSON e não devem receber id parasita aqui.
-    this.canvas.forEachObject((o) => {
-      if (isBaseObject(o)) return;
-      if (o.excludeFromExport) return;
-      const rec = o as unknown as Record<string, unknown>;
-      if (typeof rec.id !== 'string' || !rec.id) {
-        rec.id = generateObjectId();
-      }
-    });
-
-    // STRIP — remove Pattern fills and clipPaths before snapshot.
-    // Rationale: Pattern fills reference Tauri asset URLs that may become stale
-    // across app installs; clipPaths are derived from productPaths (engine state)
-    // and must be rebuilt deterministically on deserialize — not baked in JSON.
-    // The canonical materialId is preserved in capi.layers instead.
-    const savedFills = new Map<string, fabric.Pattern>();
-    const savedClipPaths = new Map<string, fabric.FabricObject>();
-    this.canvas.forEachObject((o) => {
-      if (isBaseObject(o)) return;
-      const id = (o as unknown as Record<string, unknown>).id as string;
-      if (o.fill instanceof fabric.Pattern) {
-        savedFills.set(id, o.fill as fabric.Pattern);
-        o.set({ fill: 'transparent' });
-      }
-      if (o.clipPath) {
-        savedClipPaths.set(id, o.clipPath as fabric.FabricObject);
-        o.set({ clipPath: undefined });
-      }
-    });
-
-    const json = this.canvas.toObject([...CAPI_CUSTOM_PROPS]) as {
-      version: string;
-      objects: Array<Record<string, unknown>>;
-    };
-
-    // RESTORE — symmetric: live canvas state must not be permanently mutated.
-    savedFills.forEach((pattern, id) => {
-      const obj = findById(this.canvas, id);
-      obj?.set({ fill: pattern });
-    });
-    savedClipPaths.forEach((clipPath, id) => {
-      const obj = findById(this.canvas, id);
-      obj?.set({ clipPath });
-    });
-
-    // Build layers array, computing current zIndex from canvas order.
-    const allObjects = this.canvas.getObjects();
-    const layers: LayerMeta[] = Array.from(this.layerMeta.values()).map((m) => ({
-      ...m,
-      zIndex: allObjects.findIndex(
-        (o) => !isBaseObject(o) && (o as unknown as Record<string, unknown>).id === m.id
-      ),
-    }));
-
-    return {
-      version: json.version,
-      objects: json.objects,
-      capi: {
-        items,
-        units: 'mm',
-        schemaVersion: 3,
-        layers,
-      },
-    };
+    return serializeCanvas(this.canvas, this.layerMeta, isBaseObject, items);
   }
 
   /**
@@ -2963,48 +2862,15 @@ export class CanvasEngine {
     offsetMm: { leftMm: number; topMm: number },
     sizeMm: { widthMm: number; heightMm: number }
   ): number {
-    const left = mmToPx(offsetMm.leftMm);
-    const top = mmToPx(offsetMm.topMm);
-    const right = mmToPx(offsetMm.leftMm + sizeMm.widthMm);
-    const bottom = mmToPx(offsetMm.topMm + sizeMm.heightMm);
-
-    const toRemove: fabric.FabricObject[] = [];
-    const idsToRemove: string[] = [];
-
-    for (const obj of this.canvas.getObjects()) {
-      if (isBaseObject(obj)) continue;
-      const rec = obj as unknown as Record<string, unknown>;
-      const objId = typeof rec.id === 'string' ? rec.id : null;
-
-      // Não remove o aplique base do broche. (só checado quando o objeto tem id)
-      if (objId) {
-        const meta = this.layerMeta.get(objId);
-        if (meta && meta.kind === 'principal' && meta.appliqueId === keepAppliqueId) continue;
-      }
-
-      // Centro do objeto em px (left+width/2, top+height/2 já em coords absolutas).
-      // Objetos sem id (slot content de texto/logo criado pelo SlotManager) também
-      // são removidos — eles ficam órfãos quando o slot pai é apagado.
-      const objLeft = Number(obj.left ?? 0);
-      const objTop = Number(obj.top ?? 0);
-      const objW = Number(obj.width ?? 0) * Number(obj.scaleX ?? 1);
-      const objH = Number(obj.height ?? 0) * Number(obj.scaleY ?? 1);
-      const cx = objLeft + objW / 2;
-      const cy = objTop + objH / 2;
-
-      if (cx >= left && cx <= right && cy >= top && cy <= bottom) {
-        toRemove.push(obj);
-        if (objId) idsToRemove.push(objId);
-      }
-    }
-
-    for (const obj of toRemove) this.canvas.remove(obj);
-    for (const id of idsToRemove) this.layerMeta.delete(id);
-
-    // Slot manager precisa atualizar sua estrutura interna (slots removidos).
-    this.slotManager.loadSlotsFromCanvas();
-    this.canvas.requestRenderAll();
-    return toRemove.length;
+    return removeItemContentsFn(
+      this.canvas,
+      this.layerMeta,
+      this.slotManager,
+      isBaseObject,
+      keepAppliqueId,
+      offsetMm,
+      sizeMm
+    );
   }
 
   /**
@@ -3044,209 +2910,17 @@ export class CanvasEngine {
     parentLayerId?: string,
     clampToRegion?: { leftMm: number; topMm: number; widthMm: number; heightMm: number }
   ): Promise<string[]> {
-    if (!data.objects || data.objects.length === 0) return [];
-
-    const enlivened = await fabric.util.enlivenObjects<fabric.FabricObject>(data.objects);
-    const offsetLeftPx = mmToPx(offsetMm.leftMm);
-    const offsetTopPx = mmToPx(offsetMm.topMm);
-
-    // Onda 15.fix — pré-mapeia layerId → LayerMeta do pattern, ignorando principal
-    // (esse é o "broche" do editor de padrões; no destino o broche real já existe).
-    // Tudo que NÃO está nesse mapa é considerado "órfão" — vamos criar LayerMeta
-    // default visual pra cada um, garantindo que toda peça seja gerenciável no
-    // painel de camadas (princípio: nada existe no canvas sem entry em layerMeta).
-    const patternLayerById = new Map<string, LayerMeta>();
-    // Onda 16.fix — também rastreamos os IDs dos layers principal do pattern
-    // que foram pulados. Slots cujo parentLayerId original aponta pra um
-    // desses precisam ser RE-PARENTED pro parentLayerId externo (broche-alvo),
-    // não pro newId mapeado (que não tem LayerMeta correspondente → órfão).
-    const patternPrincipalIds = new Set<string>();
-    for (const layer of data.capi?.layers ?? []) {
-      if (layer.kind === 'principal') {
-        patternPrincipalIds.add(layer.id);
-        continue;
-      }
-      patternLayerById.set(layer.id, layer);
-    }
-
-    // Mapa oldId → newId pra restaurar LayerMeta com referência correta.
-    const idMap = new Map<string, string>();
-    const newIds: string[] = [];
-
-    // Onda 16 — região-alvo em PX absolutas pra clamping.
-    // Se clampToRegion informado: objetos com centro fora da região são
-    // DESCARTADOS (não adicionados ao canvas). Anti-vazamento em multi-broche.
-    const region = clampToRegion
-      ? {
-          left: mmToPx(clampToRegion.leftMm),
-          top: mmToPx(clampToRegion.topMm),
-          right: mmToPx(clampToRegion.leftMm + clampToRegion.widthMm),
-          bottom: mmToPx(clampToRegion.topMm + clampToRegion.heightMm),
-        }
-      : null;
-
-    let droppedCount = 0;
-    for (let i = 0; i < enlivened.length; i++) {
-      const obj = enlivened[i];
-      const rec = obj as unknown as Record<string, unknown>;
-      const oldId = typeof rec.id === 'string' ? rec.id : null;
-
-      // Onda 16.fix — pula objeto cujo id corresponde a um PRINCIPAL do pattern.
-      // Esse "objeto principal" é o aplique base do broche dentro do editor de
-      // padrões. No destino (broche da prancha), já existe um aplique base
-      // próprio — adicionar mais um seria duplicação visual + órfão no painel.
-      if (oldId && patternPrincipalIds.has(oldId)) {
-        continue;
-      }
-
-      const newId = generateObjectId();
-      rec.id = newId;
-
-      // Calcula posição final em px (com offset aplicado).
-      const finalLeft = (obj.left ?? 0) + offsetLeftPx;
-      const finalTop = (obj.top ?? 0) + offsetTopPx;
-
-      // Onda 16 — Filtro de região: se centro do objeto não cai dentro da
-      // região-alvo, **descarta** o objeto (não adiciona ao canvas, não
-      // cria LayerMeta, não conta como newId). Evita slots vazarem pro
-      // broche vizinho quando o pattern tem objetos extrapolando 60×25.
-      if (region) {
-        const objW = (obj.width ?? 0) * (obj.scaleX ?? 1);
-        const objH = (obj.height ?? 0) * (obj.scaleY ?? 1);
-        const cx = finalLeft + objW / 2;
-        const cy = finalTop + objH / 2;
-        const outOfRegion =
-          cx < region.left || cx > region.right || cy < region.top || cy > region.bottom;
-        if (outOfRegion) {
-          droppedCount++;
-          if (import.meta.env.DEV) {
-            console.warn(
-              `[canvas-engine] applyPatternObjects: objeto descartado (fora da região-alvo)`,
-              {
-                oldId,
-                cx,
-                cy,
-                region,
-              }
-            );
-          }
-          continue;
-        }
-      }
-
-      if (oldId) idMap.set(oldId, newId);
-      newIds.push(newId);
-
-      obj.set({ left: finalLeft, top: finalTop });
-
-      // Onda 16.fix — CRÍTICO: se o objeto carrega capiSlot, atualizar x/y
-      // pra refletir a posição absoluta (em mm) após o offset.
-      // Sem isso, o overlay tracejado criado depois por loadSlotsFromCanvas
-      // usa meta.x/y antigas (coord local do pattern) e fica no broche errado
-      // — caso clássico de "slot apareceu no broche 1 mesmo aplicando no 2".
-      const slotMeta = getCapiSlot(obj);
-      if (slotMeta) {
-        const updatedMeta: SlotMeta = {
-          ...slotMeta,
-          // ⚠️ ID precisa também ser atualizado pra o newId (capiSlot.id é
-          // usado por loadSlotsFromCanvas pra mapear body → slot interno).
-          id: newId,
-          x: pxToMm(finalLeft),
-          y: pxToMm(finalTop),
-          maxWidth: pxToMm((obj.width ?? 0) * (obj.scaleX ?? 1)),
-          maxHeight: pxToMm((obj.height ?? 0) * (obj.scaleY ?? 1)),
-        };
-        setCapiSlot(obj, updatedMeta);
-      }
-
-      this.canvas.add(obj);
-    }
-    if (region && droppedCount > 0 && import.meta.env.DEV) {
-      console.warn(
-        `[canvas-engine] applyPatternObjects: ${droppedCount} objetos descartados por estarem fora da região-alvo`
-      );
-    }
-
-    // Importa LayerMeta correspondentes (pulando principal — já filtrado acima).
-    for (const layer of patternLayerById.values()) {
-      const newId = idMap.get(layer.id);
-      if (!newId) continue;
-      const newLayer: LayerMeta = { ...layer, id: newId };
-
-      // Onda 16.fix — Resolve parentLayerId em ordem de prioridade:
-      // 1. Se layer.parentLayerId apontava pra um PRINCIPAL DO PATTERN (que foi
-      //    pulado), re-parent pro parentLayerId externo (broche-alvo na prancha).
-      //    SEM ISSO: parentLayerId aponta pra um id sem LayerMeta → slot vira
-      //    órfão no painel (caso que vc viu: slots fora do agrupamento do broche).
-      // 2. Se layer.parentLayerId apontava pra OUTRO LAYER NÃO-PRINCIPAL do
-      //    pattern (grupo aninhado), remapeia pro newId mapeado.
-      // 3. Se layer.parentLayerId era null (slot solto no pattern), usa
-      //    parentLayerId externo se informado.
-      // 4. Fallback: limpa pra null.
-      if (layer.parentLayerId && patternPrincipalIds.has(layer.parentLayerId)) {
-        (newLayer as unknown as { parentLayerId: string | null }).parentLayerId =
-          parentLayerId ?? null;
-      } else if (layer.parentLayerId && idMap.has(layer.parentLayerId)) {
-        (newLayer as unknown as { parentLayerId: string }).parentLayerId = idMap.get(
-          layer.parentLayerId
-        )!;
-      } else if (parentLayerId) {
-        (newLayer as unknown as { parentLayerId: string | null }).parentLayerId = parentLayerId;
-      } else if (layer.parentLayerId) {
-        (newLayer as unknown as { parentLayerId: string | null }).parentLayerId = null;
-      }
-      this.layerMeta.set(newId, newLayer);
-    }
-
-    // Onda 15.fix — pra cada object adicionado SEM LayerMeta correspondente
-    // (órfão: estava no canvasJson mas faltava entry em capi.layers), criamos
-    // VisualLayerMeta default. Garante invariante: todo objeto user visível
-    // no canvas tem entry em layerMeta → aparece no painel, é gerenciável,
-    // não desaparece no próximo serialize.
-    for (const newId of newIds) {
-      if (this.layerMeta.has(newId)) continue;
-      const orphanMeta: VisualLayerMeta = {
-        id: newId,
-        parentLayerId: parentLayerId ?? null,
-        name: 'Forma',
-        zIndex: this.canvas.getObjects().length - 1,
-        visible: true,
-        locked: false,
-        kind: 'visual',
-        materialId: null,
-      };
-      this.layerMeta.set(newId, orphanMeta);
-    }
-
-    this.slotManager.loadSlotsFromCanvas();
-
-    // Re-aplica materiais.
-    if (resolveUrl) {
-      await Promise.all(
-        Array.from(this.layerMeta.entries())
-          .filter(([id]) => newIds.includes(id))
-          .filter(
-            ([, meta]) => !isOperationLayer(meta) && (meta as VisualLayerMeta).materialId !== null
-          )
-          .map(async ([id, meta]) => {
-            const materialId = (meta as VisualLayerMeta).materialId!;
-            try {
-              const url = await resolveUrl(materialId);
-              await this.applyMaterialToLayer(id, materialId, url);
-            } catch (err) {
-              if (import.meta.env.DEV) {
-                console.warn(
-                  `[canvas-engine] applyPatternObjects: failed to apply material ${materialId}:`,
-                  err
-                );
-              }
-            }
-          })
-      );
-    }
-
-    this.canvas.requestRenderAll();
-    return newIds;
+    return applyPatternObjectsFn(
+      this.canvas,
+      this.layerMeta,
+      this.slotManager,
+      (layerId, materialId, assetUrl) => this.applyMaterialToLayer(layerId, materialId, assetUrl),
+      data,
+      offsetMm,
+      resolveUrl,
+      parentLayerId,
+      clampToRegion
+    );
   }
 
   /**
@@ -3265,92 +2939,16 @@ export class CanvasEngine {
     data: SerializedCanvas,
     resolveUrl?: (materialId: string) => Promise<string>
   ): Promise<void> {
-    this.clearUserObjects();
-
-    // Restore layerMeta from the persisted array.
-    for (const layer of data.capi?.layers ?? []) {
-      this.layerMeta.set(layer.id, { ...layer });
-    }
-
-    if (!data.objects || data.objects.length === 0) {
-      this.canvas.requestRenderAll();
-      return;
-    }
-
-    const enlivened = await fabric.util.enlivenObjects<fabric.FabricObject>(data.objects);
-    for (const obj of enlivened) {
-      this.canvas.add(obj);
-    }
-    this.slotManager.loadSlotsFromCanvas();
-
-    // Onda 26 — propaga LayerMeta.opacity pro fabric obj. obj.opacity já
-    // costuma vir do enlivenObjects (fabric serializa), mas LayerMeta é a
-    // fonte autoritativa pra esse campo: garante coerência em padrões
-    // salvos antes do campo existir (opacity undefined → mantém atual).
-    for (const meta of this.layerMeta.values()) {
-      if (meta.opacity === undefined) continue;
-      const obj = this.findByCapiId(meta.id);
-      if (obj) obj.set({ opacity: meta.opacity });
-    }
-
-    // Onda 26 Fase 5 — propaga LayerMeta.blendMode pro fabric obj
-    // (globalCompositeOperation). colorLabel é só meta visual, não toca o canvas.
-    for (const meta of this.layerMeta.values()) {
-      if (meta.blendMode === undefined || meta.blendMode === 'normal') continue;
-      const obj = this.findByCapiId(meta.id);
-      if (obj) {
-        (obj as unknown as { globalCompositeOperation: string }).globalCompositeOperation =
-          meta.blendMode;
-      }
-    }
-
-    // Onda 26c — re-aplica trava nos apliques-base do Novo Pedido após
-    // deserialize. addAppliqueSvg trava no momento da criação, mas snapshot
-    // serializado pode ter sido gravado antes desta regra existir (pedidos
-    // antigos) ou pelo próprio fluxo serialize→deserialize que preserva os
-    // flags. Garantir aqui é idempotente e barato.
-    const lockedAppliqueIds = new Set<string>();
-    for (const meta of this.layerMeta.values()) {
-      if (meta.kind === 'principal' && meta.appliqueId?.startsWith('board-item:')) {
-        lockedAppliqueIds.add(meta.id);
-      }
-    }
-    if (lockedAppliqueIds.size > 0) {
-      for (const obj of this.canvas.getObjects()) {
-        const objId = (obj as unknown as Record<string, unknown>).id;
-        if (typeof objId === 'string' && lockedAppliqueIds.has(objId)) {
-          obj.set({ selectable: false, evented: false, hoverCursor: 'default' });
-        }
-      }
-    }
-
-    // Re-apply material Patterns for all layers that had a materialId.
-    // OperationLayerMeta has no materialId field — filter it out before accessing.
-    if (resolveUrl) {
-      await Promise.all(
-        Array.from(this.layerMeta.entries())
-          .filter(
-            ([, meta]) => !isOperationLayer(meta) && (meta as VisualLayerMeta).materialId !== null
-          )
-          .map(async ([id, meta]) => {
-            // Safe: filter above guarantees meta is PrincipalLayerMeta | VisualLayerMeta.
-            const materialId = (meta as VisualLayerMeta).materialId!;
-            try {
-              const url = await resolveUrl(materialId);
-              await this.applyMaterialToLayer(id, materialId, url);
-            } catch (err) {
-              if (import.meta.env.DEV) {
-                console.warn(
-                  `[canvas-engine] Failed to re-apply material ${materialId} on layer ${id}:`,
-                  err
-                );
-              }
-            }
-          })
-      );
-    }
-
-    this.canvas.requestRenderAll();
+    return deserializeCanvas(
+      this.canvas,
+      this.layerMeta,
+      this.slotManager,
+      () => this.clearUserObjects(),
+      (id) => this.findByCapiId(id),
+      (layerId, materialId, assetUrl) => this.applyMaterialToLayer(layerId, materialId, assetUrl),
+      data,
+      resolveUrl
+    );
   }
 
   dispose(): void {
