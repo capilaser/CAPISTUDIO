@@ -4,7 +4,7 @@
  * 3 cartões grandes em grid:
  *  - Novo Pedido (ativo) → /arte/novo
  *  - Abrir Pedido (em breve — Fase 9 vai habilitar)
- *  - Criar Padrão (em breve — futuro)
+ *  - Criar Padrão (ativo) → /padroes (Onda 32: rota existe desde Onda 12).
  */
 import { useNavigate } from 'react-router-dom';
 import { FilePlus2, FolderOpen, Sparkles } from 'lucide-react';
@@ -39,7 +39,7 @@ const CARDS: HubCard[] = [
     icon: Sparkles,
     title: 'Criar Padrão',
     description: 'Salvar layout validado como padrão reutilizável.',
-    comingSoon: 'Fase 11',
+    href: '/padroes',
   },
 ];
 

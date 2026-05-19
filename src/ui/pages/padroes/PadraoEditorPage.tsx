@@ -41,6 +41,14 @@ import {
 import { getProductById, type Product } from '@/data/repositories/productRepository';
 import { Button } from '@/ui/components/button';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/ui/components/dialog';
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -71,6 +79,9 @@ export default function PadraoEditorPage() {
   const [ready, setReady] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Onda 32 — confirmação forte exigida pelo CLAUDE.md para "Atualizar padrão mestre".
+  // Só abre quando isEditMode = true. Modo CRIAR salva direto.
+  const [confirmUpdateOpen, setConfirmUpdateOpen] = useState(false);
   // Conta nó de slot pra UI da sidebar. Em modo edit, hidrata após deserialize.
   const [slotCount, setSlotCount] = useState(0);
   // Objeto atualmente selecionado no canvas (slot OU rect decorativo).
@@ -289,7 +300,13 @@ export default function PadraoEditorPage() {
     setTags((prev) => prev.filter((t) => t !== tag));
   }
 
-  async function handleSave() {
+  /**
+   * Onda 32 — `handleSave` agora valida o nome e, em modo EDIT, abre o dialog
+   * de confirmação forte (CLAUDE.md regra crítica: "padrão mestre é IMUTÁVEL
+   * no fluxo normal; só Atualizar com confirmação forte"). Modo CRIAR salva
+   * direto. A persistência real fica em `doSave`.
+   */
+  function handleSave() {
     if (saving) return;
     const engine = engineRef.current;
     if (!engine || !product) return;
@@ -298,6 +315,18 @@ export default function PadraoEditorPage() {
       toast.error('Dê um nome ao padrão (mínimo 2 caracteres).');
       return;
     }
+    if (isEditMode) {
+      setConfirmUpdateOpen(true);
+      return;
+    }
+    void doSave();
+  }
+
+  async function doSave() {
+    if (saving) return;
+    const engine = engineRef.current;
+    if (!engine || !product) return;
+    const name = patternName.trim();
     setSaving(true);
     try {
       const data = engine.serialize([{ productId: product.id, offsetX: 0, offsetY: 0 }]);
@@ -317,6 +346,7 @@ export default function PadraoEditorPage() {
       toast.error(`Erro ao salvar: ${String(err)}`);
     } finally {
       setSaving(false);
+      setConfirmUpdateOpen(false);
     }
   }
 
@@ -390,13 +420,48 @@ export default function PadraoEditorPage() {
             variant="default"
             size="sm"
             className="gap-1.5"
-            onClick={() => void handleSave()}
+            onClick={handleSave}
             disabled={saving || !ready}
           >
             <Save className="h-3.5 w-3.5" />
             {saving ? 'Salvando…' : isEditMode ? 'Atualizar padrão' : 'Salvar padrão'}
           </Button>
         </div>
+
+        {/* Onda 32 — Dialog de confirmação forte pra atualizar padrão mestre.
+            CLAUDE.md exige confirmação explícita: padrão mestre é a fonte de
+            verdade pra todos os pedidos novos. Mudar afeta exibição da galeria
+            mas NÃO afeta pedidos antigos (snapshot por revisão isola). */}
+        <Dialog open={confirmUpdateOpen} onOpenChange={setConfirmUpdateOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Atualizar padrão mestre?</DialogTitle>
+              <DialogDescription className="space-y-2 pt-2 text-xs">
+                <span className="block">
+                  Você vai sobrescrever o padrão <b>"{patternName.trim()}"</b>. Esta ação não pode
+                  ser desfeita.
+                </span>
+                <span className="block text-muted-foreground">
+                  Pedidos antigos que usaram este padrão <b>não serão afetados</b> — eles têm
+                  snapshot próprio. Mas pedidos novos vão herdar o padrão atualizado.
+                </span>
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setConfirmUpdateOpen(false)}
+                disabled={saving}
+              >
+                Cancelar
+              </Button>
+              <Button variant="default" size="sm" onClick={() => void doSave()} disabled={saving}>
+                {saving ? 'Atualizando…' : 'Atualizar padrão'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <div className="flex flex-1 overflow-hidden">
           {/* Sidebar */}

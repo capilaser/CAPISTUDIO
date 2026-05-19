@@ -229,44 +229,6 @@ export function computeChapas(
   return { chapas, positions, boardWidthMm, boardHeightMm };
 }
 
-/**
- * Calcula posição (em mm) de cada broche na prancha.
- * Items 0..4 = coluna 1, 5..9 = coluna 2, etc.
- * Empilhamento vertical com gap de GAP_Y_MM, gap horizontal GAP_X_MM.
- *
- * ⚠️ DEPRECATED Onda 26e: assume todos os items do MESMO produto. Pra
- * suporte a produtos mistos use `computeChapas`. Mantido pra compatibilidade
- * com testes/consumidores que ainda não migraram (mas o boot do canvas
- * agora usa computeChapas).
- */
-function computeItemPositions(
-  items: Array<{ widthMm: number; heightMm: number }>
-): Array<{ leftMm: number; topMm: number }> {
-  const positions: Array<{ leftMm: number; topMm: number }> = [];
-  // Largura da coluna 1 = max width dos items na coluna 1.
-  const colWidths = new Map<number, number>();
-  for (let i = 0; i < items.length; i++) {
-    const col = Math.floor(i / ITEMS_PER_COLUMN);
-    colWidths.set(col, Math.max(colWidths.get(col) ?? 0, items[i].widthMm));
-  }
-  // Cálculo cumulativo de leftMm por coluna.
-  const colLefts = new Map<number, number>();
-  let cumLeft = 0;
-  for (let c = 0; c < colWidths.size; c++) {
-    colLefts.set(c, cumLeft);
-    cumLeft += (colWidths.get(c) ?? 0) + GAP_X_MM;
-  }
-  // Pra cada item: topMm é acumulado dentro da coluna; leftMm é o da coluna.
-  const colTops = new Map<number, number>();
-  for (let i = 0; i < items.length; i++) {
-    const col = Math.floor(i / ITEMS_PER_COLUMN);
-    const top = colTops.get(col) ?? 0;
-    positions.push({ leftMm: colLefts.get(col) ?? 0, topMm: top });
-    colTops.set(col, top + items[i].heightMm + GAP_Y_MM);
-  }
-  return positions;
-}
-
 /** Calcula bounding box da prancha (mm). */
 function computeBoardDims(
   items: Array<{ widthMm: number; heightMm: number }>,
@@ -753,4 +715,6 @@ export function useBoardEngine(options: UseBoardEngineOptions): UseBoardEngineRe
 }
 
 // Re-exportos pra outros módulos calcularem posições sem instanciar engine.
-export { computeItemPositions, computeBoardDims, ITEMS_PER_COLUMN, GAP_Y_MM, GAP_X_MM };
+// computeItemPositions removido na Onda 32 — era @DEPRECATED Onda 26e
+// (assumia produtos do mesmo tipo). Uso atual: computeChapas.
+export { computeBoardDims, ITEMS_PER_COLUMN, GAP_Y_MM, GAP_X_MM };
