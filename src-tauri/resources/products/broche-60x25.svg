@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="60mm" height="25mm" viewBox="0 0 60 25" version="1.1">
+  <title>Broche 60x25 — base de corte</title>
+  <desc>Base de produção Capi Studio. Cantos arredondados com raio 4.25mm. Geometria em milímetros.</desc>
+  <g id="base">
+    <rect x="0.04" y="0.04"
+          width="59.92" height="24.92"
+          rx="4.25" ry="4.25"
+          fill="none" stroke="#000000" stroke-width="0.076" />
+  </g>
+</svg>
