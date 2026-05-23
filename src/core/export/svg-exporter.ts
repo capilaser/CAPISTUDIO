@@ -31,31 +31,46 @@
  *     sem dependência direta dos repositories de banco. Em runtime,
  *     UI compõe com os 3 repos; em testes, mocks plain.
  *
- * Estados de erro (lança):
- *   - Objeto user (não-base) sem `id` resolvível via getCapiId.
- *   - LayerMeta ausente para id resolvido.
- *   - LayerMeta.kind 'principal' sem appliqueId — não dá pra rotear.
- *   - LayerMeta.kind 'visual' sem nenhum (engravingId | markingId | materialId)
- *     resolvível — não dá pra rotear (rect/slot sem asset).
- *   - assetLookup retorna null para id existente — banco inconsistente.
- *   - Asset com operation inválida ou machines vazio (defensivo — o
- *     repository já valida no create, mas dados externos podem violar).
+ * Estados de erro:
+ *   LANÇA:
+ *     - LayerMeta ausente para id resolvido (estado quebrado real).
+ *     - assetLookup retorna null para id existente (banco inconsistente).
+ *     - Asset com operation inválida ou machines vazio.
+ *   WARN+SKIP (Onda 18 + Onda 35 — não trava export):
+ *     - Objeto user sem id capi.
+ *     - LayerMeta.visible === false.
+ *     - Layer sem patternRole completo E sem asset id (slot vazio).
+ *     - Texto sem rota (sem parent, sem patternRole, sem override).
+ *
+ * Onda 35 (routing-resolver):
+ *   A decisão de operation+machines por layer foi centralizada em
+ *   `routing-resolver.ts`. Cascata: patternRole completo (Onda 33) vence
+ *   sobre asset legado quando ambos presentes. Sem patternRole → asset.
  */
-import type * as fabric from 'fabric';
+import * as fabric from 'fabric';
 
 import { getCapiId } from '@/core/canvas/capi-id';
 import type { LayerMeta } from '@/data/schema';
+import { VALID_OPERATIONS, type Operation } from '@/data/repositories/_export-validation';
+import { resolveLayerRouting, resolveTextLayerRouting } from './routing-resolver';
 import {
-  VALID_OPERATIONS,
-  assertValidMachines,
-  assertValidOperation,
-  type Operation,
-} from '@/data/repositories/_export-validation';
+  multiplyMatrix,
+  scaleMatrix,
+  translateMatrix,
+  type AffineMatrix,
+} from './svg-path-transform';
+import { shapeToFlatPathD } from './svg-shape-to-path';
 import {
   type FontBufferLoader,
   TextConversionError,
   tryConvertTextToSvgPath,
 } from './svg-text-converter';
+
+/**
+ * Onda 37 — precisão de saída do export técnico (decisão Gabriell: 4 casas).
+ * 0.0001mm é abaixo da precisão de máquinas laser pequenas.
+ */
+const OUTPUT_DECIMALS = 4;
 
 /** Cor de stroke por operação (decisão Gabriell #5). */
 export const OPERATION_STROKE: Record<Operation, string> = {
@@ -74,20 +89,11 @@ export const OPERATION_STROKE: Record<Operation, string> = {
 const PX_PER_MM = 4;
 const PX_TO_MM_SCALE = 1 / PX_PER_MM;
 
-/** Info mínima que o exporter precisa de cada asset pra roteamento. */
-export interface AssetExportInfo {
-  operation: Operation;
-  /** 1-3 machine ids — já validado pelo repository no create. */
-  machines: string[];
-}
-
-/**
- * Função de lookup injetada — resolve um asset id (de qualquer banco) pra
- * info de roteamento. Em runtime, UI passa um compositor que tenta os
- * 3 repos (applique → engraving → marking) ou usa cache pré-carregado.
- * Retorna null se id não existe em nenhum banco.
- */
-export type AssetLookupFn = (id: string) => Promise<AssetExportInfo | null>;
+// Onda 35 — AssetExportInfo e AssetLookupFn foram movidos para
+// `asset-routing-types.ts` pra serem compartilhados com routing-resolver
+// sem ciclo de imports. Re-exportamos aqui pra preservar a API pública.
+export type { AssetExportInfo, AssetLookupFn } from './asset-routing-types';
+import type { AssetExportInfo, AssetLookupFn } from './asset-routing-types';
 
 export interface SvgExportOptions {
   productWidthMm: number;
@@ -127,6 +133,17 @@ export interface SvgExportOptions {
    * Texto que não tem entrada no Map mantém defaults da decisão da 9D-bis.
    */
   textRouting?: Map<string, { operation: Operation; machines?: string[] }>;
+  /**
+   * Onda 37 bug-fix — quando informado, desloca o conteúdo do SVG em mm
+   * (subtrai do todas as coords) antes de renderizar. Usado pra desfazer
+   * o offset de `CHAPA_LABEL_HEIGHT_MM` do useBoardEngine: o canvas tem
+   * 8mm reservados no topo pro label visual ("Broches (N)"), mas o SVG
+   * técnico deve sair sem essa faixa. Multi-chapa (board-exporter) faz
+   * isso via `translate` próprio; single-chapa precisa deste hook.
+   *
+   * Default `undefined` = sem deslocamento (retrocompat).
+   */
+  contentOffsetMm?: { xMm: number; yMm: number };
 }
 
 /**
@@ -148,11 +165,24 @@ export async function exportSvgByMachine(
     fontBufferLoader,
     onTextConversionError,
     textRouting,
+    contentOffsetMm,
   } = options;
 
   // Index LayerMeta por id pra lookup O(1) ao iterar objetos do canvas.
   const layerById = new Map<string, LayerMeta>();
   for (const layer of layers) layerById.set(layer.id, layer);
+
+  // Onda 37 — frame matricial externo aplicado a todos os paths:
+  //   1. scale(1/MM_TO_PX) — converte coord canvas (px) → mm.
+  //   2. translate(-contentOffsetMm) — desfaz offset de label de chapa.
+  // Composição: frame = translate × scale. Aplica scale primeiro a cada
+  // ponto, depois translate.
+  const offX = contentOffsetMm?.xMm ?? 0;
+  const offY = contentOffsetMm?.yMm ?? 0;
+  const frame: AffineMatrix = multiplyMatrix(
+    translateMatrix(-offX, -offY),
+    scaleMatrix(PX_TO_MM_SCALE)
+  );
 
   // ── Coleta: pra cada objeto user do canvas, resolve asset routing ──────────
   //
@@ -179,8 +209,16 @@ export async function exportSvgByMachine(
   for (const obj of canvas.getObjects()) {
     // Base do produto + overlays excluídos do export não entram.
     if (obj.excludeFromExport) continue;
+    // Bug-fix Onda 36+: body de slot (hitbox transparente) e placeholder de
+    // AREA são guias do editor. Marcados via flag pra svg-exporter pular
+    // sem afetar serialização/persistência (excludeFromExport quebraria
+    // loadSlotsFromCanvas ao reabrir). Defesa em profundidade — placeholder
+    // de AREA já tem excludeFromExport: true, mas o flag continua útil pra
+    // patterns antigos que possam ter perdido a flag em algum roundtrip.
+    const rec = obj as unknown as Record<string, unknown>;
+    if (rec.__capiSlotBody === true || rec.__capiAreaPlaceholder === true) continue;
     // Heurística: base do produto e helpers internos não têm id capi.
-    const id = getCapiId(obj as unknown as Record<string, unknown>);
+    const id = getCapiId(rec);
     if (!id) continue;
 
     const layerMeta = layerById.get(id);
@@ -196,15 +234,28 @@ export async function exportSvgByMachine(
     // Texto: convertido via opentype (9D-bis) ou placeholder XML (fallback).
     if (obj.type === 'text' || obj.type === 'i-text' || obj.type === 'textbox') {
       const text = (obj as unknown as { text?: string }).text ?? '';
-      // Texto herda machines do PrincipalLayerMeta pai (aplique). Operation
-      // fixa em 'gravacao' (briefing Gabriell — texto é gravação normalmente).
-      // Override via textRouting (Fase 9F dialog) tem prioridade.
-      const parentRouting = await resolveTextRouting(
+      // Onda 35 — resolução em cascata via routing-resolver:
+      //  1. override do dialog 9F   2. patternRole na própria layer
+      //  3. patternRole no pai      4. asset legado do pai
+      // resolveTextLayerRouting nunca lança por ausência de rota — retorna
+      // routing=null (políticas Onda 18 + briefing texto-sem-rota). Aqui
+      // mantemos o contrato original: texto SEM rota é erro estruturado
+      // (legacy throw) — o caller espera que se há fabric.Text, ele exporta
+      // ou explode. Para Onda 35, isso vira warn + placeholder XML.
+      const textRoutingResolution = await resolveTextLayerRouting(
         layerMeta,
         layerById,
         assetLookup,
-        textRouting?.get(id)
+        textRouting?.get(id),
+        'svg-exporter'
       );
+      if (!textRoutingResolution.routing) {
+        console.warn(
+          `[svg-exporter] texto id="${id}" sem rota — ${textRoutingResolution.reason ?? 'motivo desconhecido'}; ignorado no export.`
+        );
+        continue;
+      }
+      const parentRouting = textRoutingResolution.routing;
 
       if (!fontBufferLoader) {
         // Sem loader injetado — comportamento da Fase 9D (placeholder).
@@ -246,7 +297,8 @@ export async function exportSvgByMachine(
           scaleY: fabricText.scaleY ?? 1,
           fill: OPERATION_STROKE[parentRouting.operation],
         },
-        fontBufferLoader
+        fontBufferLoader,
+        frame // Onda 37: emite d em mm finais flat
       );
 
       if (conversion.ok) {
@@ -275,55 +327,24 @@ export async function exportSvgByMachine(
       continue;
     }
 
-    // Resolve asset id conforme tipo de LayerMeta.
-    let assetId: string | null = null;
-    if (layerMeta.kind === 'principal') {
-      assetId = layerMeta.appliqueId;
-      if (!assetId) {
-        throw new Error(
-          `[svg-exporter] PrincipalLayerMeta id="${id}" sem appliqueId — ` +
-            `peça física não vinculada a aplique do banco não tem rota de export.`
-        );
-      }
-    } else if (layerMeta.kind === 'visual') {
-      assetId = layerMeta.engravingId ?? layerMeta.markingId ?? null;
-      if (!assetId) {
-        // Onda 18: slots avulsos (campos de texto Nome/Profissão, retângulos
-        // de logo sem asset cadastrado) viram warn + skip em vez de throw.
-        // O export do pedido inteiro não pode travar porque o operador
-        // deixou um slot vazio — esse era o comportamento da Onda 9 que
-        // bloqueava export em pedidos reais. Trade-off: o slot avulso
-        // simplesmente não aparece no SVG/DXF, o que faz sentido produção
-        // (slot sem conteúdo cadastrado não tem o que cortar/gravar).
-        console.warn(
-          `[svg-exporter] camada visual id="${id}" name="${layerMeta.name}" sem ` +
-            `engravingId nem markingId — ignorada no export (cadastre o elemento ` +
-            `num banco se quiser que vá pro arquivo).`
-        );
-        continue;
-      }
-    } else {
-      // OperationLayerMeta é sub-camada — não tem objeto Fabric próprio. Ignorada.
+    // Onda 35 — resolução unificada via routing-resolver. Cascata:
+    //  1. patternRole+processType+machineTargets completos (Onda 33) — vence
+    //  2. asset legado via appliqueId/engravingId/markingId
+    //  3. nada → null + warn + skip (política Onda 18, não trava export)
+    const layerRouting = await resolveLayerRouting(layerMeta, assetLookup, 'svg-exporter');
+    if (!layerRouting.routing) {
+      console.warn(
+        `[svg-exporter] camada id="${id}" name="${layerMeta.name}" sem rota — ` +
+          `${layerRouting.reason ?? 'motivo desconhecido'}; ignorada no export.`
+      );
       continue;
     }
-
-    const asset = await assetLookup(assetId);
-    if (!asset) {
-      throw new Error(
-        `[svg-exporter] assetLookup retornou null para id="${assetId}" (layer id="${id}"). ` +
-          `Banco inconsistente — FK no LayerMeta aponta pra registro inexistente.`
-      );
-    }
-
-    // Defensivo — bancos podem ter dados de migration default ainda inválidos.
-    assertValidOperation(asset.operation, `svg-exporter:asset(${assetId})`);
-    assertValidMachines(asset.machines, `svg-exporter:asset(${assetId})`);
 
     resolved.push({
       fabricObj: obj,
       layerMeta,
-      asset,
-      routing: asset,
+      asset: layerRouting.routing,
+      routing: layerRouting.routing,
       isTextPlaceholder: false,
     });
   }
@@ -361,12 +382,12 @@ export async function exportSvgByMachine(
       }
 
       // Shape normal (Path/Rect/Circle/etc).
-      const fragment = renderObjectSvg(r.fabricObj, r.routing.operation);
+      const fragment = renderObjectSvg(r.fabricObj, r.routing.operation, frame);
       elements.push(fragment);
     }
 
-    // Wrapper scale: Fabric emite coords em px, queremos viewBox em mm.
-    // <g transform="scale(0.25)"> ≡ dividir todas as coordenadas por 4.
+    // Onda 37 — paths já estão em coords mm finais (frame matrix aplicado em
+    // renderObjectSvg). Wrapper é só viewBox + xmlns. Sem `<g>` global.
     const inner = elements.join('\n');
     const svg = wrapAsProductSvg(inner, productWidthMm, productHeightMm);
     output.set(machineId, svg);
@@ -375,123 +396,57 @@ export async function exportSvgByMachine(
   return output;
 }
 
-/**
- * Resolve operation/machines pra um TEXTO (VisualLayerMeta de fabric.Text).
- *
- * Regras (default):
- *   - operation = 'gravacao' fixa (briefing Gabriell — texto é gravação).
- *   - machines = do PrincipalLayerMeta pai (aplique) via layerMeta.parentLayerId
- *     → resolve appliqueId → assetLookup.
- *   - Sem parentLayerId ou pai sem appliqueId → lança (texto sem rota).
- *
- * Override (Fase 9F dialog):
- *   - Se `override.operation` informado, substitui o default 'gravacao'.
- *   - Se `override.machines` informado, substitui as machines do pai —
- *     útil quando o usuário quer enviar o texto pra máquina diferente do
- *     aplique. Quando há machines no override, NÃO precisamos do pai
- *     (texto pode até ser solto — ainda preciso de parentLayerId só pra
- *     manter o invariante hierárquico).
- *
- * Pode parecer estranho que texto seja sempre gravação mesmo num aplique
- * de corte — mas é o que faz sentido produção. Aplique passa pela máquina,
- * texto vai ser gravado nessa mesma máquina antes/depois do corte.
- */
-async function resolveTextRouting(
-  textLayer: LayerMeta,
-  layerById: Map<string, LayerMeta>,
-  assetLookup: AssetLookupFn,
-  override?: { operation: Operation; machines?: string[] }
-): Promise<AssetExportInfo> {
-  if (textLayer.kind !== 'visual') {
-    throw new Error(
-      `[svg-exporter] texto com LayerMeta.kind="${textLayer.kind}" — esperado 'visual'.`
-    );
-  }
-
-  // Caminho rápido: override fornece operation + machines. Pula resolução
-  // do pai inteiramente (dialog da Fase 9F é autoritativo).
-  if (override?.machines) {
-    assertValidOperation(override.operation, `svg-exporter:textOverride(${textLayer.id})`);
-    assertValidMachines(override.machines, `svg-exporter:textOverride(${textLayer.id})`);
-    return { operation: override.operation, machines: override.machines };
-  }
-
-  // Caminho normal: precisa do PrincipalLayerMeta pai pra herdar machines.
-  if (!textLayer.parentLayerId) {
-    throw new Error(
-      `[svg-exporter] texto id="${textLayer.id}" name="${textLayer.name}" sem parentLayerId — ` +
-        `texto solto não tem rota de export. Coloque-o como filho de um aplique ou ` +
-        `passe textRouting com machines explícitas pra esse texto.`
-    );
-  }
-  const parent = layerById.get(textLayer.parentLayerId);
-  if (!parent) {
-    throw new Error(
-      `[svg-exporter] texto id="${textLayer.id}" aponta pra parentLayerId="${textLayer.parentLayerId}" ` +
-        `que não existe — estado quebrado.`
-    );
-  }
-  if (parent.kind !== 'principal' || !parent.appliqueId) {
-    throw new Error(
-      `[svg-exporter] texto id="${textLayer.id}" tem pai não-principal ou sem appliqueId — ` +
-        `texto só herda routing de aplique do banco.`
-    );
-  }
-  const parentAsset = await assetLookup(parent.appliqueId);
-  if (!parentAsset) {
-    throw new Error(
-      `[svg-exporter] aplique pai (id="${parent.appliqueId}") do texto não está no banco.`
-    );
-  }
-
-  // Operation: override > default 'gravacao'. Machines: do pai.
-  return {
-    operation: override?.operation ?? 'gravacao',
-    machines: parentAsset.machines,
-  };
-}
-
 // ── Helpers privados ─────────────────────────────────────────────────────────
 
 /**
- * Renderiza um objeto Fabric como fragmento SVG stroke-only com a cor da
- * operação. Reaproveita `obj.toSVG()` do Fabric e pós-processa fill/stroke
- * para garantir o contrato — mais robusto que reconstruir d strings do zero
- * (cobre Path, Rect, Circle, Ellipse, Polygon, Polyline, Group sem código
- * adicional).
+ * Onda 37 (export técnico flat) — emite `<path d="..."/>` com coords já em mm
+ * finais. Aplica matriz world (frame externa × matrix do objeto) e preserva
+ * Bézier matematicamente. Sem wrappers `<g transform="...">`, sem matriz por
+ * shape, sem rect/circle/ellipse — apenas paths flat para máxima clareza
+ * técnica.
  *
- * Pós-processamento mínimo:
- *   - `fill: ...` → `fill: none` (stroke-only).
- *   - `stroke: ...` → `stroke: {OPERATION_STROKE[op]}`.
- *   - Atributos `fill=` e `stroke=` em elementos individuais também trocados.
+ * Frame externa:
+ *   - scale(1/MM_TO_PX) → converte coord canvas (px) em mm
+ *   - translate(-contentOffsetMm) → desfaz offset de label de chapa
+ *   Composição: frame = translate × scale
  *
- * Casos não atingidos (sem regressão para Fase 9D):
- *   - `fabric.Image` (PNG inline) — não tem path; tratado em Fase 9E (PNG mockup).
- *   - `fabric.Text` — interceptado antes em exportSvgByMachine().
+ * Pattern fill / clipPath: estilo agora é setado direto por nós (stroke +
+ * fill=none), independente do que está no obj. Strip de pattern não é
+ * necessário porque NÃO chamamos mais `obj.toSVG()`.
  */
-function renderObjectSvg(obj: fabric.FabricObject, operation: Operation): string {
+function renderObjectSvg(
+  obj: fabric.FabricObject,
+  operation: Operation,
+  frame: AffineMatrix
+): string {
   const stroke = OPERATION_STROKE[operation];
-  let svg: string;
-  try {
-    svg = obj.toSVG();
-  } catch (err) {
-    throw new Error(`[svg-exporter] obj.toSVG() falhou para type="${obj.type}": ${String(err)}`);
-  }
-
-  return recolorSvgFragment(svg, stroke);
+  const d = shapeToFlatPathD(obj, frame, OUTPUT_DECIMALS);
+  if (!d) return '';
+  return (
+    `<path d="${d}" ` +
+    `stroke="${stroke}" stroke-width="0.01" fill="none" ` +
+    `vector-effect="non-scaling-stroke"/>`
+  );
 }
 
 /**
+ * @deprecated Onda 37 — não é mais chamada pelo pipeline principal. O novo
+ * `renderObjectSvg` emite `<path>` flat já com stroke/fill corretos. Esta
+ * função fica como helper de retrocompat para callers/testes externos.
+ *
  * Substitui fill/stroke em todo o fragmento. Cobre:
  *   - Inline style: `fill: rgb(0,0,0)` → `fill: none`
- *   - Inline style: `stroke: rgb(255,0,0)` → `stroke: {hex}`
  *   - Atributos: `fill="black"` → `fill="none"`, `stroke="…"` → `stroke="{hex}"`
- *
- * Não toca em `stroke-width`, `stroke-dasharray`, transforms ou paths em si.
- * Exportado para teste unitário.
+ *   - `fill="url(#SVGID_0)"` → `fill="none"`
+ *   - `<pattern>...</pattern>` em defs → removido
+ *   - `<image xlink:href="...">` → removido
  */
 export function recolorSvgFragment(svg: string, stroke: string): string {
   return svg
+    .replace(/<pattern\b[^>]*>[\s\S]*?<\/pattern>/gi, '')
+    .replace(/<image\b[^/]*\/>/gi, '')
+    .replace(/<image\b[^>]*>[\s\S]*?<\/image>/gi, '')
+    .replace(/<defs>\s*<\/defs>/gi, '')
     .replace(/fill\s*:\s*[^;"'}]+/gi, 'fill: none')
     .replace(/stroke\s*:\s*[^;"'}]+/gi, `stroke: ${stroke}`)
     .replace(/\bfill\s*=\s*"[^"]*"/gi, 'fill="none"')
@@ -510,16 +465,29 @@ export function recolorSvgFragment(svg: string, stroke: string): string {
 export function wrapAsProductSvg(
   innerSvg: string,
   productWidthMm: number,
-  productHeightMm: number
+  productHeightMm: number,
+  /**
+   * @deprecated Onda 37 — agora o offset é absorvido na matriz `frame` que
+   * `renderObjectSvg` usa pra emitir paths em mm finais. Este parâmetro é
+   * ignorado nesta versão (callers continuam podendo passar pra retrocompat
+   * de assinatura; o exporter já aplicou o offset antes de chegar aqui).
+   *
+   * Mantido por enquanto pra não quebrar testes externos / callers em
+   * trânsito. Limpeza definitiva numa onda futura.
+   */
+  contentOffsetMm: { xMm: number; yMm: number } = { xMm: 0, yMm: 0 }
 ): string {
+  void contentOffsetMm; // já aplicado no path level (Onda 37)
+  // Onda 37: SVG técnico FLAT. Sem `<g transform="scale(...)">`, sem
+  // `<g transform="translate(...)">`. Apenas `<path d="...">` em mm finais.
+  // Mantemos xmlns:xlink declarado por defesa (caso algum caminho residual
+  // emita atributo xlink:href em release futuro).
   return (
     `<?xml version="1.0" encoding="UTF-8"?>\n` +
-    `<svg xmlns="http://www.w3.org/2000/svg" version="1.1" ` +
+    `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" ` +
     `width="${productWidthMm}mm" height="${productHeightMm}mm" ` +
     `viewBox="0 0 ${productWidthMm} ${productHeightMm}">\n` +
-    `<g transform="scale(${PX_TO_MM_SCALE})">\n` +
     `${innerSvg}\n` +
-    `</g>\n` +
     `</svg>\n`
   );
 }

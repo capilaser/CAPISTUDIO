@@ -77,7 +77,14 @@ export function TextoItem({
     getAllFonts()
       .then((list) => {
         setFonts(list);
-        if (list.length > 0) setFontFamily(list[0].family);
+        if (list.length === 0) return;
+        // Bug-fix Onda 36+ (rodada 2): default era `list[0]` que com
+        // ORDER BY (category, name) cai em Roboto Slab Variable —
+        // comprovadamente incompatível com opentype.js (font-unsupported).
+        // Operador digitava texto e o export saía como `<!-- Texto pendente -->`.
+        // Preferir Montserrat (sempre vetorizável); fallback pra primeira.
+        const montserrat = list.find((f) => f.family === 'Montserrat');
+        setFontFamily(montserrat ? montserrat.family : list[0].family);
       })
       .catch(() => {});
   }, []);

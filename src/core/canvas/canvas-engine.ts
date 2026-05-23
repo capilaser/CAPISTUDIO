@@ -1573,6 +1573,23 @@ export class CanvasEngine {
   }
 
   /**
+   * Onda 35 — objetos Fabric de CONTENT dos slots (texto/logo dentro de
+   * TEXT_AREA/LOGO_AREA). Usado pelo `slot-content-promoter` para destravar
+   * `excludeFromExport` temporariamente durante o export de produção.
+   */
+  getSlotContentFabricObjects(): fabric.FabricObject[] {
+    return this.slotManager.getContentFabricObjects();
+  }
+
+  /**
+   * Onda 35 — pares (content, body) dos slots. Usado pelo promoter para
+   * herdar routing (processType/machineTargets) da AREA pai via capiSlot.id.
+   */
+  getSlotContentBodyPairs(): Array<{ content: fabric.FabricObject; body: fabric.Rect }> {
+    return this.slotManager.getContentBodyPairs();
+  }
+
+  /**
    * Onda 20.C — seleciona um objeto no canvas pelo id capi. Usado pelos
    * atalhos de canvas (Tab/Shift+Tab) pra focar o próximo slot do broche
    * ativo. Usa `findByCapiId` (não `findById`) pra resolver slots cujo id

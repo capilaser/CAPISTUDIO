@@ -23,8 +23,13 @@
  */
 import type { Chapa, ChapasLayout } from '@/hooks/useBoardEngine';
 
-/** Espaço reservado pra label em cima de cada chapa (mesmo valor do useBoardEngine). */
-const CHAPA_LABEL_HEIGHT_MM = 8;
+/**
+ * Espaço reservado pra label em cima de cada chapa (mesmo valor do useBoardEngine).
+ * Exportado pra que ExportSvgDialog (caminho single-chapa) possa desfazer o
+ * deslocamento vertical no export técnico — multi-chapa já faz via
+ * `buildChapaExportInfos` abaixo.
+ */
+export const CHAPA_LABEL_HEIGHT_MM = 8;
 /** mm → px do canvas Fabric (mesma convenção: 4 px/mm). */
 const MM_TO_PX = 4;
 

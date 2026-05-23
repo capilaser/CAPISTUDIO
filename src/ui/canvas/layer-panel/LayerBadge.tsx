@@ -68,3 +68,42 @@ export function ChildCountBadge({ operations }: ChildCountBadgeProps) {
     </span>
   );
 }
+
+/**
+ * Onda 37 Fix-3 — pill compacto pra mostrar patternRole no LayerRow.
+ * Quando `hasIssue=true`, sobrescreve com vermelho danger pra sinalizar
+ * problema (lido de validatePattern por layer). Paleta aprovada por
+ * Gabriell: discreta, ind/industrial.
+ */
+const PATTERN_ROLE_COLOR: Record<string, { bg: string; text: string; label: string }> = {
+  PRODUCT: { bg: 'bg-ink-700', text: 'text-ink-100', label: 'PROD' },
+  APPLIQUE: { bg: 'bg-amber-700/70', text: 'text-amber-50', label: 'APL' },
+  CONTOUR: { bg: 'bg-ink-600', text: 'text-ink-100', label: 'CTR' },
+  TEXT_AREA: { bg: 'bg-violet-700/70', text: 'text-violet-50', label: 'TXT' },
+  LOGO_AREA: { bg: 'bg-fuchsia-700/70', text: 'text-fuchsia-50', label: 'LGO' },
+};
+
+const ISSUE_OVERRIDE = { bg: 'bg-danger/70', text: 'text-white' };
+
+interface PatternRoleBadgeProps {
+  role: string;
+  /** true => override vermelho. Caller computa via validatePattern por layer. */
+  hasIssue?: boolean;
+  /** Tooltip — caller passa mensagem da issue quando hasIssue=true. */
+  title?: string;
+}
+
+export function PatternRoleBadge({ role, hasIssue, title }: PatternRoleBadgeProps) {
+  const cfg = PATTERN_ROLE_COLOR[role];
+  if (!cfg) return null;
+  const bg = hasIssue ? ISSUE_OVERRIDE.bg : cfg.bg;
+  const text = hasIssue ? ISSUE_OVERRIDE.text : cfg.text;
+  return (
+    <span
+      className={`rounded px-1 py-0 font-mono text-[8px] font-medium tracking-wider ${bg} ${text}`}
+      title={title ?? role}
+    >
+      {cfg.label}
+    </span>
+  );
+}

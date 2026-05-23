@@ -17,6 +17,7 @@ import * as fabric from 'fabric';
 
 import type { CanvasItem, LayerMeta, VisualLayerMeta } from '@/data/schema';
 import { isOperationLayer } from './layer-meta';
+import { bridgePatternAreasToSlots } from './pattern-area-bridge';
 import { SlotManager, getCapiSlot, setCapiSlot } from './slot-manager';
 import type { SlotMeta } from './types';
 import { mmToPx, pxToMm } from './units';
@@ -302,6 +303,16 @@ export async function applyPatternObjects(
   clampToRegion?: { leftMm: number; topMm: number; widthMm: number; heightMm: number }
 ): Promise<string[]> {
   if (!data.objects || data.objects.length === 0) return [];
+
+  // Onda 34 — bridge AREA → capiSlot. Patterns criados a partir da Onda 33
+  // podem ter layers patternRole='TEXT_AREA'|'LOGO_AREA' que precisam virar
+  // slots no destino para a sidebar (TextoItem/LogoSlotItem) operar. Aditiva
+  // e idempotente: patterns antigos sem AREA passam intactos.
+  //
+  // Bridge muta `data.objects` injetando capiSlot. O caller (PatternBar)
+  // já trata `data` como entrada de uso único — é o canvasJson lido do
+  // banco, não compartilhado entre callers.
+  bridgePatternAreasToSlots({ objects: data.objects, capi: data.capi });
 
   const enlivened = await fabric.util.enlivenObjects<fabric.FabricObject>(data.objects);
   const offsetLeftPx = mmToPx(offsetMm.leftMm);

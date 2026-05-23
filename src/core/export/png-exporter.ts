@@ -214,19 +214,22 @@ export async function exportPngMockup(
     // (esse flag só vale pra toObject/toJSON). Precisamos ocultar manualmente
     // o que NÃO deve aparecer no mockup, sendo específico sobre cada tipo:
     //
-    //   - __capiOverlay   = slot overlay (tracejado vermelho), board highlight
-    //                       (tracejado azul). Decoração do editor, nunca exporta.
-    //   - __capiBase      = stroke preto da base SVG (linha de corte). Visualmente
-    //                       o traço da forma do broche — irrelevante no mockup,
-    //                       que mostra só material + conteúdo. (Pertence ao
-    //                       SVG de produção.)
+    //   - __capiOverlay         = slot overlay (tracejado vermelho), board
+    //                             highlight (tracejado azul). Decoração editor.
+    //   - __capiBase            = stroke preto da base SVG (linha de corte).
+    //                             Pertence ao SVG de produção, não ao mockup.
+    //   - __capiAreaPlaceholder = retângulo roxo de TEXT_AREA/LOGO_AREA da
+    //                             Onda 33+. Bug-fix Onda 36+: guia visual,
+    //                             nunca aparece em mockup do cliente.
     //
     // Mantemos __capiMaterialRect (a textura metálica) e conteúdo do usuário
     // (texto, logos) sem mexer.
     const isOverlay = rec.__capiOverlay === true;
     const isBase = rec.__capiBase === true;
+    const isAreaPlaceholder = rec.__capiAreaPlaceholder === true;
+    const isSlotBody = rec.__capiSlotBody === true;
 
-    if (isOverlay || isBase) {
+    if (isOverlay || isBase || isAreaPlaceholder || isSlotBody) {
       restoredVisibility.push({ obj, visible: obj.visible ?? true });
       obj.set({ visible: false });
       continue;

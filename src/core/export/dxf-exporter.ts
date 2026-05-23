@@ -25,14 +25,11 @@ import type * as fabric from 'fabric';
 
 import { getCapiId } from '@/core/canvas/capi-id';
 import type { LayerMeta } from '@/data/schema';
-import {
-  assertValidMachines,
-  assertValidOperation,
-  type Operation,
-} from '@/data/repositories/_export-validation';
+import { type Operation } from '@/data/repositories/_export-validation';
 
 import { DxfBuilder, type DxfLayerName, flipY } from './dxf-writer';
 import { flattenSvgPath, type FlatPolyline } from './path-flattener';
+import { resolveLayerRouting, resolveTextLayerRouting } from './routing-resolver';
 import { type FontBufferLoader, tryConvertTextToSvgPath } from './svg-text-converter';
 
 /** PX_PER_MM constante (igual canvas-engine/svg-exporter). */
@@ -42,12 +39,10 @@ const PX_TO_MM = 1 / PX_PER_MM;
 /** Tolerância de flatten em mm — sub-precisão de laser pequeno. */
 const FLATTEN_TOLERANCE_MM = 0.1;
 
-export interface AssetExportInfo {
-  operation: Operation;
-  machines: string[];
-}
-
-export type AssetLookupFn = (id: string) => Promise<AssetExportInfo | null>;
+// Onda 35 — tipos canônicos vivem em `asset-routing-types.ts`. Re-export
+// preserva a API pública pré-Onda 35 (callers que importavam daqui).
+export type { AssetExportInfo, AssetLookupFn } from './asset-routing-types';
+import type { AssetExportInfo, AssetLookupFn } from './asset-routing-types';
 
 export interface DxfExportOptions {
   productWidthMm: number;
@@ -158,7 +153,12 @@ export async function exportDxfByMachineAndOperation(
   for (const obj of canvas.getObjects()) {
     if (obj.excludeFromExport) continue;
 
-    const id = getCapiId(obj as unknown as Record<string, unknown>);
+    // Bug-fix Onda 36+: pula guias do editor que não devem virar polyline.
+    // Ver svg-exporter pro raciocínio completo.
+    const rec = obj as unknown as Record<string, unknown>;
+    if (rec.__capiSlotBody === true || rec.__capiAreaPlaceholder === true) continue;
+
+    const id = getCapiId(rec);
     if (!id) continue;
 
     const layerMeta = layerById.get(id);
@@ -178,12 +178,23 @@ export async function exportDxfByMachineAndOperation(
 
     // Texto: converte via opentype → flatten cada path resultante.
     if (obj.type === 'text' || obj.type === 'i-text' || obj.type === 'textbox') {
-      const routing = await resolveTextRouting(
+      // Onda 35 — mesma cascata do svg-exporter via routing-resolver. Em DXF,
+      // texto sem rota é apenas ignorado (sem placeholder — DXF não tem
+      // comentários úteis para o operador no software laser).
+      const textResolution = await resolveTextLayerRouting(
         layerMeta,
         layerById,
         assetLookup,
-        textRouting?.get(id)
+        textRouting?.get(id),
+        'dxf-exporter'
       );
+      if (!textResolution.routing) {
+        console.warn(
+          `[dxf-exporter] texto id="${id}" sem rota — ${textResolution.reason ?? 'motivo desconhecido'}; ignorado.`
+        );
+        continue;
+      }
+      const routing = textResolution.routing;
       if (!fontBufferLoader) {
         // Sem loader: ignora texto (não emite placeholder em DXF — operador
         // que abrir o arquivo não veria nada de útil, e o SVG cobre esse caso).
@@ -231,29 +242,32 @@ export async function exportDxfByMachineAndOperation(
       continue;
     }
 
-    // Shape (Path/Rect/Circle/Group): resolve asset via routing tradicional.
-    let assetId: string | null = null;
-    if (layerMeta.kind === 'principal') assetId = layerMeta.appliqueId;
-    else if (layerMeta.kind === 'visual') {
-      assetId = layerMeta.engravingId ?? layerMeta.markingId ?? null;
-    } else continue; // OperationLayerMeta não tem objeto Fabric
-
-    if (!assetId) {
-      // visual avulso (rect/slot sem asset). SVG lança; DXF avisa.
-      console.warn(`[dxf-exporter] layer id="${id}" ignorada — visual sem assetId.`);
+    // Onda 35 — resolução unificada via routing-resolver. Mesma cascata
+    // do svg-exporter: patternRole completo (Onda 33) vence sobre asset;
+    // sem rota → warn + skip (política Onda 18 + nota DXF: warn em vez
+    // de throw para banco inconsistente, preservando contrato pré-35).
+    let layerRouting;
+    try {
+      layerRouting = await resolveLayerRouting(layerMeta, assetLookup, 'dxf-exporter');
+    } catch (err) {
+      // dxf-exporter sempre tratou banco inconsistente como warn em vez de
+      // throw (linha original "banco inconsistente — log já saiu do SVG").
+      // Preservar esse comportamento — operador exporta SVG primeiro e vê
+      // o throw lá. DXF pula silenciosamente.
+      console.warn(
+        `[dxf-exporter] layer id="${id}" ignorada — ${err instanceof Error ? err.message : String(err)}`
+      );
+      continue;
+    }
+    if (!layerRouting.routing) {
+      console.warn(
+        `[dxf-exporter] layer id="${id}" name="${layerMeta.name}" sem rota — ` +
+          `${layerRouting.reason ?? 'motivo desconhecido'}; ignorada.`
+      );
       continue;
     }
 
-    const asset = await assetLookup(assetId);
-    if (!asset) {
-      // banco inconsistente — log já saiu do SVG; aqui avisa.
-      console.warn(`[dxf-exporter] assetId="${assetId}" não encontrado no banco.`);
-      continue;
-    }
-    assertValidOperation(asset.operation, `dxf-exporter:asset(${assetId})`);
-    assertValidMachines(asset.machines, `dxf-exporter:asset(${assetId})`);
-
-    resolved.push({ kind: 'shape', fabricObj: obj, routing: asset });
+    resolved.push({ kind: 'shape', fabricObj: obj, routing: layerRouting.routing });
   }
 
   if (resolved.length === 0) return new Map();
@@ -296,33 +310,6 @@ export async function exportDxfByMachineAndOperation(
 }
 
 // ── Helpers privados ─────────────────────────────────────────────────────────
-
-/** Resolve texto: igual ao svg-exporter. Sem throws — texto sem rota é ignorado. */
-async function resolveTextRouting(
-  textLayer: LayerMeta,
-  layerById: Map<string, LayerMeta>,
-  assetLookup: AssetLookupFn,
-  override?: { operation: Operation; machines?: string[] }
-): Promise<AssetExportInfo> {
-  if (override?.machines) {
-    return { operation: override.operation, machines: override.machines };
-  }
-  // Sem override completo: precisa do PrincipalLayerMeta pai.
-  if (textLayer.kind === 'visual' && textLayer.parentLayerId) {
-    const parent = layerById.get(textLayer.parentLayerId);
-    if (parent?.kind === 'principal' && parent.appliqueId) {
-      const parentAsset = await assetLookup(parent.appliqueId);
-      if (parentAsset) {
-        return {
-          operation: override?.operation ?? 'gravacao',
-          machines: parentAsset.machines,
-        };
-      }
-    }
-  }
-  // Sem rota — DXF retorna routing degenerado (machines: []); caller filtra.
-  return { operation: override?.operation ?? 'gravacao', machines: [] };
-}
 
 /** Extrai o `d` do primeiro `<path>` no SVG retornado por opentype. */
 function extractPathD(svg: string): string | null {

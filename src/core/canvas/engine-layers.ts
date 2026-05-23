@@ -28,12 +28,34 @@ import { pxToMm } from './units';
 import { CAPI_CUSTOM_PROPS, generateObjectId } from './engine-serialization';
 
 /**
+ * Onda 37 Fix-3 — campos opcionais herdados de PatternLayerExtras pra UI
+ * (LayerRow) ler metadata sem chamar getLayerMeta por linha (O(n)). Todos
+ * opcionais; ausência = layer legado / não classificado.
+ */
+export interface LayerNodeClassification {
+  /** PRODUCT / APPLIQUE / CONTOUR / TEXT_AREA / LOGO_AREA quando setada. */
+  patternRole?: import('@/data/schema').PatternRole;
+  /** corte / gravacao / marcacao quando setado. */
+  processType?: import('@/data/schema').ProcessType;
+  /** Códigos M1/M2/M3. */
+  machineTargets?: import('@/data/schema').MachineCode[];
+  /** Bounds em mm — só para TEXT_AREA / LOGO_AREA. */
+  boundsMm?: import('@/data/schema').LayerBoundsMm;
+  /** Locks granulares Onda 33. */
+  lockGranular?: import('@/data/schema').LayerLocks;
+}
+
+/**
  * Nó da árvore exibida no painel de camadas (Onda 7).
  * - 'principal' = aplique/base, sempre raiz, com `children` (slots/operations/visuais).
  * - 'visual' | 'operation' = nó folha (Onda 7 não permite filhos de filhos).
+ *
+ * Onda 37 Fix-3: todos os variants agora carregam LayerNodeClassification
+ * pra UI poder renderizar badges sem re-consultar layerMeta. Campos são
+ * opcionais — retrocompat com callers que ignoram.
  */
 export type LayerNode =
-  | {
+  | ({
       kind: 'principal';
       id: string;
       name: string;
@@ -46,8 +68,8 @@ export type LayerNode =
       /** Onda 26 Fase 5 — sempre presente; 'normal' quando meta.blendMode undefined. */
       blendMode: LayerBlendMode;
       children: LayerNode[];
-    }
-  | {
+    } & LayerNodeClassification)
+  | ({
       kind: 'visual';
       id: string;
       name: string;
@@ -57,8 +79,8 @@ export type LayerNode =
       colorLabel: LayerColorLabel;
       blendMode: LayerBlendMode;
       parentId: string | null;
-    }
-  | {
+    } & LayerNodeClassification)
+  | ({
       kind: 'operation';
       id: string;
       name: string;
@@ -72,7 +94,7 @@ export type LayerNode =
       operation: string;
       /** Onda 15 — ids de máquinas (MB/FB/DL). 1–3 elementos. */
       machines: string[];
-    };
+    } & LayerNodeClassification);
 
 /**
  * Emit `layer-meta-changed` synthetic event on the canvas. Fabric 6 não
@@ -586,6 +608,16 @@ export function getLayersHierarchy(
   const principals: PrincipalNode[] = [];
   const orphans: LeafNode[] = [];
 
+  // Onda 37 Fix-3 — helper inline pra empacotar os 5 campos opcionais de
+  // PatternLayerExtras (Onda 33) nos LayerNodes. Mantém builder DRY.
+  const classification = (meta: LayerMeta): LayerNodeClassification => ({
+    patternRole: meta.patternRole,
+    processType: meta.processType,
+    machineTargets: meta.machineTargets,
+    boundsMm: meta.boundsMm,
+    lockGranular: meta.lockGranular,
+  });
+
   for (const meta of layerMeta.values()) {
     if (meta.kind === 'principal') {
       principals.push({
@@ -598,6 +630,7 @@ export function getLayersHierarchy(
         colorLabel: meta.colorLabel ?? 'none',
         blendMode: meta.blendMode ?? 'normal',
         children: [],
+        ...classification(meta),
       });
     }
   }
@@ -619,6 +652,7 @@ export function getLayersHierarchy(
             parentId: meta.parentLayerId ?? null,
             operation: meta.operation,
             machines: meta.machines,
+            ...classification(meta),
           }
         : {
             kind: 'visual',
@@ -630,6 +664,7 @@ export function getLayersHierarchy(
             colorLabel: meta.colorLabel ?? 'none',
             blendMode: meta.blendMode ?? 'normal',
             parentId: meta.parentLayerId ?? null,
+            ...classification(meta),
           };
     const parent = meta.parentLayerId ? principalById.get(meta.parentLayerId) : undefined;
     if (parent) {
@@ -839,6 +874,17 @@ export function convertToArea(
   // 4. Cria placeholder tracejado roxo (alinhado com style das proximity
   //    lines da engine — operador reconhece como "área inteligente, não
   //    é geometria real").
+  //
+  // CRITICAL (bug-fix Onda 36+): o placeholder é GUIA VISUAL do editor.
+  // Nunca pode sair em PNG/SVG/DXF de produção. Estratégia:
+  //   - NÃO usamos `excludeFromExport: true` porque o objeto PRECISA ser
+  //     serializado pelo `canvas.toObject()` (senão pattern não persiste:
+  //     fabric filtra excludeFromExport antes de aplicar CAPI_CUSTOM_PROPS).
+  //   - Em vez disso usamos flag `__capiAreaPlaceholder: true` — checada
+  //     por svg-exporter, dxf-exporter e png-exporter pra pular o objeto
+  //     no caminho de produção. O objeto continua no canvasJson, mas não
+  //     aparece em arquivo de produção.
+  //   - Idêntica estratégia do `__capiSlotBody` (slot-manager).
   const placeholder = new fabric.Rect({
     left: leftPx,
     top: topPx,
@@ -862,8 +908,10 @@ export function convertToArea(
   });
   // 5. Invariante Onda 31: body.id = layerId. NÃO setamos `capiSlot` —
   //    áreas da Onda 33 NÃO são slots do SlotManager; loadSlotsFromCanvas
-  //    ignora rects sem capiSlot.
+  //    ignora rects sem capiSlot. (Mas a bridge Onda 34+ injeta capiSlot
+  //    quando o pattern é APLICADO num pedido — aí vira slot do tipo certo.)
   (placeholder as unknown as Record<string, unknown>).id = id;
+  (placeholder as unknown as Record<string, unknown>).__capiAreaPlaceholder = true;
   canvas.add(placeholder);
 
   // 6. LayerMeta novo. Sempre visual (mesmo se origem foi principal).

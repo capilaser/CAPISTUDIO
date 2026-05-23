@@ -197,6 +197,36 @@ export class SlotManager {
     return this.slots.get(id)?.body;
   }
 
+  /**
+   * Onda 35 — retorna os objetos Fabric de CONTENT dos slots (fabric.Text
+   * de slots de texto, fabric.Group de slots de logo). Usado pelo
+   * `slot-content-promoter` para destravar `excludeFromExport=true`
+   * temporariamente durante o export de produção.
+   *
+   * Slots sem content (vazios) não entram no array. Body/overlay/placeholder
+   * ficam de fora — apenas content "exportável conceitualmente" é listado.
+   */
+  getContentFabricObjects(): fabric.FabricObject[] {
+    const out: fabric.FabricObject[] = [];
+    for (const entry of this.slots.values()) {
+      if (entry.content) out.push(entry.content);
+    }
+    return out;
+  }
+
+  /**
+   * Onda 35 — pares (content, body) para o slot-content-promoter herdar
+   * routing da LayerMeta do body (que tem patternRole+processType+
+   * machineTargets da AREA pai). Slots sem content não entram.
+   */
+  getContentBodyPairs(): Array<{ content: fabric.FabricObject; body: fabric.Rect }> {
+    const out: Array<{ content: fabric.FabricObject; body: fabric.Rect }> = [];
+    for (const entry of this.slots.values()) {
+      if (entry.content) out.push({ content: entry.content, body: entry.body });
+    }
+    return out;
+  }
+
   // ─── Content management (stubs — implemented in Checkpoint C Phase 4) ────
 
   /**
@@ -459,6 +489,11 @@ export class SlotManager {
       if (rec.id !== meta.id) {
         rec.id = meta.id;
       }
+      // Bug-fix Onda 36+: re-marca body como hitbox de slot (a flag não
+      // sobrevive ao serialize → CAPI_CUSTOM_PROPS não inclui __capiSlotBody
+      // pois é só pra excluir no export). Re-aplicar aqui garante que svg/
+      // dxf-exporter pulem o body após reabrir pedido/padrão.
+      rec.__capiSlotBody = true;
       const overlay = this.buildOverlayRect(meta);
       this.canvas.add(overlay);
       this.slots.set(meta.id, { meta: { ...meta }, body, overlay });
@@ -657,7 +692,7 @@ export class SlotManager {
   // ─── Fabric object builders ───────────────────────────────────────────────
 
   private buildBodyRect(meta: SlotMeta): fabric.Rect {
-    return new fabric.Rect({
+    const rect = new fabric.Rect({
       left: mmToPx(meta.x),
       top: mmToPx(meta.y),
       width: mmToPx(meta.maxWidth),
@@ -674,10 +709,20 @@ export class SlotManager {
       transparentCorners: false,
       cornerSize: 6,
     });
+    // Bug-fix Onda 36+: body do slot é hitbox interativa do editor, não
+    // geometria de produção. NÃO usamos `excludeFromExport: true` aqui porque
+    // o body PRECISA estar no canvasJson serializado (loadSlotsFromCanvas
+    // depende disso pra reconstruir o slot ao reabrir pedido/padrão).
+    //
+    // Em vez disso marcamos com `__capiSlotBody: true` — flag que svg/dxf-
+    // exporter checam pra pular o body no export de produção (mas o body
+    // continua sendo serializado pelo toObject normal).
+    (rect as unknown as Record<string, unknown>).__capiSlotBody = true;
+    return rect;
   }
 
   private buildOverlayRect(meta: SlotMeta): fabric.Rect {
-    return new fabric.Rect({
+    const rect = new fabric.Rect({
       left: mmToPx(meta.x),
       top: mmToPx(meta.y),
       width: mmToPx(meta.maxWidth),
@@ -701,6 +746,14 @@ export class SlotManager {
       // bug de cache do Fabric 6.
       objectCaching: false,
     });
+    // Bug-fix Onda 36+ (rodada 2): o overlay vermelho tracejado é GUIA do
+    // editor — só `excludeFromExport: true` não basta porque `fabric.toDataURL`
+    // (usado pelo PNG mockup) IGNORA esse flag (limitação Fabric 6). O png-
+    // exporter usa heurística `__capiOverlay` pra ocultar manualmente. Sem
+    // essa flag o overlay vermelho vazava no PNG do cliente como "caixa
+    // tracejada vermelha em volta do texto". Bug latente desde Onda 17.
+    (rect as unknown as Record<string, unknown>).__capiOverlay = true;
+    return rect;
   }
 }
 

@@ -16,6 +16,7 @@
  * pra manter o componente testável sem Fabric).
  */
 import { useState } from 'react';
+import { AlertTriangle, CheckCircle2, Circle } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { cn } from '@/lib/cn';
@@ -43,8 +44,24 @@ export interface PatternClassificationState {
   hasChildren: boolean;
 }
 
+/**
+ * Onda 37 Fix-2 — status resumido da layer pra mostrar no topo do painel.
+ *  - 'unclassified' = sem patternRole, painel mostra prompt pra escolher
+ *  - 'ok'           = layer classificada e sem issues
+ *  - 'incomplete'   = layer classificada mas validatePattern reporta error/warning
+ * Mensagem curta é exibida ao lado do ícone. Caller calcula via validatePattern
+ * (mesma source of truth do bloqueio de save da Onda 36).
+ */
+export interface ClassificationValidationStatus {
+  kind: 'unclassified' | 'ok' | 'incomplete';
+  /** Mensagem curta (ex.: "Falta processo + máquinas"). */
+  message: string;
+}
+
 interface Props {
   state: PatternClassificationState;
+  /** Onda 37 Fix-2 — status resumido pra UI ler de relance. */
+  validationStatus?: ClassificationValidationStatus;
   onSetPatternRole: (role: PatternRole | undefined) => void;
   onSetProcess: (process: ProcessType | undefined) => void;
   onSetMachines: (machines: MachineCode[]) => void;
@@ -81,6 +98,7 @@ const LOCK_LABELS: Record<keyof LayerLocks, string> = {
 
 export function PatternClassificationPanel({
   state,
+  validationStatus,
   onSetPatternRole,
   onSetProcess,
   onSetMachines,
@@ -136,6 +154,10 @@ export function PatternClassificationPanel({
         Classificação
       </span>
 
+      {/* Onda 37 Fix-2 — Status resumido. Mostra de relance se a layer está
+          OK ou se falta algo (igual validatePattern reportaria no save). */}
+      {validationStatus && <ValidationStatusRow status={validationStatus} />}
+
       {/* ── Pattern role ────────────────────────────────────── */}
       <label className="flex flex-col gap-1">
         <span className="text-[10px] uppercase tracking-wider text-muted-foreground/80">
@@ -158,74 +180,92 @@ export function PatternClassificationPanel({
         </select>
       </label>
 
-      {/* ── Process type ────────────────────────────────────── */}
-      <label className="flex flex-col gap-1">
-        <span className="text-[10px] uppercase tracking-wider text-muted-foreground/80">
-          Processo
-        </span>
-        <select
-          value={state.processType ?? ''}
-          onChange={(e) => handleProcessChange(e.currentTarget.value)}
-          className={cn(
-            'h-7 rounded-md border border-border bg-background/60 px-2',
-            'font-body text-xs text-foreground',
-            'focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/40'
-          )}
-        >
-          {PROCESS_OPTIONS.map((opt) => (
-            <option key={opt.value || 'none'} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-      </label>
+      {/* Onda 37 Fix-4 — campos abaixo são condicionais. Antes apareciam
+          mesmo sem patternRole, confundindo operador. Agora:
+            - Sem patternRole → mostra só prompt explicativo.
+            - Com patternRole → mostra Process + Machines + Locks.
+            - Com TEXT_AREA/LOGO_AREA → adiciona bloco info de bounds. */}
+      {!state.patternRole && (
+        <p className="rounded border border-border bg-background/40 px-2 py-2 text-[11px] leading-relaxed text-muted-foreground">
+          Escolha o papel da camada acima para definir processo, máquinas e travas.
+        </p>
+      )}
 
-      {/* ── Machines ────────────────────────────────────────── */}
-      <div className="flex flex-col gap-1">
-        <span className="text-[10px] uppercase tracking-wider text-muted-foreground/80">
-          Máquinas
-        </span>
-        <div className="flex flex-col gap-1">
-          {MACHINE_CODES.map((code) => {
-            const checked = state.machineTargets.includes(code);
-            return (
-              <label key={code} className="flex items-center gap-2 text-[11px] text-foreground">
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  onChange={(e) => toggleMachine(code, e.currentTarget.checked)}
-                  className="h-3.5 w-3.5 cursor-pointer accent-primary"
-                />
-                <span className="font-mono">{code}</span>
-                <span className="text-muted-foreground">({MACHINE_LABEL[code]})</span>
-              </label>
-            );
-          })}
-        </div>
-      </div>
+      {state.patternRole && (
+        <>
+          {/* ── Process type ────────────────────────────────────── */}
+          <label className="flex flex-col gap-1">
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground/80">
+              Processo
+            </span>
+            <select
+              value={state.processType ?? ''}
+              onChange={(e) => handleProcessChange(e.currentTarget.value)}
+              className={cn(
+                'h-7 rounded-md border border-border bg-background/60 px-2',
+                'font-body text-xs text-foreground',
+                'focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/40'
+              )}
+            >
+              {PROCESS_OPTIONS.map((opt) => (
+                <option key={opt.value || 'none'} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </label>
 
-      {/* ── Locks granulares ────────────────────────────────── */}
-      <div className="flex flex-col gap-1">
-        <span className="text-[10px] uppercase tracking-wider text-muted-foreground/80">
-          Travas
-        </span>
-        <div className="grid grid-cols-2 gap-1">
-          {(Object.keys(LOCK_LABELS) as Array<keyof LayerLocks>).map((key) => {
-            const checked = state.locks[key] === true;
-            return (
-              <label key={key} className="flex items-center gap-1.5 text-[11px] text-foreground">
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  onChange={(e) => onSetLock(key, e.currentTarget.checked)}
-                  className="h-3.5 w-3.5 cursor-pointer accent-primary"
-                />
-                <span>{LOCK_LABELS[key]}</span>
-              </label>
-            );
-          })}
-        </div>
-      </div>
+          {/* ── Machines ────────────────────────────────────────── */}
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground/80">
+              Máquinas
+            </span>
+            <div className="flex flex-col gap-1">
+              {MACHINE_CODES.map((code) => {
+                const checked = state.machineTargets.includes(code);
+                return (
+                  <label key={code} className="flex items-center gap-2 text-[11px] text-foreground">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(e) => toggleMachine(code, e.currentTarget.checked)}
+                      className="h-3.5 w-3.5 cursor-pointer accent-primary"
+                    />
+                    <span className="font-mono">{code}</span>
+                    <span className="text-muted-foreground">({MACHINE_LABEL[code]})</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* ── Locks granulares ────────────────────────────────── */}
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground/80">
+              Travas
+            </span>
+            <div className="grid grid-cols-2 gap-1">
+              {(Object.keys(LOCK_LABELS) as Array<keyof LayerLocks>).map((key) => {
+                const checked = state.locks[key] === true;
+                return (
+                  <label
+                    key={key}
+                    className="flex items-center gap-1.5 text-[11px] text-foreground"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(e) => onSetLock(key, e.currentTarget.checked)}
+                      className="h-3.5 w-3.5 cursor-pointer accent-primary"
+                    />
+                    <span>{LOCK_LABELS[key]}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        </>
+      )}
 
       {/* ── Dialog de conversão destrutiva ─────────────────── */}
       <Dialog open={convertOpen !== null} onOpenChange={(o) => !o && setConvertOpen(null)}>
@@ -261,6 +301,39 @@ export function PatternClassificationPanel({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+/**
+ * Onda 37 Fix-2 — linha de status no topo do painel. Visual discreto,
+ * alinhado com a paleta industrial-utilitária do app:
+ *   - unclassified → ícone Circle cinza + "Sem classificação"
+ *   - ok           → ícone CheckCircle2 verde + "OK"/mensagem custom
+ *   - incomplete   → ícone AlertTriangle danger + mensagem do erro
+ */
+function ValidationStatusRow({ status }: { status: ClassificationValidationStatus }) {
+  if (status.kind === 'unclassified') {
+    return (
+      <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+        <Circle className="h-3 w-3" />
+        <span>{status.message}</span>
+      </div>
+    );
+  }
+  if (status.kind === 'ok') {
+    return (
+      <div className="flex items-center gap-1.5 text-[11px] text-ok">
+        <CheckCircle2 className="h-3 w-3" />
+        <span>{status.message}</span>
+      </div>
+    );
+  }
+  // incomplete
+  return (
+    <div className="flex items-center gap-1.5 rounded border border-danger/30 bg-danger/5 px-2 py-1 text-[11px] text-danger">
+      <AlertTriangle className="h-3 w-3 shrink-0" />
+      <span className="leading-tight">{status.message}</span>
     </div>
   );
 }

@@ -19,7 +19,6 @@ import {
   Save,
   Type,
   ImagePlus,
-  Briefcase,
   X as XIcon,
   Square,
   Minus,
@@ -57,11 +56,19 @@ import {
 import { LayerPanel } from '@/ui/canvas/LayerPanel';
 import AppLayout from '@/ui/layout/AppLayout';
 
+import { labelFromPatternRole } from './label-from-pattern-role';
 import { ObjectPropertiesPanel, type ObjectGeometry } from './ObjectPropertiesPanel';
 import {
   PatternClassificationPanel,
   type PatternClassificationState,
 } from './PatternClassificationPanel';
+import { PatternValidationDialog } from './PatternValidationDialog';
+import {
+  summarizeLayerValidation,
+  validatePattern,
+  type PatternIssue,
+} from '@/core/patterns/validate-pattern';
+import { cn } from '@/lib/cn';
 import type { LayerLocks, MachineCode, PatternRole, ProcessType } from '@/data/schema';
 
 const VIEWPORT = { widthPx: 900, heightPx: 600 };
@@ -87,6 +94,14 @@ export default function PadraoEditorPage() {
   // Onda 32 — confirmação forte exigida pelo CLAUDE.md para "Atualizar padrão mestre".
   // Só abre quando isEditMode = true. Modo CRIAR salva direto.
   const [confirmUpdateOpen, setConfirmUpdateOpen] = useState(false);
+  // Onda 36 — pre-check de validação no save. Modo 'block' lista errors;
+  // 'confirm-save' lista warnings com botão "Salvar mesmo assim".
+  const [validation, setValidation] = useState<{
+    open: boolean;
+    mode: 'block' | 'confirm-save';
+    errors: PatternIssue[];
+    warnings: PatternIssue[];
+  }>({ open: false, mode: 'block', errors: [], warnings: [] });
   // Conta nó de slot pra UI da sidebar. Em modo edit, hidrata após deserialize.
   const [slotCount, setSlotCount] = useState(0);
   // Objeto atualmente selecionado no canvas (slot OU rect decorativo).
@@ -99,6 +114,14 @@ export default function PadraoEditorPage() {
   }, []);
 
   // Helper: monta ObjectGeometry para o id selecionado (slot OU rect comum).
+  //
+  // Onda 37 Fix-1: prioriza patternRole (Onda 33) na hora de escolher label.
+  // Antes, qualquer placeholder de AREA classificada saía como "Forma" — o
+  // operador não conseguia distinguir uma área inteligente de um retângulo
+  // decorativo só pelo painel. Ordem:
+  //   1. Slot tradicional (legado capiSlot) → "Slot · Nome/Profissão/..."
+  //   2. patternRole presente → label de classificação (Área · Texto, etc)
+  //   3. Fallback → "Forma"
   const refreshSelected = useCallback((id: string | null) => {
     const engine = engineRef.current;
     if (!engine || !id) {
@@ -111,9 +134,10 @@ export default function PadraoEditorPage() {
       return;
     }
     const slot = engine.getSlot(id);
+    const meta = engine.getLayerMeta(id);
     const label = slot
       ? `Slot · ${slot.type === 'profissao' ? 'Profissão' : slot.type === 'nome' ? 'Nome' : slot.type === 'logo' ? 'Logo' : 'Custom'}`
-      : 'Forma';
+      : labelFromPatternRole(meta?.patternRole);
     setSelectedObject({ id, label, ...geom });
   }, []);
 
@@ -217,10 +241,53 @@ export default function PadraoEditorPage() {
     };
   }, [isEditMode, editingId, productIdParam, recalcSlotCount, refreshSelected]);
 
-  function handleAddSlot(type: 'nome' | 'profissao' | 'logo') {
+  /**
+   * Onda 37 (ajuste de conceito) — "Área de Texto" e "Área de Logo" são
+   * placeholders inteligentes da spec de templates (Onda 33). Substituem
+   * o conceito antigo de slots fixos ('nome' / 'profissao' / 'logo'), que
+   * acoplava o template ao conteúdo do pedido.
+   *
+   * Fluxo: criar Rect centralizado com dimensões padrão → converter em AREA
+   * via `convertToArea` (preserva bounds em mm, troca o vetor por placeholder
+   * tracejado, anota patternRole + boundsMm em LayerMeta).
+   *
+   * Decisão de tamanho default:
+   *  - TEXT_AREA: 50% × 15% do produto (largo e baixo — formato típico de
+   *    linha de texto).
+   *  - LOGO_AREA: 30% × 30% (quadrado pequeno — formato típico de logo).
+   * Ambos centralizados; operador ajusta depois via Properties Panel.
+   */
+  function handleAddTextArea() {
     const engine = engineRef.current;
-    if (!engine) return;
-    engine.createSlot(type);
+    if (!engine || !product) return;
+    const w = product.canvasMm.width * 0.5;
+    const h = product.canvasMm.height * 0.15;
+    const x = (product.canvasMm.width - w) / 2;
+    const y = (product.canvasMm.height - h) / 2;
+    const rect = engine.addRectangle(x, y, w, h);
+    const id = (rect as unknown as { id?: string }).id;
+    if (id) {
+      engine.convertToArea(id, 'TEXT_AREA');
+      refreshSelected(id);
+      bumpClassification();
+    }
+    recalcSlotCount();
+  }
+
+  function handleAddLogoArea() {
+    const engine = engineRef.current;
+    if (!engine || !product) return;
+    const w = product.canvasMm.width * 0.3;
+    const h = product.canvasMm.height * 0.3;
+    const x = (product.canvasMm.width - w) / 2;
+    const y = (product.canvasMm.height - h) / 2;
+    const rect = engine.addRectangle(x, y, w, h);
+    const id = (rect as unknown as { id?: string }).id;
+    if (id) {
+      engine.convertToArea(id, 'LOGO_AREA');
+      refreshSelected(id);
+      bumpClassification();
+    }
     recalcSlotCount();
   }
 
@@ -263,6 +330,41 @@ export default function PadraoEditorPage() {
       locks: meta?.lockGranular ?? {},
       hasChildren: engine.hasChildren(layerId),
     };
+  })();
+
+  // Onda 37 Fix-2 — status resumido pra mostrar no topo do PatternClassificationPanel.
+  // Reusa validatePattern via summarizeLayerValidation (mesma source of truth do
+  // bloqueio de save da Onda 36). Custo trivial (1 layer).
+  const classificationValidationStatus = (() => {
+    void classificationTick; // depende do tick — re-leitura quando engine muta
+    const engine = engineRef.current;
+    const layerId = selectedObject?.id ?? null;
+    if (!engine || !layerId) return undefined;
+    const meta = engine.getLayerMeta(layerId);
+    return summarizeLayerValidation(meta, {
+      hasFabricObject: (id) => engine.getObjectById(id) !== null,
+    });
+  })();
+
+  // Onda 37 Fix-5 — contador global discreto no header. Roda validatePattern
+  // sobre TODAS as layers e resume "Tudo válido" / "⚠ N problemas" para o
+  // operador bater o olho antes de salvar. Reusa source-of-truth do bloqueio
+  // de save (Onda 36); aqui só é leitura visual.
+  const headerValidationSummary = (() => {
+    void classificationTick; // mesma dependência
+    const engine = engineRef.current;
+    if (!engine) return null;
+    const layers = Array.from(engine.getAllLayerMetas().values());
+    // Conta só layers classificadas — patterns antigos sem patternRole nunca
+    // geram issue (retrocompat). Se nenhuma layer classificada, retornamos
+    // null pra não poluir o header.
+    const classifiedCount = layers.filter((l) => l.patternRole !== undefined).length;
+    if (classifiedCount === 0) return null;
+    const { errors, warnings } = validatePattern(layers, {
+      hasFabricObject: (id) => engine.getObjectById(id) !== null,
+    });
+    const total = errors.length + warnings.length;
+    return { errors: errors.length, warnings: warnings.length, total };
   })();
 
   function handleSetPatternRole(role: PatternRole | undefined) {
@@ -398,6 +500,36 @@ export default function PadraoEditorPage() {
       toast.error('Dê um nome ao padrão (mínimo 2 caracteres).');
       return;
     }
+
+    // Onda 36 — validação estrutural antes do save. Errors bloqueiam;
+    // warnings exigem confirmação explícita via dialog.
+    const layers = Array.from(engine.getAllLayerMetas().values());
+    const { errors, warnings } = validatePattern(layers, {
+      hasFabricObject: (id) => engine.getObjectById(id) !== null,
+    });
+    if (errors.length > 0) {
+      setValidation({ open: true, mode: 'block', errors, warnings });
+      return;
+    }
+    if (warnings.length > 0) {
+      setValidation({ open: true, mode: 'confirm-save', errors: [], warnings });
+      return;
+    }
+
+    if (isEditMode) {
+      setConfirmUpdateOpen(true);
+      return;
+    }
+    void doSave();
+  }
+
+  /**
+   * Onda 36 — chamado quando o usuário confirma "Salvar mesmo assim" no
+   * dialog de warnings. Pula a re-validação (já validamos no handleSave)
+   * e segue pra confirmação forte de edit ou salva direto em modo create.
+   */
+  function handleConfirmSaveWithWarnings() {
+    setValidation((v) => ({ ...v, open: false }));
     if (isEditMode) {
       setConfirmUpdateOpen(true);
       return;
@@ -499,6 +631,42 @@ export default function PadraoEditorPage() {
               />
             </div>
           </div>
+          {/* Onda 37 Fix-5 — contador global discreto. Aparece só quando o
+              pattern tem layers classificadas. Verde = tudo válido, âmbar =
+              avisos, vermelho = erros (bloqueia save). */}
+          {headerValidationSummary && (
+            <div
+              className={cn(
+                'flex items-center gap-1 rounded px-2 py-1 text-[10px] font-medium uppercase tracking-wider',
+                headerValidationSummary.errors > 0
+                  ? 'border border-danger/30 bg-danger/5 text-danger'
+                  : headerValidationSummary.warnings > 0
+                    ? 'border border-warn/30 bg-warn/5 text-warn'
+                    : 'border border-ok/30 bg-ok/5 text-ok'
+              )}
+              title={
+                headerValidationSummary.errors > 0
+                  ? `${headerValidationSummary.errors} erro(s) bloqueia(m) o save`
+                  : headerValidationSummary.warnings > 0
+                    ? `${headerValidationSummary.warnings} aviso(s) — save pede confirmação`
+                    : 'Padrão pronto para salvar'
+              }
+            >
+              {headerValidationSummary.errors > 0 ? (
+                <>
+                  ⚠ {headerValidationSummary.errors} erro
+                  {headerValidationSummary.errors === 1 ? '' : 's'}
+                </>
+              ) : headerValidationSummary.warnings > 0 ? (
+                <>
+                  ⚠ {headerValidationSummary.warnings} aviso
+                  {headerValidationSummary.warnings === 1 ? '' : 's'}
+                </>
+              ) : (
+                <>✓ Tudo válido</>
+              )}
+            </div>
+          )}
           <Button
             variant="default"
             size="sm"
@@ -546,6 +714,20 @@ export default function PadraoEditorPage() {
           </DialogContent>
         </Dialog>
 
+        {/* Onda 36 — dialog de validação estrutural. Errors bloqueiam save;
+            warnings pedem confirmação explícita. Layers legadas (sem
+            patternRole) não geram issue, então este dialog só aparece
+            quando o operador classificou camadas com Onda 33. */}
+        <PatternValidationDialog
+          open={validation.open}
+          mode={validation.mode}
+          errors={validation.errors}
+          warnings={validation.warnings}
+          onCancel={() => setValidation((v) => ({ ...v, open: false }))}
+          onConfirm={handleConfirmSaveWithWarnings}
+          busy={saving}
+        />
+
         <div className="flex flex-1 overflow-hidden">
           {/* Sidebar */}
           <aside className="flex w-[260px] shrink-0 flex-col gap-4 overflow-y-auto border-r border-border bg-card p-4">
@@ -566,17 +748,19 @@ export default function PadraoEditorPage() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" side="right" className="w-56">
-                <DropdownMenuItem onClick={() => handleAddSlot('nome')} className="gap-2">
+                {/* Onda 37 (ajuste de conceito) — campos inteligentes da spec
+                    de templates. Substituem "Campo de Nome/Profissão/Logo"
+                    do modelo antigo, que acoplava o template ao conteúdo do
+                    pedido. Agora: Área de Texto/Logo são genéricas; nome,
+                    profissão, cargo, etc são apenas TEXTO digitado pelo
+                    operador depois. */}
+                <DropdownMenuItem onClick={handleAddTextArea} className="gap-2">
                   <Type className="h-4 w-4" />
-                  Campo de Nome
+                  Área de Texto
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleAddSlot('profissao')} className="gap-2">
-                  <Briefcase className="h-4 w-4" />
-                  Campo de Profissão
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleAddSlot('logo')} className="gap-2">
+                <DropdownMenuItem onClick={handleAddLogoArea} className="gap-2">
                   <ImagePlus className="h-4 w-4" />
-                  Campo de Logo
+                  Área de Logo
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={handleAddBorda} className="gap-2">
                   <Square className="h-4 w-4" />
@@ -612,9 +796,12 @@ export default function PadraoEditorPage() {
               />
             )}
 
-            {/* Onda 33 — Classificação semântica da camada (spec templates). */}
+            {/* Onda 33 — Classificação semântica da camada (spec templates).
+                Onda 37 Fix-2: também recebe status resumido pra mostrar de
+                relance se a layer está OK ou incompleta. */}
             <PatternClassificationPanel
               state={classificationState}
+              validationStatus={classificationValidationStatus}
               onSetPatternRole={handleSetPatternRole}
               onSetProcess={handleSetProcess}
               onSetMachines={handleSetMachines}

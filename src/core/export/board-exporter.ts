@@ -73,10 +73,17 @@ export interface BoardExportOptions {
 }
 
 /**
+ * @deprecated Onda 37 — caminho antigo de items soltos (cada item exporta em
+ * seu próprio canvas, depois merge por máquina com translate por item).
+ * Não é mais chamado pelo runtime real — ExportSvgDialog usa
+ * `exportSvgByMachine` direto (single-chapa) ou `exportBoardSvgByChapa`
+ * (multi-chapa).
+ *
+ * Mantida temporariamente pra retrocompat de testes externos. Será
+ * removida numa onda de limpeza futura.
+ *
  * Exporta a prancha inteira como Map<machineId, svgString>. Cada SVG tem
  * viewBox da prancha inteira, com cada broche translatado pro seu offset.
- *
- * Map vazio quando nenhum item tem conteúdo exportável.
  */
 export async function exportBoardSvg(options: BoardExportOptions): Promise<Map<string, string>> {
   const { items, assetLookup, fontBufferLoader, textRouting, onTextConversionError } = options;
@@ -172,17 +179,13 @@ export function computeBoardBounds(items: BoardItemExport[]): {
 }
 
 /**
+ * @deprecated Onda 37 — svg-exporter agora emite paths flat (sem wrapper
+ * `<g transform="scale(...)">`). Esta função busca por um formato que não
+ * é mais gerado. Mantida temporariamente pra retrocompat de testes externos
+ * em trânsito. Vai ser removida numa onda de limpeza futura.
+ *
  * Extrai o conteúdo entre `<g transform="scale(...)">` e o `</g>` que fecha
- * esse wrapper, gerado por `svg-exporter.wrapAsProductSvg`. O resultado
- * inclui o wrapper de scale — é justamente esse wrapper que converte coords
- * px (Fabric) em mm.
- *
- * Por que regex e não DOMParser? Em runtime Tauri/Vitest temos jsdom, mas
- * manter este módulo livre de DOM evita inflar bundle e simplifica testes
- * unitários puros. O formato de saída do svg-exporter é fixo (controlado
- * pelo módulo vizinho) — regex é seguro aqui.
- *
- * Exportado pra teste unitário.
+ * esse wrapper. Retorna `null` se o input vier do novo formato flat.
  */
 export function extractInnerScaledGroup(svg: string): string | null {
   // Match: `<g transform="scale(0.25)">\n…\n</g>\n</svg>` — captura desde a
@@ -193,10 +196,12 @@ export function extractInnerScaledGroup(svg: string): string | null {
 }
 
 /**
+ * @deprecated Onda 37 — não é mais usada pelo pipeline de export. O novo
+ * `exportBoardSvgByChapa` chama `svg-exporter.exportSvgByMachine` por chapa,
+ * que já produz SVG completo. Mantida pra retrocompat de testes externos.
+ *
  * Empacota o conteúdo (já com translate por item + scale interno) num SVG
  * completo da prancha. viewBox em mm — mesmo contrato do svg-exporter.
- *
- * Exportado pra teste unitário.
  */
 export function wrapAsBoardSvg(
   innerSvg: string,
@@ -293,40 +298,34 @@ export async function exportBoardSvgByChapa(
   } = options;
 
   if (chapas.length === 0) return [];
+  void boardWidthMm;
+  void boardHeightMm;
 
-  // 1. Export único do canvas inteiro — viewBox da prancha completa.
-  const byMachine = await exportSvgByMachine(canvas, {
-    productWidthMm: boardWidthMm,
-    productHeightMm: boardHeightMm,
-    layers,
-    assetLookup,
-    fontBufferLoader,
-    textRouting,
-    onTextConversionError,
-  });
-
-  if (byMachine.size === 0) return [];
-
-  // 2. Pra cada (chapa × máquina), recorta via translate negativo.
+  // Onda 37 — pipeline novo: 1 chamada exportSvgByMachine POR CHAPA.
+  //
+  // Pré-Onda 37: 1 chamada com viewBox da prancha + translate negativo
+  // por chapa via extractInnerScaledGroup + wrapAsBoardSvg. Esse caminho
+  // dependia do formato `<g transform="scale(...)">` do svg-exporter
+  // legado. Agora o exporter emite paths flat em mm finais — não há mais
+  // wrapper `<g scale>` pra extrair.
+  //
+  // Solução: chamar exportSvgByMachine N vezes (uma por chapa), passando
+  // `contentOffsetMm = { xMm: chapa.bboxMm.leftMm, yMm: chapa.bboxMm.topMm }`.
+  // O exporter já aplica o offset no path level (frame matrix). Cada SVG
+  // sai com viewBox próprio da chapa, paths em coords [0..widthMm, 0..heightMm].
   const results: BoardChapaSvgResult[] = [];
   for (const chapa of chapas) {
-    for (const [machineId, fullSvg] of byMachine) {
-      const inner = extractInnerScaledGroup(fullSvg);
-      if (!inner) continue;
-
-      // Translate negativo desloca conteúdo da prancha pra origem da chapa.
-      // O inner já tem `<g transform="scale(0.25)">` interno (px→mm); o wrapper
-      // translate fica em mm puros pq atua sobre o resultado da scale.
-      const shifted =
-        `<g transform="translate(${-chapa.bboxMm.leftMm} ${-chapa.bboxMm.topMm})">\n` +
-        `${inner}\n` +
-        `</g>`;
-
-      const svg = wrapAsBoardSvg(shifted, {
-        widthMm: chapa.bboxMm.widthMm,
-        heightMm: chapa.bboxMm.heightMm,
-      });
-
+    const byMachine = await exportSvgByMachine(canvas, {
+      productWidthMm: chapa.bboxMm.widthMm,
+      productHeightMm: chapa.bboxMm.heightMm,
+      layers,
+      assetLookup,
+      fontBufferLoader,
+      textRouting,
+      onTextConversionError,
+      contentOffsetMm: { xMm: chapa.bboxMm.leftMm, yMm: chapa.bboxMm.topMm },
+    });
+    for (const [machineId, svg] of byMachine) {
       results.push({
         chapaId: chapa.chapaId,
         filenameToken: chapa.filenameToken,

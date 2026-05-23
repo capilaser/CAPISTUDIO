@@ -33,6 +33,15 @@
  */
 import * as opentype from 'opentype.js';
 
+import {
+  IDENTITY,
+  multiplyMatrix,
+  scaleMatrix,
+  transformPathD,
+  translateMatrix,
+  type AffineMatrix,
+} from './svg-path-transform';
+
 export type TextConversionErrorKind = 'font-not-found' | 'font-unsupported' | 'parse-error';
 
 export class TextConversionError extends Error {
@@ -145,20 +154,23 @@ export async function loadFont(
 }
 
 /**
- * Vetoriza um texto e retorna um fragmento `<g><path/></g>` SVG pronto pra
- * inserir no output do svg-exporter. Coordenadas em px do canvas (svg-exporter
- * reescala pra mm via `<g transform="scale(0.25)">` no wrapper externo).
+ * Vetoriza um texto e retorna um fragmento SVG pronto pra inserir no output
+ * do svg-exporter.
  *
- * Posição: fabric.Text usa top-left do bounding box; opentype getPath usa
- * baseline. Calculamos o offset via `font.ascender / unitsPerEm * fontSize`.
+ * Onda 37 (export técnico flat): coordenadas FINAIS já em mm. Recebe
+ * `worldFrame` opcional (matriz afim externa, e.g. scale px→mm + offset de
+ * label de chapa). Quando informado, o `d` é matematicamente transformado
+ * preservando Bézier (sem flatten). Output: `<path d="..."/>` sem `<g>`,
+ * sem `transform="..."`.
  *
- * Linhas múltiplas: split por \n e empilha verticalmente usando
- * `lineHeight * fontSize`. Sem auto-wrap (fabric.Textbox tem outra lógica que
- * não cabe nesta fase — se aparecer no canvas, é cenário pra Onda futura).
+ * Retrocompat (worldFrame ausente): output legado `<g transform="..."><path/></g>`
+ * em px do canvas. Não é usado mais pelo svg-exporter principal, mantido pra
+ * tests externos e callers em trânsito.
  */
 export async function convertTextToSvgPath(
   options: TextConversionOptions,
-  loader: FontBufferLoader
+  loader: FontBufferLoader,
+  worldFrame?: AffineMatrix
 ): Promise<string> {
   const {
     text,
@@ -201,14 +213,34 @@ export async function convertTextToSvgPath(
       fontCache.set(fontFamily, { ok: false, error });
       throw error;
     }
-    pathDs.push(path.toPathData(2));
+    // Precisão alta no opentype antes do transform (depois reduzimos no
+    // arredondamento final do transformPathD).
+    pathDs.push(path.toPathData(6));
   }
 
   const combinedD = pathDs.join(' ');
 
-  // Transform: translate pro left/top, depois rotate, depois scale.
-  // Ordem corresponde ao layout do fabric.Text (que aplica scale e angle
-  // ao redor do top-left quando originX/Y = 'left'/'top').
+  // Matriz local do texto: translate(left, top) × rotate(angle) × scale(sx, sy).
+  // Ordem confere com fabric.Text origin top-left.
+  const angleRad = (angle * Math.PI) / 180;
+  const cosA = Math.cos(angleRad);
+  const sinA = Math.sin(angleRad);
+  // rotate matrix
+  const rot: AffineMatrix = { a: cosA, b: sinA, c: -sinA, d: cosA, e: 0, f: 0 };
+  const local = multiplyMatrix(
+    multiplyMatrix(translateMatrix(left, top), rot),
+    scaleMatrix(scaleX, scaleY)
+  );
+
+  if (worldFrame) {
+    // Onda 37 — emit flat: d em mm finais, sem `<g transform>`.
+    const m = multiplyMatrix(worldFrame, local);
+    const transformedD = transformPathD(combinedD, m, 4);
+    return `<path d="${transformedD}" fill="${fill}" stroke="none"/>`;
+  }
+
+  // Caminho legado (sem worldFrame): emite com transform string igual ao antigo.
+  void IDENTITY; // marcador de import usado quando worldFrame undefined
   const transforms: string[] = [];
   transforms.push(`translate(${left} ${top})`);
   if (angle !== 0) transforms.push(`rotate(${angle})`);
@@ -229,13 +261,17 @@ export async function convertTextToSvgPath(
  *
  * Não engole erros genéricos (TypeError, programação errada) — só os
  * estruturados de TextConversionError.
+ *
+ * Onda 37 — aceita worldFrame opcional, passado adiante pra
+ * convertTextToSvgPath emitir d em mm finais flat.
  */
 export async function tryConvertTextToSvgPath(
   options: TextConversionOptions,
-  loader: FontBufferLoader
+  loader: FontBufferLoader,
+  worldFrame?: AffineMatrix
 ): Promise<{ ok: true; svg: string } | { ok: false; error: TextConversionError }> {
   try {
-    const svg = await convertTextToSvgPath(options, loader);
+    const svg = await convertTextToSvgPath(options, loader, worldFrame);
     return { ok: true, svg };
   } catch (err) {
     if (err instanceof TextConversionError) {

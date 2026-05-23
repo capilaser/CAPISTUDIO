@@ -14,7 +14,8 @@ import { ChevronDown, ChevronRight, Layers as LayersIcon } from 'lucide-react';
 import { type RefObject } from 'react';
 
 import type { CanvasEngine, LayerNode } from '@/core/canvas/canvas-engine';
-import { ChildCountBadge, OperationBadge } from './LayerBadge';
+import { summarizeNodeValidation } from '@/core/patterns/validate-pattern';
+import { ChildCountBadge, OperationBadge, PatternRoleBadge } from './LayerBadge';
 import { LayerActions } from './LayerActions';
 import { LayerBlendModeSelect } from './LayerBlendModeSelect';
 import { LayerOpacitySlider } from './LayerOpacitySlider';
@@ -161,6 +162,20 @@ export function LayerRow({
                 operations={node.children.filter((c) => c.kind === 'operation').length}
               />
             )}
+            {/* Onda 37 Fix-3 — badge de patternRole pra leitura rápida no painel.
+                Vermelho quando há problema (mesma source de truth do save). */}
+            {node.patternRole &&
+              (() => {
+                const status = summarizeNodeValidation(node);
+                const hasIssue = status.kind === 'incomplete';
+                return (
+                  <PatternRoleBadge
+                    role={node.patternRole}
+                    hasIssue={hasIssue}
+                    title={hasIssue ? status.message : node.patternRole}
+                  />
+                );
+              })()}
             {selected && (
               <>
                 <LayerOpacitySlider value={node.opacity} onChange={onOpacityChange} />

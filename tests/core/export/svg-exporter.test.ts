@@ -271,13 +271,13 @@ describe('svg-exporter (Onda 9 Fase 9D)', () => {
       expect(out).toContain('stroke="#0000FF"');
     });
 
-    it('wrapAsProductSvg emite header com width/height/viewBox em mm', () => {
+    it('wrapAsProductSvg emite header com width/height/viewBox em mm (Onda 37: SVG flat, sem `<g scale>`)', () => {
       const out = wrapAsProductSvg('<g/>', 100, 50);
       expect(out).toContain('width="100mm"');
       expect(out).toContain('height="50mm"');
       expect(out).toContain('viewBox="0 0 100 50"');
-      // Scale wrapper 1/4 (px→mm).
-      expect(out).toMatch(/scale\(0\.25\)/);
+      // Onda 37: scale(0.25) foi absorvido no path level — wrapper é flat.
+      expect(out).not.toMatch(/scale\(0\.25\)/);
     });
 
     it('OPERATION_STROKE expõe as 3 cores semânticas', () => {
@@ -347,8 +347,11 @@ describe('svg-exporter (Onda 9 Fase 9D)', () => {
       expect(out.has('fiber-laser')).toBe(true);
 
       // Warning saiu pro console identificando o slot ignorado.
+      // Onda 35: mensagem mudou ao centralizar resolução em routing-resolver
+      // (motivo legível agora vem do `RoutingResolution.reason`). Padrão
+      // ainda permite operador localizar o slot — id + nome + razão.
       expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringMatching(/camada visual.*sem engravingId nem markingId.*ignorada/)
+        expect.stringMatching(/camada id=.*sem rota.*visual sem engravingId\/markingId/)
       );
 
       warnSpy.mockRestore();
@@ -564,7 +567,11 @@ describe('svg-exporter (Onda 9 Fase 9D)', () => {
       expect(masterSvg).toMatch(/<path d="M[^"]+"\s+fill="#FF0000"/);
     });
 
-    it('texto sem parentLayerId lança erro de routing claro', async () => {
+    it('Onda 35: texto sem parentLayerId é ignorado com warn (não lança)', async () => {
+      // Onda 35: alinhado com política Onda 18 de "warn+skip em vez de
+      // throw" pra slots/textos sem rota. Banco inconsistente (FK quebrada)
+      // continua lançando — coberto em outro teste. Aqui o texto solto é
+      // simplesmente ignorado, e o resto do export segue normalmente.
       const text = new fabric.IText('Solto', {
         left: 100,
         top: 50,
@@ -586,15 +593,20 @@ describe('svg-exporter (Onda 9 Fase 9D)', () => {
         materialId: null,
       });
 
-      await expect(
-        exportSvgByMachine(engine.canvas, {
-          productWidthMm: 300,
-          productHeightMm: 90,
-          layers,
-          assetLookup: makeLookup({}),
-          fontBufferLoader: diskFontLoader(),
-        })
-      ).rejects.toThrow(/sem parentLayerId/);
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const out = await exportSvgByMachine(engine.canvas, {
+        productWidthMm: 300,
+        productHeightMm: 90,
+        layers,
+        assetLookup: makeLookup({}),
+        fontBufferLoader: diskFontLoader(),
+      });
+
+      // Texto órfão ignorado → nenhum SVG gerado (não há outra geometria).
+      expect(out.size).toBe(0);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(/texto id=.*sem rota/));
+      warnSpy.mockRestore();
     });
   });
 
