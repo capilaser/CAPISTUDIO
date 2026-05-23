@@ -1,0 +1,17 @@
+[
+  {
+    "id": "abs-escovado",
+    "label": "ABS Escovado",
+    "brushed": 1
+  },
+  {
+    "id": "acrilico-espelhado",
+    "label": "Acrílico Espelhado",
+    "brushed": 0
+  },
+  {
+    "id": "acrilico-solido",
+    "label": "Acrílico Sólido",
+    "brushed": 0
+  }
+]

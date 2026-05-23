@@ -1,0 +1,47 @@
+[
+  {
+    "id": "montserrat",
+    "name": "Montserrat",
+    "category": "Moderno",
+    "family": "Montserrat",
+    "source": "local",
+    "file": "resources/fonts/Montserrat-Variable.ttf",
+    "created_at": 1778347857
+  },
+  {
+    "id": "playfair-display",
+    "name": "Playfair Display",
+    "category": "Serifado",
+    "family": "Playfair Display",
+    "source": "local",
+    "file": "resources/fonts/PlayfairDisplay-Variable.ttf",
+    "created_at": 1778347857
+  },
+  {
+    "id": "bebas-neue",
+    "name": "Bebas Neue",
+    "category": "Display",
+    "family": "Bebas Neue",
+    "source": "local",
+    "file": "resources/fonts/BebasNeue-Regular.ttf",
+    "created_at": 1778347857
+  },
+  {
+    "id": "roboto-slab",
+    "name": "Roboto Slab",
+    "category": "Corporativo",
+    "family": "Roboto Slab",
+    "source": "local",
+    "file": "resources/fonts/RobotoSlab-Variable.ttf",
+    "created_at": 1778347857
+  },
+  {
+    "id": "caveat",
+    "name": "Caveat",
+    "category": "Script",
+    "family": "Caveat",
+    "source": "local",
+    "file": "resources/fonts/Caveat-Variable.ttf",
+    "created_at": 1778347857
+  }
+]

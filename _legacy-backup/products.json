@@ -1,0 +1,36 @@
+[
+  {
+    "id": "broche-60x25",
+    "type": "broche",
+    "label": "Broche 60 x 25",
+    "icon": "🏷️",
+    "status": "published",
+    "canvas_mm": "{\"width\":60,\"height\":25}",
+    "view_box": "0 0 60 25",
+    "allowed_slot_types": "[\"logo\",\"name\",\"profession\"]",
+    "constraints": "{\"sizeLocked\":true,\"minGapMm\":2}",
+    "version_rev": 1,
+    "base_svg": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\" \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\">\n<!-- Creator: CorelDRAW (Versão OEM) -->\n<svg xmlns=\"http://www.w3.org/2000/svg\" xml:space=\"preserve\" width=\"60.0759mm\" height=\"25.076mm\" version=\"1.1\" style=\"shape-rendering:geometricPrecision; text-rendering:geometricPrecision; image-rendering:optimizeQuality; fill-rule:evenodd; clip-rule:evenodd\"\nviewBox=\"0 0 5144.73 2147.44\"\n xmlns:xlink=\"http://www.w3.org/1999/xlink\"\n xmlns:xodm=\"http://www.corel.com/coreldraw/odm/2003\">\n <defs>\n  <style type=\"text/css\">\n   <![CDATA[\n    .str0 {stroke:#373435;stroke-width:6.53;stroke-miterlimit:22.9256}\n    .fil0 {fill:none}\n   ]]>\n  </style>\n </defs>\n <g id=\"Camada_x0020_1\">\n  <metadata id=\"CorelCorpID_0Corel-Layer\"/>\n  <path class=\"fil0 str0\" d=\"M367.21 3.26c0,0 4410.31,0 4410.31,0 200.18,0 363.95,163.77 363.95,363.95 0,0 0,1413.02 0,1413.02 0,200.17 -163.77,363.94 -363.95,363.94 0,0 -4410.31,0 -4410.31,0 -200.18,0 -363.95,-163.77 -363.95,-363.94 0,0 0,-1413.02 0,-1413.02 0,-200.18 163.77,-363.95 363.95,-363.95z\"/>\n </g>\n</svg>",
+    "config": null,
+    "created_at": 1778347857,
+    "updated_at": 1778347857,
+    "deleted_at": null
+  },
+  {
+    "id": "placa-300x90",
+    "type": "placa",
+    "label": "Placa 300 x 90",
+    "icon": "🪪",
+    "status": "published",
+    "canvas_mm": "{\"width\":300,\"height\":90}",
+    "view_box": "0 0 300 90",
+    "allowed_slot_types": "[\"logo\",\"name\",\"profession\",\"free-text\",\"qrcode\",\"image\"]",
+    "constraints": "{\"sizeLocked\":true,\"minGapMm\":2}",
+    "version_rev": 1,
+    "base_svg": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\" \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\">\n<!-- Creator: CorelDRAW (Versão OEM) -->\n<svg xmlns=\"http://www.w3.org/2000/svg\" xml:space=\"preserve\" width=\"300.2mm\" height=\"90.2mm\" version=\"1.1\" style=\"shape-rendering:geometricPrecision; text-rendering:geometricPrecision; image-rendering:optimizeQuality; fill-rule:evenodd; clip-rule:evenodd\"\nviewBox=\"0 0 24333.28 7311.33\"\n xmlns:xlink=\"http://www.w3.org/1999/xlink\"\n xmlns:xodm=\"http://www.corel.com/coreldraw/odm/2003\">\n <defs>\n  <style type=\"text/css\">\n   <![CDATA[\n    .str0 {stroke:#373435;stroke-width:16.21;stroke-miterlimit:22.9256}\n    .fil0 {fill:none}\n   ]]>\n  </style>\n </defs>\n <g id=\"Camada_x0020_1\">\n  <metadata id=\"CorelCorpID_0Corel-Layer\"/>\n  <path class=\"fil0 str0\" d=\"M8.11 8.11l20669.51 0c2006.16,0 3647.56,1641.4 3647.56,3647.57l0 3647.55 -20669.51 0c-2006.16,0 -3647.56,-1641.41 -3647.56,-3647.55l0 -3647.57z\"/>\n </g>\n</svg>",
+    "config": "{\"productionModules\":[{\"id\":\"placa-base\",\"label\":\"Base da Placa\",\"operation\":\"preview\"},{\"id\":\"aplique-esquerdo\",\"label\":\"Aplique Esquerdo + Logo\",\"operation\":\"engrave\"},{\"id\":\"aplique-cargo\",\"label\":\"Aplique Cargo + Escrita\",\"operation\":\"engrave\"},{\"id\":\"nome-recorte\",\"label\":\"Nome para Corte\",\"operation\":\"cut\"}]}",
+    "created_at": 1778347857,
+    "updated_at": 1778347857,
+    "deleted_at": null
+  }
+]

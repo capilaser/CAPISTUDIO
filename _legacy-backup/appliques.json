@@ -1,0 +1,44 @@
+[
+  {
+    "id": "aplique-1-formato-d",
+    "name": "Aplique 1 — Formato D",
+    "file_path": "resource://fixtures/appliques/aplique-1-formato-d.svg",
+    "thumbnail_path": null,
+    "width_mm": 100.2,
+    "height_mm": 90.2,
+    "tags": "[]",
+    "metadata": null,
+    "created_at": 1778347857,
+    "deleted_at": null,
+    "operation": "corte",
+    "machines": "[\"fiber-laser\"]"
+  },
+  {
+    "id": "aplique-2-quadrado",
+    "name": "Aplique 2 — Quadrado",
+    "file_path": "resource://fixtures/appliques/aplique-2-quadrado.svg",
+    "thumbnail_path": null,
+    "width_mm": 100.2,
+    "height_mm": 90.2,
+    "tags": "[]",
+    "metadata": null,
+    "created_at": 1778347857,
+    "deleted_at": null,
+    "operation": "corte",
+    "machines": "[\"fiber-laser\"]"
+  },
+  {
+    "id": "aplique-3-pill",
+    "name": "Aplique 3 — Pill",
+    "file_path": "resource://fixtures/appliques/aplique-3-pill.svg",
+    "thumbnail_path": null,
+    "width_mm": 95.2,
+    "height_mm": 15.2,
+    "tags": "[]",
+    "metadata": null,
+    "created_at": 1778347857,
+    "deleted_at": null,
+    "operation": "marcacao",
+    "machines": "[\"master-biro\",\"fiber-laser\"]"
+  }
+]

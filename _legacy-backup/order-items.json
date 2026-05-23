@@ -1,0 +1,86 @@
+[
+  {
+    "id": "8f0163d8-00ed-49a7-bd53-235bb6de8de3",
+    "order_id": "0085ddc7-ad41-43c4-9aab-f5f603ab0592",
+    "position": 0,
+    "product_id": "broche-60x25",
+    "pattern_id": null,
+    "material_id": "abs-escovado-prata",
+    "fields": "{}",
+    "canvas_json": "{}",
+    "created_at": 1778853075,
+    "updated_at": 1778853075
+  },
+  {
+    "id": "f884d37d-bbf0-4470-89a8-4f521fa135da",
+    "order_id": "0085ddc7-ad41-43c4-9aab-f5f603ab0592",
+    "position": 1,
+    "product_id": "placa-300x90",
+    "pattern_id": null,
+    "material_id": "abs-escovado-rose",
+    "fields": "{}",
+    "canvas_json": "{}",
+    "created_at": 1778853075,
+    "updated_at": 1778853075
+  },
+  {
+    "id": "1561913e-ba18-4e13-8735-6ae7abe87448",
+    "order_id": "ebda07db-3994-4ab8-bf81-b1271dd039a5",
+    "position": 0,
+    "product_id": "broche-60x25",
+    "pattern_id": "wave1-broche-60x25-nome-centro",
+    "material_id": "abs-escovado-prata",
+    "fields": "{}",
+    "canvas_json": "{}",
+    "created_at": 1779025340,
+    "updated_at": 1779025340
+  },
+  {
+    "id": "873333aa-476c-4a9c-9a69-523fbe993c83",
+    "order_id": "6897cd0c-0985-4816-b870-caa5f433816b",
+    "position": 0,
+    "product_id": "broche-60x25",
+    "pattern_id": "wave1-broche-60x25-2-tracos",
+    "material_id": "abs-escovado-dourado",
+    "fields": "{}",
+    "canvas_json": "{}",
+    "created_at": 1779050912,
+    "updated_at": 1779050912
+  },
+  {
+    "id": "5d7c8fde-3263-4603-8563-e2fa085d5f9d",
+    "order_id": "85624b2a-c8cf-483a-a378-0d23f2ba572c",
+    "position": 0,
+    "product_id": "broche-60x25",
+    "pattern_id": "wave1-broche-60x25-borda-logo-nome-prof",
+    "material_id": "abs-escovado-dourado",
+    "fields": "{}",
+    "canvas_json": "{}",
+    "created_at": 1779057918,
+    "updated_at": 1779057918
+  },
+  {
+    "id": "ef52793c-ca8f-4b21-8a32-e4915577038b",
+    "order_id": "91801ac6-291a-405f-83b4-f2089997f66d",
+    "position": 0,
+    "product_id": "broche-60x25",
+    "pattern_id": "wave1-broche-60x25-borda-logo-nome-prof",
+    "material_id": "abs-escovado-dourado",
+    "fields": "{}",
+    "canvas_json": "{}",
+    "created_at": 1779061720,
+    "updated_at": 1779061720
+  },
+  {
+    "id": "3651393b-1ea1-4d29-bc82-9ea89705cd82",
+    "order_id": "18fdf70e-2576-43a6-a6e7-a2113459798e",
+    "position": 0,
+    "product_id": "broche-60x25",
+    "pattern_id": "pattern-1779188796219-229a2384",
+    "material_id": "abs-escovado-dourado",
+    "fields": "{}",
+    "canvas_json": "{}",
+    "created_at": 1779217149,
+    "updated_at": 1779217149
+  }
+]

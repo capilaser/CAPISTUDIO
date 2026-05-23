@@ -1,0 +1,68 @@
+{
+  "version": "6.9.1",
+  "objects": [
+    {
+      "rx": 0,
+      "ry": 0,
+      "id": "bd6b1431-195e-4b9a-b5ed-1ede79318a73",
+      "type": "Rect",
+      "version": "6.9.1",
+      "originX": "left",
+      "originY": "top",
+      "left": 88.8333,
+      "top": 22,
+      "width": 124.1667,
+      "height": 24.8333,
+      "fill": "rgba(167, 139, 250, 0.06)",
+      "stroke": "#a78bfa",
+      "strokeWidth": 1.5,
+      "strokeDashArray": [4, 3],
+      "strokeLineCap": "butt",
+      "strokeDashOffset": 0,
+      "strokeLineJoin": "miter",
+      "strokeUniform": true,
+      "strokeMiterLimit": 4,
+      "scaleX": 1,
+      "scaleY": 1,
+      "angle": 0,
+      "flipX": false,
+      "flipY": false,
+      "opacity": 1,
+      "shadow": null,
+      "visible": true,
+      "backgroundColor": "",
+      "fillRule": "nonzero",
+      "paintFirst": "fill",
+      "globalCompositeOperation": "source-over",
+      "skewX": 0,
+      "skewY": 0
+    }
+  ],
+  "capi": {
+    "items": [{ "productId": "broche-60x25", "offsetX": 0, "offsetY": 0 }],
+    "units": "mm",
+    "schemaVersion": 3,
+    "layers": [
+      {
+        "kind": "visual",
+        "id": "bd6b1431-195e-4b9a-b5ed-1ede79318a73",
+        "parentLayerId": null,
+        "name": "Camada 1",
+        "zIndex": 2,
+        "visible": true,
+        "locked": false,
+        "materialId": null,
+        "patternRole": "TEXT_AREA",
+        "boundsMm": {
+          "x": 22.70833333333334,
+          "y": 5.25,
+          "width": 31.041666666666664,
+          "height": 6.208333333333333
+        },
+        "machineTargets": ["M2"],
+        "lockGranular": { "position": false },
+        "processType": "gravacao"
+      }
+    ]
+  }
+}

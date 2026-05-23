@@ -1,0 +1,149 @@
+{
+  "version": "6.0.0",
+  "objects": [
+    {
+      "type": "line",
+      "id": "decor-traco",
+      "version": "6.0.0",
+      "originX": "left",
+      "originY": "top",
+      "x1": 340,
+      "y1": 60,
+      "x2": 340,
+      "y2": 300,
+      "left": 340,
+      "top": 60,
+      "stroke": "#2a2c2e",
+      "strokeWidth": 1,
+      "strokeUniform": true,
+      "fill": "",
+      "selectable": true,
+      "evented": true
+    },
+    {
+      "type": "rect",
+      "id": "slot-logo",
+      "version": "6.0.0",
+      "originX": "left",
+      "originY": "top",
+      "left": 60,
+      "top": 60,
+      "width": 240,
+      "height": 240,
+      "fill": "transparent",
+      "stroke": "",
+      "strokeWidth": 0,
+      "selectable": true,
+      "evented": true,
+      "capiSlot": {
+        "id": "slot-logo",
+        "type": "logo",
+        "x": 15,
+        "y": 15,
+        "maxWidth": 60,
+        "maxHeight": 60,
+        "autoCenter": true,
+        "autoFit": false
+      }
+    },
+    {
+      "type": "rect",
+      "id": "slot-nome",
+      "version": "6.0.0",
+      "originX": "left",
+      "originY": "top",
+      "left": 380,
+      "top": 100,
+      "width": 760,
+      "height": 80,
+      "fill": "transparent",
+      "stroke": "",
+      "strokeWidth": 0,
+      "selectable": true,
+      "evented": true,
+      "capiSlot": {
+        "id": "slot-nome",
+        "type": "nome",
+        "x": 95,
+        "y": 25,
+        "maxWidth": 190,
+        "maxHeight": 20,
+        "autoCenter": true,
+        "autoFit": true
+      }
+    },
+    {
+      "type": "rect",
+      "id": "slot-profissao",
+      "version": "6.0.0",
+      "originX": "left",
+      "originY": "top",
+      "left": 380,
+      "top": 220,
+      "width": 760,
+      "height": 60,
+      "fill": "transparent",
+      "stroke": "",
+      "strokeWidth": 0,
+      "selectable": true,
+      "evented": true,
+      "capiSlot": {
+        "id": "slot-profissao",
+        "type": "profissao",
+        "x": 95,
+        "y": 55,
+        "maxWidth": 190,
+        "maxHeight": 15,
+        "autoCenter": true,
+        "autoFit": true
+      }
+    }
+  ],
+  "capi": {
+    "items": [{ "productId": "placa-300x90", "offsetX": 0, "offsetY": 0 }],
+    "units": "mm",
+    "schemaVersion": 3,
+    "layers": [
+      {
+        "id": "decor-traco",
+        "parentLayerId": null,
+        "name": "Traço",
+        "zIndex": 0,
+        "visible": true,
+        "locked": false,
+        "kind": "visual",
+        "materialId": null
+      },
+      {
+        "id": "slot-logo",
+        "parentLayerId": null,
+        "name": "Logo",
+        "zIndex": 1,
+        "visible": true,
+        "locked": false,
+        "kind": "visual",
+        "materialId": null
+      },
+      {
+        "id": "slot-nome",
+        "parentLayerId": null,
+        "name": "Nome",
+        "zIndex": 2,
+        "visible": true,
+        "locked": false,
+        "kind": "visual",
+        "materialId": null
+      },
+      {
+        "id": "slot-profissao",
+        "parentLayerId": null,
+        "name": "Profissão",
+        "zIndex": 3,
+        "visible": true,
+        "locked": false,
+        "kind": "visual",
+        "materialId": null
+      }
+    ]
+  }
+}

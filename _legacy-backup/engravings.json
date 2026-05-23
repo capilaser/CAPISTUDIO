@@ -1,0 +1,17 @@
+[
+  {
+    "id": "balanca-advogado",
+    "name": "Balança Advogado",
+    "file_path": "resource://fixtures/engravings/balanca-advogado.svg",
+    "thumbnail_path": null,
+    "width_mm": 69.9985,
+    "height_mm": 64.0889,
+    "tags": "[\"profissao\",\"advogado\",\"direito\"]",
+    "metadata": null,
+    "created_at": 1778458544,
+    "deleted_at": null,
+    "category_id": "profissoes",
+    "operation": "gravacao",
+    "machines": "[\"fiber-laser\"]"
+  }
+]

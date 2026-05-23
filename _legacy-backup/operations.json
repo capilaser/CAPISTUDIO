@@ -1,0 +1,37 @@
+[
+  {
+    "id": "contorno",
+    "label": "Contorno",
+    "default_color": "#000000"
+  },
+  {
+    "id": "corte-laser",
+    "label": "Corte Laser",
+    "default_color": "#2563eb"
+  },
+  {
+    "id": "corte",
+    "label": "Corte",
+    "default_color": "#000000"
+  },
+  {
+    "id": "gravacao",
+    "label": "Gravação",
+    "default_color": "#dc2626"
+  },
+  {
+    "id": "marcacao",
+    "label": "Marcação",
+    "default_color": "#2563eb"
+  },
+  {
+    "id": "aplique",
+    "label": "Aplique",
+    "default_color": "#7c3aed"
+  },
+  {
+    "id": "gravacao-aplique",
+    "label": "Gravação Aplique",
+    "default_color": "#d97706"
+  }
+]

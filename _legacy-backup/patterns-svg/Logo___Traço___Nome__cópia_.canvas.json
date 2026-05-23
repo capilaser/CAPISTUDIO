@@ -1,0 +1,149 @@
+{
+  "version": "6.0.0",
+  "objects": [
+    {
+      "type": "line",
+      "id": "decor-traco",
+      "version": "6.0.0",
+      "originX": "left",
+      "originY": "top",
+      "x1": 80,
+      "y1": 16,
+      "x2": 80,
+      "y2": 84,
+      "left": 80,
+      "top": 16,
+      "stroke": "#2a2c2e",
+      "strokeWidth": 1,
+      "strokeUniform": true,
+      "fill": "",
+      "selectable": true,
+      "evented": true
+    },
+    {
+      "type": "rect",
+      "id": "slot-logo",
+      "version": "6.0.0",
+      "originX": "left",
+      "originY": "top",
+      "left": 12,
+      "top": 20,
+      "width": 60,
+      "height": 60,
+      "fill": "transparent",
+      "stroke": "",
+      "strokeWidth": 0,
+      "selectable": true,
+      "evented": true,
+      "capiSlot": {
+        "id": "slot-logo",
+        "type": "logo",
+        "x": 3,
+        "y": 5,
+        "maxWidth": 15,
+        "maxHeight": 15,
+        "autoCenter": true,
+        "autoFit": false
+      }
+    },
+    {
+      "type": "rect",
+      "id": "slot-nome",
+      "version": "6.0.0",
+      "originX": "left",
+      "originY": "top",
+      "left": 92,
+      "top": 26,
+      "width": 136,
+      "height": 20,
+      "fill": "transparent",
+      "stroke": "",
+      "strokeWidth": 0,
+      "selectable": true,
+      "evented": true,
+      "capiSlot": {
+        "id": "slot-nome",
+        "type": "nome",
+        "x": 23,
+        "y": 6.5,
+        "maxWidth": 34,
+        "maxHeight": 5,
+        "autoCenter": true,
+        "autoFit": true
+      }
+    },
+    {
+      "type": "rect",
+      "id": "slot-profissao",
+      "version": "6.0.0",
+      "originX": "left",
+      "originY": "top",
+      "left": 92,
+      "top": 56,
+      "width": 136,
+      "height": 16,
+      "fill": "transparent",
+      "stroke": "",
+      "strokeWidth": 0,
+      "selectable": true,
+      "evented": true,
+      "capiSlot": {
+        "id": "slot-profissao",
+        "type": "profissao",
+        "x": 23,
+        "y": 14,
+        "maxWidth": 34,
+        "maxHeight": 4,
+        "autoCenter": true,
+        "autoFit": true
+      }
+    }
+  ],
+  "capi": {
+    "items": [{ "productId": "broche-60x25", "offsetX": 0, "offsetY": 0 }],
+    "units": "mm",
+    "schemaVersion": 3,
+    "layers": [
+      {
+        "id": "decor-traco",
+        "parentLayerId": null,
+        "name": "Traço",
+        "zIndex": 0,
+        "visible": true,
+        "locked": false,
+        "kind": "visual",
+        "materialId": null
+      },
+      {
+        "id": "slot-logo",
+        "parentLayerId": null,
+        "name": "Logo",
+        "zIndex": 1,
+        "visible": true,
+        "locked": false,
+        "kind": "visual",
+        "materialId": null
+      },
+      {
+        "id": "slot-nome",
+        "parentLayerId": null,
+        "name": "Nome",
+        "zIndex": 2,
+        "visible": true,
+        "locked": false,
+        "kind": "visual",
+        "materialId": null
+      },
+      {
+        "id": "slot-profissao",
+        "parentLayerId": null,
+        "name": "Profissão",
+        "zIndex": 3,
+        "visible": true,
+        "locked": false,
+        "kind": "visual",
+        "materialId": null
+      }
+    ]
+  }
+}

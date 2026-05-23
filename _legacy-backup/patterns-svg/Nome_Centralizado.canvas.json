@@ -1,0 +1,48 @@
+{
+  "version": "6.0.0",
+  "objects": [
+    {
+      "type": "rect",
+      "id": "slot-nome",
+      "version": "6.0.0",
+      "originX": "left",
+      "originY": "top",
+      "left": 120,
+      "top": 140,
+      "width": 960,
+      "height": 80,
+      "fill": "transparent",
+      "stroke": "",
+      "strokeWidth": 0,
+      "selectable": true,
+      "evented": true,
+      "capiSlot": {
+        "id": "slot-nome",
+        "type": "nome",
+        "x": 30,
+        "y": 35,
+        "maxWidth": 240,
+        "maxHeight": 20,
+        "autoCenter": true,
+        "autoFit": true
+      }
+    }
+  ],
+  "capi": {
+    "items": [{ "productId": "placa-300x90", "offsetX": 0, "offsetY": 0 }],
+    "units": "mm",
+    "schemaVersion": 3,
+    "layers": [
+      {
+        "id": "slot-nome",
+        "parentLayerId": null,
+        "name": "Nome",
+        "zIndex": 0,
+        "visible": true,
+        "locked": false,
+        "kind": "visual",
+        "materialId": null
+      }
+    ]
+  }
+}

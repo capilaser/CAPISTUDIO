@@ -1,0 +1,74 @@
+[
+  {
+    "id": "abs-escovado-prata",
+    "family_id": "abs-escovado",
+    "label": "Prata",
+    "swatch": "#c9c9c3",
+    "png_path": "materials/abs-escovado-prata.png",
+    "fallback_stops": "[{\"offset\":\"0%\",\"color\":\"#f1f1ee\"},{\"offset\":\"48%\",\"color\":\"#c9c9c3\"},{\"offset\":\"100%\",\"color\":\"#989992\"}]"
+  },
+  {
+    "id": "abs-escovado-rose",
+    "family_id": "abs-escovado",
+    "label": "Rose Gold",
+    "swatch": "#d4848a",
+    "png_path": "materials/abs-escovado-rose.png",
+    "fallback_stops": "[{\"offset\":\"0%\",\"color\":\"#f9c9c9\"},{\"offset\":\"48%\",\"color\":\"#d4848a\"},{\"offset\":\"100%\",\"color\":\"#b06068\"}]"
+  },
+  {
+    "id": "abs-escovado-dourado",
+    "family_id": "abs-escovado",
+    "label": "Dourado",
+    "swatch": "#d5aa35",
+    "png_path": "materials/abs-escovado-dourado.png",
+    "fallback_stops": "[{\"offset\":\"0%\",\"color\":\"#ffdc70\"},{\"offset\":\"48%\",\"color\":\"#d5aa35\"},{\"offset\":\"100%\",\"color\":\"#a47d2c\"}]"
+  },
+  {
+    "id": "abs-escovado-bronze",
+    "family_id": "abs-escovado",
+    "label": "Bronze",
+    "swatch": "#a47d2c",
+    "png_path": "materials/abs-escovado-bronze.png",
+    "fallback_stops": "[{\"offset\":\"0%\",\"color\":\"#c4954a\"},{\"offset\":\"48%\",\"color\":\"#a47d2c\"},{\"offset\":\"100%\",\"color\":\"#6e521a\"}]"
+  },
+  {
+    "id": "acrilico-espelhado-dourado",
+    "family_id": "acrilico-espelhado",
+    "label": "Dourado",
+    "swatch": "#d4af37",
+    "png_path": "materials/acrilico-espelhado-dourado.png",
+    "fallback_stops": "[{\"offset\":\"0%\",\"color\":\"#f0d985\"},{\"offset\":\"48%\",\"color\":\"#d4af37\"},{\"offset\":\"100%\",\"color\":\"#9c8128\"}]"
+  },
+  {
+    "id": "acrilico-espelhado-prata",
+    "family_id": "acrilico-espelhado",
+    "label": "Prata",
+    "swatch": "#c0c0c0",
+    "png_path": "materials/acrilico-espelhado-prata.png",
+    "fallback_stops": "[{\"offset\":\"0%\",\"color\":\"#e8e8e8\"},{\"offset\":\"48%\",\"color\":\"#c0c0c0\"},{\"offset\":\"100%\",\"color\":\"#8a8a8a\"}]"
+  },
+  {
+    "id": "acrilico-espelhado-rose-gold",
+    "family_id": "acrilico-espelhado",
+    "label": "Rose Gold",
+    "swatch": "#b76e79",
+    "png_path": "materials/acrilico-espelhado-rose-gold.png",
+    "fallback_stops": "[{\"offset\":\"0%\",\"color\":\"#e8b4be\"},{\"offset\":\"48%\",\"color\":\"#b76e79\"},{\"offset\":\"100%\",\"color\":\"#864e58\"}]"
+  },
+  {
+    "id": "acrilico-solido-branco",
+    "family_id": "acrilico-solido",
+    "label": "Branco",
+    "swatch": "#f5f5f5",
+    "png_path": "materials/acrilico-solido-branco.png",
+    "fallback_stops": "[{\"offset\":\"0%\",\"color\":\"#fafafa\"},{\"offset\":\"48%\",\"color\":\"#f5f5f5\"},{\"offset\":\"100%\",\"color\":\"#e8e8e8\"}]"
+  },
+  {
+    "id": "acrilico-solido-preto",
+    "family_id": "acrilico-solido",
+    "label": "Preto",
+    "swatch": "#1a1a1a",
+    "png_path": "materials/acrilico-solido-preto.png",
+    "fallback_stops": "[{\"offset\":\"0%\",\"color\":\"#2a2a2a\"},{\"offset\":\"48%\",\"color\":\"#1a1a1a\"},{\"offset\":\"100%\",\"color\":\"#0d0d0d\"}]"
+  }
+]

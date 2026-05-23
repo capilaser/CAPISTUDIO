@@ -1,0 +1,106 @@
+{
+  "version": "6.0.0",
+  "objects": [
+    {
+      "type": "line",
+      "id": "decor-traco-esq",
+      "version": "6.0.0",
+      "originX": "left",
+      "originY": "top",
+      "x1": 32,
+      "y1": 16,
+      "x2": 32,
+      "y2": 84,
+      "left": 32,
+      "top": 16,
+      "stroke": "#2a2c2e",
+      "strokeWidth": 1,
+      "strokeUniform": true,
+      "fill": "",
+      "selectable": true,
+      "evented": true
+    },
+    {
+      "type": "line",
+      "id": "decor-traco-dir",
+      "version": "6.0.0",
+      "originX": "left",
+      "originY": "top",
+      "x1": 208,
+      "y1": 16,
+      "x2": 208,
+      "y2": 84,
+      "left": 208,
+      "top": 16,
+      "stroke": "#2a2c2e",
+      "strokeWidth": 1,
+      "strokeUniform": true,
+      "fill": "",
+      "selectable": true,
+      "evented": true
+    },
+    {
+      "type": "rect",
+      "id": "slot-nome",
+      "version": "6.0.0",
+      "originX": "left",
+      "originY": "top",
+      "left": 44,
+      "top": 38,
+      "width": 152,
+      "height": 24,
+      "fill": "transparent",
+      "stroke": "",
+      "strokeWidth": 0,
+      "selectable": true,
+      "evented": true,
+      "capiSlot": {
+        "id": "slot-nome",
+        "type": "nome",
+        "x": 11,
+        "y": 9.5,
+        "maxWidth": 38,
+        "maxHeight": 6,
+        "autoCenter": true,
+        "autoFit": true
+      }
+    }
+  ],
+  "capi": {
+    "items": [{ "productId": "broche-60x25", "offsetX": 0, "offsetY": 0 }],
+    "units": "mm",
+    "schemaVersion": 3,
+    "layers": [
+      {
+        "id": "decor-traco-esq",
+        "parentLayerId": null,
+        "name": "Traço Esquerdo",
+        "zIndex": 0,
+        "visible": true,
+        "locked": false,
+        "kind": "visual",
+        "materialId": null
+      },
+      {
+        "id": "decor-traco-dir",
+        "parentLayerId": null,
+        "name": "Traço Direito",
+        "zIndex": 1,
+        "visible": true,
+        "locked": false,
+        "kind": "visual",
+        "materialId": null
+      },
+      {
+        "id": "slot-nome",
+        "parentLayerId": null,
+        "name": "Nome",
+        "zIndex": 2,
+        "visible": true,
+        "locked": false,
+        "kind": "visual",
+        "materialId": null
+      }
+    ]
+  }
+}

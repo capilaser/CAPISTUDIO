@@ -1,0 +1,74 @@
+{
+  "version": "6.9.1",
+  "objects": [
+    {
+      "id": "766ce27c-eceb-4c96-bef9-c46bb194cd55",
+      "type": "Path",
+      "version": "6.9.1",
+      "originX": "left",
+      "originY": "top",
+      "left": 399.6,
+      "top": -0.4,
+      "width": 2031.07,
+      "height": 1827.97,
+      "fill": "transparent",
+      "stroke": "#2a2c2e",
+      "strokeWidth": 1,
+      "strokeDashArray": null,
+      "strokeLineCap": "butt",
+      "strokeDashOffset": 0,
+      "strokeLineJoin": "miter",
+      "strokeUniform": true,
+      "strokeMiterLimit": 4,
+      "scaleX": 0.1969,
+      "scaleY": 0.1969,
+      "angle": 0,
+      "flipX": false,
+      "flipY": false,
+      "opacity": 1,
+      "shadow": null,
+      "visible": true,
+      "backgroundColor": "",
+      "fillRule": "evenodd",
+      "paintFirst": "fill",
+      "globalCompositeOperation": "source-over",
+      "skewX": 0,
+      "skewY": 0,
+      "path": [
+        ["M", 2.03, 2.03],
+        ["C", 2.03, 2.03, 1119.12, 2.03, 1119.12, 2.03],
+        ["C", 1621.81, 2.03, 2033.1, 413.32, 2033.1, 916.01],
+        ["C", 2033.1, 916.01, 2033.1, 1829.99, 2033.1, 1829.99],
+        ["C", 2033.1, 1829.99, 2.0299999999999727, 1829.99, 2.0299999999999727, 1829.99],
+        [
+          "C",
+          2.0299999999999727,
+          1829.99,
+          2.0299999999999727,
+          2.019999999999982,
+          2.0299999999999727,
+          2.019999999999982
+        ],
+        ["Z"]
+      ]
+    }
+  ],
+  "capi": {
+    "productId": "placa-300x90",
+    "units": "mm",
+    "schemaVersion": 2,
+    "layers": [
+      {
+        "id": "766ce27c-eceb-4c96-bef9-c46bb194cd55",
+        "parentLayerId": null,
+        "name": "Aplique 1 — Formato D",
+        "zIndex": 1,
+        "visible": true,
+        "locked": false,
+        "kind": "principal",
+        "materialId": "abs-escovado-dourado",
+        "appliqueId": "aplique-1-formato-d"
+      }
+    ]
+  }
+}
