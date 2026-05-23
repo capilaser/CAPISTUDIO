@@ -1,18 +1,23 @@
 /**
- * tauri-io.ts — Adapter real do TauriIO (Onda 9.F).
+ * tauri-io.ts — Adapter para operações de filesystem do app.
  *
- * Compõe os 3 plugins (fs/shell/path) numa interface única usada pelo
- * png-export-service. Em testes, o service recebe mock; em runtime, a UI
- * passa `makeTauriIO()`.
+ * Interface mínima usada pelos services que escrevem arquivos (exports, projetos)
+ * e abrem pastas no Explorer. Mantido em arquivo separado para não importar
+ * `@tauri-apps/plugin-*` em código puro (testes em Node falham ao importar
+ * plugins Tauri).
  *
- * Mantido em arquivo separado pra não importar `@tauri-apps/plugin-*` no
- * service puro (testes em Node falham ao importar plugins Tauri).
+ * Onda 4 (Exportação) e Onda 2B (Sistema de arquivos do projeto) vão consumir.
  */
 import { writeFile } from '@tauri-apps/plugin-fs';
 import { open as shellOpen } from '@tauri-apps/plugin-shell';
 import { documentDir, join } from '@tauri-apps/api/path';
 
-import type { TauriIO } from './png-export-service';
+export interface TauriIO {
+  writeFile(path: string, bytes: Uint8Array): Promise<void>;
+  openFolder(path: string): Promise<void>;
+  documentDir(): Promise<string>;
+  joinPath(...segments: string[]): Promise<string>;
+}
 
 export function makeTauriIO(): TauriIO {
   return {
@@ -20,8 +25,6 @@ export function makeTauriIO(): TauriIO {
       await writeFile(path, bytes);
     },
     async openFolder(path: string): Promise<void> {
-      // shell.open(path-de-pasta) → Windows Explorer / macOS Finder /
-      // file manager Linux. Comportamento nativo da plataforma.
       await shellOpen(path);
     },
     async documentDir(): Promise<string> {

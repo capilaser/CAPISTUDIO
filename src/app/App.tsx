@@ -1,46 +1,23 @@
-import { useEffect, useState } from 'react';
-import { BrowserRouter } from 'react-router-dom';
-
-import { seedDatabase } from '@/data/seeds';
-import { CheatsheetProvider } from '@/ui/components/cheatsheet-provider';
-import { FontLoader } from '@/ui/components/FontLoader';
-import { Toaster } from '@/ui/components/sonner';
-
-import { RouterContent } from './router';
-
+/**
+ * Tela transitória durante o reinício inteligente do V2.
+ *
+ * Onda 2A — Faxina cirúrgica: toda a UI antiga foi removida (padroes/,
+ * novo-pedido/, dev/, banco/, banco-apliques/, inicial/, ArteHubPage).
+ * O canvas-engine, exporters e snap/alignment ficam preservados em src/core/
+ * para serem reaproveitados nas Ondas 2D, 3 e 4.
+ *
+ * Esta tela some quando a Onda 2C (tela inicial nova) for entregue.
+ */
 export default function App() {
-  const [dbReady, setDbReady] = useState(false);
-  const [dbError, setDbError] = useState<string | null>(null);
-
-  useEffect(() => {
-    seedDatabase()
-      .then(() => setDbReady(true))
-      .catch((e: unknown) => setDbError(String(e)));
-  }, []);
-
-  if (dbError) {
-    return (
-      <main className="flex h-full items-center justify-center bg-ink-950 font-mono text-sm text-danger">
-        DB init error: {dbError}
-      </main>
-    );
-  }
-
-  if (!dbReady) {
-    return (
-      <main className="flex h-full items-center justify-center bg-ink-950 font-mono text-sm text-ink-400">
-        initializing…
-      </main>
-    );
-  }
-
   return (
-    <BrowserRouter>
-      <CheatsheetProvider>
-        <FontLoader />
-        <Toaster />
-        <RouterContent />
-      </CheatsheetProvider>
-    </BrowserRouter>
+    <main className="flex h-full min-h-screen flex-col items-center justify-center gap-3 bg-ink-950 px-6 text-center font-mono text-ink-300">
+      <h1 className="text-lg font-semibold text-ink-100">Capi Studio</h1>
+      <p className="text-sm text-ink-400">Em reconstrução — Onda 2A</p>
+      <p className="max-w-md text-xs text-ink-500">
+        Sistema sendo reescrito a partir do{' '}
+        <code className="rounded bg-ink-900 px-1.5 py-0.5 text-laser">PROJECT_VISION.md</code>.
+        Próxima entrega: tela inicial + editor de projeto (Onda 2C/2D).
+      </p>
+    </main>
   );
 }
