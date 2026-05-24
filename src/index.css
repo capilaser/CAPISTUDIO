@@ -1,0 +1,111 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html, body, #root {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  body {
+    @apply bg-studio-bg text-studio-text font-sans;
+    font-size: 13px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+@layer components {
+  /* ── Sidebar sections ── */
+  .sidebar-section {
+    @apply border-b border-studio-border;
+  }
+
+  .sidebar-section-header {
+    @apply flex items-center justify-between px-3 py-2 text-xs font-semibold uppercase tracking-wider text-studio-muted cursor-pointer select-none hover:text-studio-text transition-colors;
+  }
+
+  /* ── Tool button ── */
+  .tool-btn {
+    @apply relative flex items-center justify-center w-9 h-9 rounded-studio text-studio-muted hover:text-studio-text hover:bg-studio-elevated transition-all duration-100 cursor-pointer select-none;
+  }
+
+  .tool-btn.active {
+    @apply text-studio-text bg-studio-accent/20 ring-1 ring-studio-accent/50;
+  }
+
+  /* ── Layer row ── */
+  .layer-row {
+    @apply flex items-center gap-2 px-2 py-1.5 rounded-studio cursor-pointer hover:bg-studio-elevated transition-colors;
+  }
+
+  .layer-row.selected {
+    @apply bg-studio-accent/15 ring-1 ring-inset ring-studio-accent/30;
+  }
+
+  /* ── Property row ── */
+  .prop-row {
+    @apply flex items-center gap-2 px-3 py-1.5;
+  }
+
+  .prop-label {
+    @apply text-studio-muted text-xs w-20 shrink-0;
+  }
+
+  .prop-input {
+    @apply flex-1 bg-studio-surface border border-studio-border rounded-studio px-2 py-1 text-xs text-studio-text
+           focus:outline-none focus:border-studio-accent focus:ring-1 focus:ring-studio-accent/30
+           transition-colors;
+  }
+
+  /* ── Button variants ── */
+  .btn-primary {
+    @apply flex items-center gap-1.5 px-3 py-1.5 bg-studio-accent hover:bg-studio-accent-hover
+           text-white text-xs font-medium rounded-studio transition-colors cursor-pointer select-none;
+  }
+
+  .btn-secondary {
+    @apply flex items-center gap-1.5 px-3 py-1.5 bg-studio-elevated hover:bg-studio-surface
+           text-studio-text text-xs font-medium rounded-studio border border-studio-border
+           transition-colors cursor-pointer select-none;
+  }
+
+  .btn-ghost {
+    @apply flex items-center gap-1.5 px-2 py-1.5 hover:bg-studio-elevated
+           text-studio-muted hover:text-studio-text text-xs rounded-studio
+           transition-colors cursor-pointer select-none;
+  }
+
+  /* ── Separator ── */
+  .studio-separator {
+    @apply w-px h-5 bg-studio-border mx-1;
+  }
+
+  /* ── Tooltip ── */
+  .studio-tooltip {
+    @apply absolute z-50 px-2 py-1 bg-studio-elevated border border-studio-border
+           text-studio-text text-xs rounded-studio shadow-lg pointer-events-none
+           whitespace-nowrap animate-fade-in;
+  }
+
+  /* ── Badge ── */
+  .layer-type-badge {
+    @apply text-2xs px-1.5 py-0.5 rounded font-medium;
+  }
+}
+
+@layer utilities {
+  .no-drag {
+    -webkit-app-region: no-drag;
+  }
+  .drag-region {
+    -webkit-app-region: drag;
+  }
+}
