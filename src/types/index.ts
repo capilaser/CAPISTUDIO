@@ -1,4 +1,17 @@
-// ─── Layer Types ─────────────────────────────────────────────────────────────
+/**
+ * Capi Studio — Core Types
+ *
+ * Hierarchy:
+ *   ProductTemplate → EditableSlot   (definition)
+ *           ↓
+ *       ArtProject → FilledSlot      (instance for a client)
+ *           ↓
+ *       CanvasDocument → Layer + CanvasElement  (visual)
+ */
+
+// ─────────────────────────────────────────────────────────────
+// LAYERS
+// ─────────────────────────────────────────────────────────────
 
 export type LayerType =
   | 'base'
@@ -12,216 +25,251 @@ export type LayerType =
   | 'mockup'
   | 'reference'
   | 'guide'
-  | 'editable'
-  | 'non-exportable'
+  | 'editable_area'
+  | 'replacement_area'
+  | 'non_exportable'
 
-export type MachineId = 'machine1' | 'machine2' | 'machine3'
+export type MachineId = 'machine_1' | 'machine_2' | 'machine_3'
 
 export type ExportFormat = 'png' | 'svg' | 'dxf'
 
-export type ToolId =
-  | 'select'
-  | 'move'
-  | 'text'
-  | 'rectangle'
-  | 'ellipse'
-  | 'line'
-  | 'pen'
-  | 'image'
-  | 'laser-cut'
-  | 'laser-engrave'
-
-// ─── Element Types ────────────────────────────────────────────────────────────
-
-export type ElementType =
-  | 'rect'
-  | 'ellipse'
-  | 'line'
-  | 'polyline'
-  | 'text'
-  | 'image'
-  | 'path'
-  | 'group'
-
-export interface Transform {
-  x: number
-  y: number
-  width: number
-  height: number
-  rotation: number
-  scaleX: number
-  scaleY: number
-}
-
-export interface FillStyle {
-  type: 'solid' | 'none' | 'gradient' | 'pattern'
-  color?: string
-  opacity?: number
-}
-
-export interface StrokeStyle {
-  color: string
-  width: number
-  opacity: number
-  dashArray?: number[]
-  lineCap?: 'butt' | 'round' | 'square'
-  lineJoin?: 'miter' | 'round' | 'bevel'
-}
-
-export interface CanvasElement {
-  id: string
-  type: ElementType
-  name: string
-  layerId: string
-  transform: Transform
-  fill: FillStyle
-  stroke: StrokeStyle
-  visible: boolean
-  locked: boolean
-  // type-specific props
-  text?: string
-  fontSize?: number
-  fontFamily?: string
-  fontWeight?: number
-  src?: string        // for images
-  points?: number[]   // for lines/polylines
-  d?: string          // for paths (SVG path data)
-  cornerRadius?: number
-}
-
-// ─── Layer ───────────────────────────────────────────────────────────────────
-
-export const LAYER_TYPE_LABELS: Record<LayerType, string> = {
-  base:            'Base',
-  cut:             'Corte',
-  engrave:         'Gravação',
-  mark:            'Marcação',
-  text:            'Texto',
-  logo:            'Logo',
-  svg:             'SVG',
-  image:           'Imagem',
-  mockup:          'Mockup',
-  reference:       'Referência',
-  guide:           'Guia',
-  editable:        'Editável',
-  'non-exportable': 'Não Exportável',
-}
-
-export const LAYER_TYPE_COLORS: Record<LayerType, string> = {
-  base:            '#6366f1',
-  cut:             '#ef4444',
-  engrave:         '#f59e0b',
-  mark:            '#8b5cf6',
-  text:            '#3b82f6',
-  logo:            '#10b981',
-  svg:             '#06b6d4',
-  image:           '#ec4899',
-  mockup:          '#78716c',
-  reference:       '#64748b',
-  guide:           '#22c55e',
-  editable:        '#f97316',
-  'non-exportable': '#6b7280',
+export interface LayerExportConfig {
+  png: boolean
+  svg: boolean
+  dxf: boolean
 }
 
 export interface Layer {
   id: string
   name: string
   type: LayerType
-  machines: MachineId[]
+  order: number
   visible: boolean
   locked: boolean
-  exportFormats: ExportFormat[]
-  elements: CanvasElement[]
-  order: number
-  color?: string
+  /** Operational color used for laser machine: '#000000' cut, '#ff0000' engrave, '#0000ff' mark */
+  operationalColor: string
+  machines: MachineId[]
+  export: LayerExportConfig
+  tags: string[]
 }
 
-// ─── Canvas Document ──────────────────────────────────────────────────────────
-
-export interface CanvasDocument {
-  width: number
-  height: number
-  backgroundColor: string
-  unit: 'mm' | 'px' | 'in'
-  dpi: number
-  layers: Layer[]
+/** Short labels for layer-type badges */
+export const LAYER_TYPE_LABELS: Record<LayerType, string> = {
+  base: 'BAS',
+  cut: 'CUT',
+  engrave: 'ENG',
+  mark: 'MRK',
+  text: 'TXT',
+  logo: 'LOG',
+  svg: 'SVG',
+  image: 'IMG',
+  mockup: 'MOC',
+  reference: 'REF',
+  guide: 'GDE',
+  editable_area: 'EDT',
+  replacement_area: 'RPL',
+  non_exportable: 'NEX',
 }
 
-// ─── Machine Config ───────────────────────────────────────────────────────────
-
-export interface MachineConfig {
-  id: MachineId
-  name: string
-  workAreaWidth: number   // mm
-  workAreaHeight: number  // mm
-  maxPower: number        // W
-  maxSpeed: number        // mm/s
-  laserType: 'co2' | 'fiber' | 'diode'
-  color: string
+export const LAYER_TYPE_COLORS: Record<LayerType, string> = {
+  base: '#888888',
+  cut: '#000000',
+  engrave: '#ef4444',
+  mark: '#3b82f6',
+  text: '#a855f7',
+  logo: '#f59e0b',
+  svg: '#22c55e',
+  image: '#06b6d4',
+  mockup: '#D4AF37',
+  reference: '#64748b',
+  guide: '#64748b',
+  editable_area: '#22c55e',
+  replacement_area: '#f59e0b',
+  non_exportable: '#475569',
 }
 
-export const DEFAULT_MACHINES: MachineConfig[] = [
-  {
-    id: 'machine1',
-    name: 'CO2 60W',
-    workAreaWidth: 400,
-    workAreaHeight: 600,
-    maxPower: 60,
-    maxSpeed: 500,
-    laserType: 'co2',
-    color: '#6366f1',
-  },
-  {
-    id: 'machine2',
-    name: 'Fibra 20W',
-    workAreaWidth: 110,
-    workAreaHeight: 110,
-    maxPower: 20,
-    maxSpeed: 2000,
-    laserType: 'fiber',
-    color: '#f59e0b',
-  },
-  {
-    id: 'machine3',
-    name: 'Diodo 10W',
-    workAreaWidth: 200,
-    workAreaHeight: 300,
-    maxPower: 10,
-    maxSpeed: 300,
-    laserType: 'diode',
-    color: '#22c55e',
-  },
-]
+// ─────────────────────────────────────────────────────────────
+// EDITABLE SLOTS (template definition)
+// ─────────────────────────────────────────────────────────────
 
-// ─── Project ──────────────────────────────────────────────────────────────────
+export type SlotKind = 'text' | 'logo' | 'svg' | 'image'
 
-export interface Project {
+export interface SlotConstraints {
+  maxLines?: number
+  autoFit?: boolean
+  keepAspectRatio?: boolean
+  align?: 'left' | 'center' | 'right'
+}
+
+export interface EditableSlot {
   id: string
+  templateId: string
+  /** internal name e.g. 'slot_nome' */
   name: string
-  createdAt: Date
-  updatedAt: Date
-  canvas: CanvasDocument
-  templateId?: string
-  filePath?: string
-  isDirty: boolean
-}
-
-// ─── UI State ─────────────────────────────────────────────────────────────────
-
-export interface ViewportState {
-  zoom: number          // 0.1 to 10
-  offsetX: number
-  offsetY: number
-}
-
-export interface CursorPosition {
+  /** display label e.g. 'Nome do cliente' */
+  label: string
+  kind: SlotKind
   x: number
   y: number
-  canvasX: number
-  canvasY: number
+  width: number
+  height: number
+  rotation: number
+  layerId: string
+  required: boolean
+  defaultValue?: string
+  defaultFontFamily?: string
+  defaultFontSize?: number
+  constraints: SlotConstraints
+}
+
+// ─────────────────────────────────────────────────────────────
+// CANVAS ELEMENTS (rendered instances)
+// ─────────────────────────────────────────────────────────────
+
+export type ElementType = 'text' | 'path' | 'svg' | 'image' | 'shape'
+
+export interface TextElementData {
+  text: string
+  fontFamily: string
+  fontSize: number
+  fontWeight?: string
+  fontStyle?: string
+  align: 'left' | 'center' | 'right'
+  color: string
+  lineHeight?: number
+}
+
+export interface ImageElementData {
+  src: string
+  originalPath?: string
+  keepAspectRatio: boolean
+}
+
+export interface ShapeElementData {
+  shapeType: 'rect' | 'circle' | 'line'
+  fill?: string
+  stroke?: string
+  strokeWidth?: number
+}
+
+export type ElementData = TextElementData | ImageElementData | ShapeElementData
+
+export interface CanvasElement {
+  id: string
+  layerId: string
+  /** if rendered from a template slot, link to it so fills can update */
+  slotId?: string
+  type: ElementType
+  name?: string
+  x: number
+  y: number
+  width: number
+  height: number
+  rotation: number
+  visible: boolean
+  locked: boolean
+  data: ElementData
+}
+
+// ─────────────────────────────────────────────────────────────
+// CANVAS DOCUMENT
+// ─────────────────────────────────────────────────────────────
+
+export interface CanvasDocument {
+  id: string
+  widthMm: number
+  heightMm: number
+  unit: 'mm'
+  backgroundColor: string
+  layers: Layer[]
+  elements: CanvasElement[]
+}
+
+// ─────────────────────────────────────────────────────────────
+// PRODUCT TEMPLATE
+// ─────────────────────────────────────────────────────────────
+
+export interface ProductTemplate {
+  id: string
+  name: string
+  slug: string
+  category: string
+  description?: string
+  thumbnail?: string
+  realWidthMm: number
+  realHeightMm: number
+  unit: 'mm'
+  document: CanvasDocument
+  slots: EditableSlot[]
+  createdAt: string
+  updatedAt: string
+}
+
+// ─────────────────────────────────────────────────────────────
+// ART PROJECT (instance per client/order)
+// ─────────────────────────────────────────────────────────────
+
+export type ProjectStatus =
+  | 'draft'
+  | 'approval_pending'
+  | 'approved'
+  | 'production_ready'
+  | 'archived'
+
+export interface SlotOverrides {
+  x?: number
+  y?: number
+  width?: number
+  height?: number
+  rotation?: number
+  fontSize?: number
+}
+
+export interface FilledSlot {
+  slotId: string
+  /** for text slots */
+  value?: string
+  /** for logo/image/svg slots */
+  assetPath?: string
+  overrides?: SlotOverrides
+}
+
+export interface ExportRecord {
+  id: string
+  format: ExportFormat
+  filePath: string
+  createdAt: string
+}
+
+export interface ArtProject {
+  id: string
+  name: string
+  templateId?: string
+  status: ProjectStatus
+  document: CanvasDocument
+  filledSlots: FilledSlot[]
+  exportHistory: ExportRecord[]
+  folderPath?: string
+  createdAt: string
+  updatedAt: string
+}
+
+// ─────────────────────────────────────────────────────────────
+// UI STATE
+// ─────────────────────────────────────────────────────────────
+
+export type ToolId = 'select' | 'text' | 'image' | 'pan'
+
+export interface ViewportState {
+  zoom: number
+  panX: number
+  panY: number
 }
 
 export interface SelectionState {
-  selectedLayerId: string | null
-  selectedElementIds: string[]
+  elementId?: string
+  layerId?: string
 }
+
+/** Standard mm → px conversion at 96dpi */
+export const MM_TO_PX = 3.7795275591
