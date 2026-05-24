@@ -4,7 +4,7 @@
   "description": "Capi Studio — Laser Production Art Studio",
   "main": "dist-electron/electron/main.js",
   "scripts": {
-    "dev": "tsc --project tsconfig.node.json && concurrently --kill-others \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "dev": "tsc --project tsconfig.node.json && concurrently --kill-others \"vite\" \"wait-on http://localhost:5174 && electron .\"",
     "build": "tsc --project tsconfig.node.json && vite build",
     "preview": "vite preview",
     "electron:build": "electron-builder"
