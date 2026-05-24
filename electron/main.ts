@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain, dialog, Menu } from 'electron'
 import path from 'path'
+import fs from 'fs'
 
 const isDev = process.env.NODE_ENV !== 'production'
 
@@ -103,6 +104,29 @@ app.whenReady().then(() => {
   })
 
   ipcMain.handle('app:getVersion', () => app.getVersion())
+
+  ipcMain.handle('fs:writeFile', async (_, filePath: string, content: string) => {
+    fs.mkdirSync(path.dirname(filePath), { recursive: true })
+    fs.writeFileSync(filePath, content, 'utf8')
+    return { ok: true }
+  })
+
+  ipcMain.handle('fs:readFile', async (_, filePath: string) => {
+    return fs.readFileSync(filePath, 'utf8')
+  })
+
+  ipcMain.handle('fs:readdir', async (_, dirPath: string) => {
+    if (!fs.existsSync(dirPath)) return []
+    return fs.readdirSync(dirPath)
+  })
+
+  ipcMain.handle('fs:exists', async (_, filePath: string) => {
+    return fs.existsSync(filePath)
+  })
+
+  ipcMain.handle('app:getDocumentsPath', () => {
+    return app.getPath('documents')
+  })
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

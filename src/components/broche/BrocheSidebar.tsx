@@ -1,6 +1,8 @@
-import React, { useRef } from 'react'
+import React, { useRef, useState } from 'react'
 import { useBrocheStore } from '@/store/useBrocheStore'
 import { BrocheType } from '@/data/brocheTemplates'
+
+const TITLE_CHIPS = ['Dr.', 'Dra.', 'Enf.', 'Adv.', 'Psic.', 'Arq.', 'Esp.']
 
 const TYPES: { value: BrocheType; icon: string; label: string }[] = [
   { value: 'logo_nome_profissao', icon: '🏢', label: 'Logo + Nome + Profissão' },
@@ -45,6 +47,7 @@ function NudgeControl({ target }: { target: 'logo' | 'name' | 'profession' }) {
 export function BrocheSidebar() {
   const store = useBrocheStore()
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [isDragging, setIsDragging] = useState(false)
 
   const type = store.type
   const hasLogoSection = type.includes('logo') || type === 'apenas_logo'
@@ -54,9 +57,49 @@ export function BrocheSidebar() {
   function handleLogoFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
+    readLogoFile(file)
+  }
+
+  function readLogoFile(file: File) {
     const reader = new FileReader()
     reader.onload = () => store.setLogo(reader.result as string)
     reader.readAsDataURL(file)
+  }
+
+  function handleDragOver(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault()
+    e.stopPropagation()
+  }
+
+  function handleDragEnter(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(true)
+  }
+
+  function handleDragLeave(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+  }
+
+  function handleDrop(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+    const file = e.dataTransfer.files?.[0]
+    if (!file) return
+    const isValid = file.type.startsWith('image/') || file.name.endsWith('.svg')
+    if (!isValid) return
+    readLogoFile(file)
+  }
+
+  function handleTitleChip(chip: string) {
+    const current = store.nameText
+    // Remove existing chip prefix if present
+    const existingChip = TITLE_CHIPS.find(c => current.startsWith(c + ' '))
+    const baseName = existingChip ? current.slice(existingChip.length + 1) : current
+    store.setNameText(chip + (baseName ? ' ' + baseName : ''))
   }
 
   return (
@@ -108,7 +151,14 @@ export function BrocheSidebar() {
           {store.logoSource === 'upload' && (
             <>
               {!store.hasLogo ? (
-                <div className="logo-upload-zone" onClick={() => fileInputRef.current?.click()}>
+                <div
+                  className={`logo-upload-zone${isDragging ? ' dragging' : ''}`}
+                  onClick={() => fileInputRef.current?.click()}
+                  onDragOver={handleDragOver}
+                  onDragEnter={handleDragEnter}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                >
                   <input ref={fileInputRef} type="file" accept="image/*,.svg" onChange={handleLogoFile} style={{ display: 'none' }}/>
                   <div className="upload-icon">🖼️</div>
                   <div className="upload-text">Clique ou arraste a logo aqui<br/><small>SVG, PNG, JPG</small></div>
@@ -156,6 +206,16 @@ export function BrocheSidebar() {
           <div className="field-group">
             <div className="field">
               <label>Texto do nome</label>
+              <div className="title-chips">
+                {TITLE_CHIPS.map(chip => (
+                  <button
+                    key={chip}
+                    className="title-chip"
+                    onClick={() => handleTitleChip(chip)}
+                    title={`Prefixar com ${chip}`}
+                  >{chip}</button>
+                ))}
+              </div>
               <input
                 type="text"
                 value={store.nameText}

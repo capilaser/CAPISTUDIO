@@ -32,6 +32,8 @@ export interface BrocheState {
   professionFont: string
 
   showGuides: boolean
+  lastSavedAt: string | null
+  isSaved: boolean
 
   setType: (t: BrocheType) => void
   setColor: (c: BrocheColor) => void
@@ -54,6 +56,8 @@ export interface BrocheState {
   applyPattern: (id: string) => void
   setFilter: (f: string) => void
   toggleGuides: () => void
+
+  markSaved: (at: string) => void
 }
 
 const DEFAULT_ELEMENTS = {
@@ -83,6 +87,8 @@ export const useBrocheStore = create<BrocheState>((set, get) => {
     professionText: 'GERENTE ADMINISTRATIVA',
     professionFont: 'Arial',
     showGuides: false,
+    lastSavedAt: null,
+    isSaved: false,
 
     setType: (t) => {
       set({ type: t, activeFilter: 'todos' })
@@ -115,10 +121,10 @@ export const useBrocheStore = create<BrocheState>((set, get) => {
       }))
     },
 
-    setNameText: (v) => set({ nameText: v }),
-    setNameFont: (v) => set({ nameFont: v }),
-    setProfessionText: (v) => set({ professionText: v }),
-    setProfessionFont: (v) => set({ professionFont: v }),
+    setNameText: (v) => set({ nameText: v, isSaved: false }),
+    setNameFont: (v) => set({ nameFont: v, isSaved: false }),
+    setProfessionText: (v) => set({ professionText: v, isSaved: false }),
+    setProfessionFont: (v) => set({ professionFont: v, isSaved: false }),
 
     adjustText: (key, delta) => {
       const el = get().elements[key]
@@ -196,5 +202,6 @@ export const useBrocheStore = create<BrocheState>((set, get) => {
 
     setFilter: (f) => set({ activeFilter: f }),
     toggleGuides: () => set(s => ({ showGuides: !s.showGuides })),
+    markSaved: (at) => set({ lastSavedAt: at, isSaved: true }),
   }
 })

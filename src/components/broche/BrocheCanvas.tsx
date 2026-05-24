@@ -1,4 +1,4 @@
-import React, { useRef } from 'react'
+import React, { useRef, useEffect } from 'react'
 import { useBrocheStore } from '@/store/useBrocheStore'
 import { TEMPLATES } from '@/data/brocheTemplates'
 import { generateBrocheDXF, downloadText } from '@/utils/exportDXF'
@@ -36,7 +36,16 @@ export function BrocheCanvas() {
     downloadText('broche.svg', content, 'image/svg+xml')
   }
 
+  function requireNameOrConfirm(): boolean {
+    const needsName = type !== 'apenas_logo'
+    if (needsName && !store.nameText.trim()) {
+      return window.confirm('Nome não preenchido. Exportar mesmo assim?')
+    }
+    return true
+  }
+
   function exportPNG() {
+    if (!requireNameOrConfirm()) return
     if (!svgRef.current) return
     const clone = svgRef.current.cloneNode(true) as SVGElement
     clone.setAttribute('width', '60mm')
@@ -66,6 +75,7 @@ export function BrocheCanvas() {
   }
 
   function exportDXF() {
+    if (!requireNameOrConfirm()) return
     const dxf = generateBrocheDXF({
       hasDivider: showDivider,
       dividerX,
@@ -82,6 +92,18 @@ export function BrocheCanvas() {
     })
     downloadText('broche.dxf', dxf, 'application/dxf')
   }
+
+  // Listen for keyboard shortcut events from App.tsx
+  useEffect(() => {
+    function onExportDXF() { exportDXF() }
+    function onExportPNG() { exportPNG() }
+    window.addEventListener('capi:exportDXF', onExportDXF)
+    window.addEventListener('capi:exportPNG', onExportPNG)
+    return () => {
+      window.removeEventListener('capi:exportDXF', onExportDXF)
+      window.removeEventListener('capi:exportPNG', onExportPNG)
+    }
+  })
 
   return (
     <div className="canvas-area">

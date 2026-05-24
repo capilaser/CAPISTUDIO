@@ -150,6 +150,7 @@ export function generateBrocheDXF(data: BrocheExportData): string {
   }
 
   const header = [
+    '999', 'Gerado por Capi Studio - www.capilaser.com.br',
     '0', 'SECTION',
     '2', 'HEADER',
     '9', '$ACADVER',
@@ -159,6 +160,19 @@ export function generateBrocheDXF(data: BrocheExportData): string {
     '0', 'ENDSEC',
     '0', 'SECTION',
     '2', 'TABLES',
+    // LTYPE table (linetype CONTINUOUS)
+    '0', 'TABLE',
+    '2', 'LTYPE',
+    '70', '1',
+    '0', 'LTYPE',
+    '2', 'CONTINUOUS',
+    '70', '0',
+    '3', 'Solid line',
+    '72', '65',
+    '73', '0',
+    '40', '0.0',
+    '0', 'ENDTAB',
+    // LAYER table
     '0', 'TABLE',
     '2', 'LAYER',
     '70', '2',

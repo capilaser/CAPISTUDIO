@@ -536,3 +536,106 @@ body {
   box-shadow: 0 2px 8px rgba(180,83,9,0.3);
 }
 .btn-dxf:hover { background: #92400e; }
+
+/* ── TITLE CHIPS (Dr./Dra. etc) ── */
+.title-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+.title-chip {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 20px;
+  border: 1px solid var(--border2);
+  background: var(--surface2);
+  color: var(--text2);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  line-height: 1.5;
+}
+.title-chip:hover {
+  background: var(--purple-light);
+  color: var(--purple-dark);
+  border-color: var(--purple-mid);
+}
+
+/* ── LOGO UPLOAD DRAG-AND-DROP ── */
+.logo-upload-zone {
+  border: 2px dashed var(--border2);
+  border-radius: var(--radius-sm);
+  padding: 16px 12px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.logo-upload-zone:hover {
+  border-color: var(--purple-mid);
+  background: var(--purple-light);
+}
+.logo-upload-zone.dragging {
+  border-color: var(--purple);
+  background: var(--purple-light);
+  box-shadow: 0 0 0 3px rgba(124,58,237,0.15);
+}
+
+/* ── SAVE STATUS + BUTTON ── */
+.save-status {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--danger);
+  opacity: 0.85;
+  transition: color 0.2s;
+}
+.save-status.saved {
+  color: var(--success);
+}
+.btn-save {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 5px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border2);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.btn-save:hover:not(:disabled) {
+  background: var(--purple-light);
+  border-color: var(--purple-mid);
+  color: var(--purple-dark);
+}
+.btn-save:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── TOAST ── */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--text);
+  color: #fff;
+  font-size: 12px;
+  padding: 10px 20px;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  z-index: 9999;
+  cursor: pointer;
+  animation: toast-in 0.2s ease;
+  white-space: nowrap;
+  max-width: 90vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}

@@ -149,11 +149,50 @@ export const TEMPLATES: BrocheTemplate[] = [
       logo: { x: 15, y: 4, width: 30, height: 17 },
     },
   },
+  {
+    id: 'placa_porta_padrao',
+    label: 'Placa Porta · padrão',
+    types: ['logo_nome', 'logo_nome_profissao'],
+    filters: ['clássico', 'com-traço'],
+    layout: {
+      hasDivider: true, dividerX: 20,
+      logo:       { x: 5,    y: 6,    width: 12, height: 12 },
+      name:       { x: 40,   y: 11,   size: 6.0 },
+      profession: { x: 40,   y: 18,   size: 2.5 },
+      nameOnly:   { x: 40,   y: 12.5, size: 7.5 },
+    },
+  },
+  {
+    id: 'cracha_horizontal',
+    label: 'Crachá · horizontal',
+    types: ['logo_nome', 'logo_nome_profissao', 'apenas_nome'],
+    filters: ['centralizado', 'sem-traço'],
+    layout: {
+      hasDivider: false,
+      logo:       { x: 3,    y: 7,    width: 11, height: 11 },
+      name:       { x: 36,   y: 11.5, size: 6.8 },
+      profession: { x: 36,   y: 17.5, size: 2.7 },
+      nameOnly:   { x: 30,   y: 12.5, size: 8.5 },
+    },
+  },
+  {
+    id: 'ln_dupla_coluna',
+    label: 'Dois campos · compacto',
+    types: ['logo_nome', 'logo_nome_profissao'],
+    filters: ['compacto', 'com-traço'],
+    layout: {
+      hasDivider: true, dividerX: 17,
+      logo:       { x: 4,    y: 6,    width: 10, height: 10 },
+      name:       { x: 38.5, y: 9.5,  size: 5.5 },
+      profession: { x: 38.5, y: 16.5, size: 2.5 },
+      nameOnly:   { x: 38.5, y: 12.5, size: 6.5 },
+    },
+  },
 ]
 
 export const FILTERS_BY_TYPE: Record<BrocheType, string[]> = {
-  logo_nome:           ['todos', 'com-traço', 'sem-traço', 'nome-longo', 'centralizado'],
-  logo_nome_profissao: ['todos', 'com-traço', 'sem-traço', 'compacto'],
+  logo_nome:           ['todos', 'com-traço', 'sem-traço', 'nome-longo', 'centralizado', 'compacto'],
+  logo_nome_profissao: ['todos', 'com-traço', 'sem-traço', 'compacto', 'clássico'],
   nome_profissao:      ['todos', 'clássico', 'nome-longo', 'centralizado', 'compacto'],
   apenas_nome:         ['todos', 'centralizado', 'clássico'],
   apenas_logo:         ['todos', 'centralizado'],
