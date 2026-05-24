@@ -14,11 +14,27 @@ import {
   MachineId,
 } from '@/types'
 
+// ─── Template Field Types ─────────────────────────────────────────────────────
+
+export interface TemplateField {
+  id: string
+  label: string
+  type: 'text' | 'logo' | 'image'
+  value: string | null
+  layerId: string
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function nanoid(): string {
   return Math.random().toString(36).slice(2, 11)
 }
+
+const BASE_ID = nanoid()
+const CUT_ID = nanoid()
+const ENGRAVE_ID = nanoid()
+const TEXT_ID = nanoid()
+const LOGO_ID = nanoid()
 
 function makeDefaultCanvas(): CanvasDocument {
   return {
@@ -29,7 +45,7 @@ function makeDefaultCanvas(): CanvasDocument {
     dpi: 96,
     layers: [
       {
-        id: nanoid(),
+        id: BASE_ID,
         name: 'Base',
         type: 'base' as LayerType,
         machines: ['machine1' as MachineId],
@@ -38,10 +54,10 @@ function makeDefaultCanvas(): CanvasDocument {
         exportFormats: ['png', 'svg'] as ExportFormat[],
         elements: [],
         order: 0,
-        color: '#6366f1',
+        color: '#555555',
       },
       {
-        id: nanoid(),
+        id: CUT_ID,
         name: 'Corte',
         type: 'cut' as LayerType,
         machines: ['machine1' as MachineId],
@@ -50,22 +66,42 @@ function makeDefaultCanvas(): CanvasDocument {
         exportFormats: ['svg', 'dxf'] as ExportFormat[],
         elements: [],
         order: 1,
-        color: '#ef4444',
+        color: '#000000',
       },
       {
-        id: nanoid(),
+        id: ENGRAVE_ID,
         name: 'Gravação',
         type: 'engrave' as LayerType,
-        machines: ['machine1' as MachineId],
+        machines: ['machine2' as MachineId],
         visible: true,
         locked: false,
         exportFormats: ['png'] as ExportFormat[],
         elements: [],
         order: 2,
-        color: '#f59e0b',
+        color: '#ef4444',
+      },
+      {
+        id: TEXT_ID,
+        name: 'Texto',
+        type: 'text' as LayerType,
+        machines: ['machine1' as MachineId, 'machine2' as MachineId],
+        visible: true,
+        locked: false,
+        exportFormats: ['png', 'svg'] as ExportFormat[],
+        elements: [],
+        order: 3,
+        color: '#8b5cf6',
       },
     ],
   }
+}
+
+function makeDefaultTemplateFields(): TemplateField[] {
+  return [
+    { id: 'tf1', label: 'Nome do cliente', type: 'text', value: 'João Silva', layerId: TEXT_ID },
+    { id: 'tf2', label: 'Texto secundário', type: 'text', value: 'Presente especial', layerId: TEXT_ID },
+    { id: 'tf3', label: 'Logo principal', type: 'logo', value: null, layerId: LOGO_ID },
+  ]
 }
 
 function makeDefaultProject(): Project {
@@ -88,6 +124,10 @@ export interface ProjectStore {
   markDirty: () => void
   markSaved: () => void
   newProject: () => void
+
+  // Template fields (quick-edit panel data)
+  templateFields: TemplateField[]
+  updateTemplateField: (id: string, value: string | null) => void
 
   // Viewport
   viewport: ViewportState
@@ -153,9 +193,21 @@ export const useProjectStore = create<ProjectStore>()(
     newProject: () =>
       set({
         project: makeDefaultProject(),
+        templateFields: makeDefaultTemplateFields(),
         selection: { selectedLayerId: null, selectedElementIds: [] },
         viewport: { zoom: 1, offsetX: 0, offsetY: 0 },
       }),
+
+    // ── Template Fields ──
+    templateFields: makeDefaultTemplateFields(),
+
+    updateTemplateField: (id, value) =>
+      set((s) => ({
+        templateFields: s.templateFields.map((f) =>
+          f.id === id ? { ...f, value } : f
+        ),
+        project: { ...s.project, isDirty: true },
+      })),
 
     // ── Viewport ──
     viewport: { zoom: 1, offsetX: 0, offsetY: 0 },
